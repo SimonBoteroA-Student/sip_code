@@ -1,0 +1,1188 @@
+SECOP II - Exploración¶
+
+En este cuaderno se realiza análisis exploratorio de los datos mediante
+estadísticas descriptivas, pruebas y gráficas.
+
+In [1]:
+
+    import sys
+    print(sys.executable)
+
+    C:\Users\Home\anaconda3\envs\vigia\python.exe
+
+In [2]:
+
+    #Librerias
+    import os
+    import pandas as pd
+    import numpy as np
+    import datetime
+    import time
+    import scipy
+    import pycorrcat.pycorrcat as corrcat  #Calcula la V de cramer para variables categóricas.
+
+    import matplotlib.pyplot as plt
+    from matplotlib_venn import venn2
+    import squarify
+    import seaborn as sns
+    import plotly.express as px  #**
+    import plotly.graph_objs as go
+
+    %matplotlib inline
+    pd.plotting.register_matplotlib_converters()
+    pd.set_option('display.max_columns', None, 'display.max_colwidth', 100)
+    pd.set_option('display.float_format', lambda x: '%.2f' % x)
+
+In [3]:
+
+    os.getcwd()
+
+Out[3]:
+
+    'C:\\Users\\Home\\Documents\\vigia_article'
+
+Gráficas sin filtrar variables¶
+
+Se usan los datos sin imputación y limpieza para revisar las
+distribuciones a tener en cuenta al modificar variables.
+
+In [12]:
+
+    #Leer base de datos
+    secopII_Master = pd.read_csv('created_data\SECOPII_Master_t.csv')
+
+In [13]:
+
+    secopII_Master.dtypes
+
+Out[13]:
+
+    Nombre Entidad                 object
+    Nit Entidad                     int64
+    Departamento                   object
+    Orden                          object
+    Sector                         object
+                                    ...  
+    Tuvo_adiciones_valor            int64
+    Tuvo_adiciones_tiempo           int64
+    Tuvo_adiciones                  int64
+    Tipo Empresa Proveedor         object
+    Fecha inscripcion proveedor    object
+    Length: 61, dtype: object
+
+In [14]:
+
+    #Dar formato de fecha
+    secopII_Master['Fecha de Firma'] = pd.to_datetime(secopII_Master['Fecha de Firma'])#, format='%m/%d/%Y')
+    #Dar formato de periodicidad mensual
+    conteo_mensual_contratos = secopII_Master['Fecha de Firma'].dt.to_period('M').value_counts().sort_index()
+
+    plt.figure(figsize=(14,5))
+    conteo_mensual_contratos.plot(kind='area')
+    plt.xticks(conteo_mensual_contratos.index, conteo_mensual_contratos.index, rotation=90)
+    plt.title('Número de contratos firmados mensualmente', fontsize=16)
+
+    #Guardar
+    plt.savefig('created_data/figures/serie_contratos_firmados_mensual.png', bbox_inches = "tight")
+
+[No description has been provided for this image]
+
+In [15]:
+
+    pd.to_numeric(secopII_Master['Fecha de Firma'].dt.year).value_counts().sort_index()
+
+Out[15]:
+
+    2016.00        4
+    2017.00     1201
+    2018.00    32438
+    2019.00    32640
+    2020.00    18531
+    Name: Fecha de Firma, dtype: int64
+
+In [16]:
+
+    conteo_sector = secopII_Master['Sector'].value_counts(normalize=True)
+    conteo_sector['Otros'] = conteo_sector[6:].sum()
+    conteo_sector = conteo_sector.drop(index=conteo_sector[6:-1].index)
+
+    # secopII_Master['Rama'].value_counts(normalize=True)
+    # secopII_Master['Entidad Centralizada'].value_counts(normalize=True)
+
+    #Los tres pie
+    fig, axs = plt.subplots(1,3, figsize=(15,8))
+    plt.subplots_adjust(wspace=0.3)
+    #Secto
+    axs[0].pie(conteo_sector, 
+               autopct='%.1f%%', pctdistance=1.1,
+               labels=conteo_sector.index, labeldistance=1.3,
+               textprops={'fontsize': 13}
+              )
+    axs[0].set_title('(a) Sector', fontsize=16)
+
+    #Rama           
+    axs[1].pie(secopII_Master['Rama'].value_counts(normalize=True),
+               autopct='%.1f%%', 
+               labels=['Ejecutiva', 'Corporación \n Autónoma'],
+               textprops={'fontsize': 14}
+              )
+    axs[1].set_title('(b) Rama', fontsize=16)
+
+    #Centralizada           
+    axs[2].pie(secopII_Master['Entidad Centralizada'].value_counts(normalize=True),
+               autopct='%.1f%%',
+               labels=secopII_Master['Entidad Centralizada'].value_counts(normalize=True).index,
+               textprops={'fontsize': 14}
+              )
+    axs[2].set_title('(c) ¿Es centralizada?', fontsize=16)
+
+    #Guardar
+    plt.savefig('created_data/figures/tortas_sector_rama_centralizado.png')
+
+[No description has been provided for this image]
+
+In [17]:
+
+    conteo_sector = secopII_Master['Sector'].value_counts(normalize=True)
+    conteo_sector['Otros'] = conteo_sector[6:].sum()
+    conteo_sector = conteo_sector.drop(index=conteo_sector[6:-1].index)
+
+    # secopII_Master['Rama'].value_counts(normalize=True)
+    # secopII_Master['Entidad Centralizada'].value_counts(normalize=True)
+
+    #Los tres pie
+    fig, axs = plt.subplots(1,2, figsize=(15,8))
+    plt.subplots_adjust(wspace=0.3)
+    #Secto
+    axs[0].pie(conteo_sector, 
+               autopct='%.1f%%', pctdistance=1.1,
+               labels=conteo_sector.index, labeldistance=1.3,
+               textprops={'fontsize': 14}
+              )
+    axs[0].set_title('(a) Sector', fontsize=16)
+
+    #Centralizada           
+    axs[1].pie(secopII_Master['Entidad Centralizada'].value_counts(normalize=True),
+               autopct='%.1f%%',
+               labels=secopII_Master['Entidad Centralizada'].value_counts(normalize=True).index,
+               textprops={'fontsize': 15}
+              )
+    axs[1].set_title('(b) ¿Es centralizada?', fontsize=16)
+
+    #Guardar
+    plt.savefig('created_data/figures/tortas_sector_centralizado.png')
+
+[No description has been provided for this image]
+
+In [18]:
+
+    print(secopII_Master['Valor del Contrato'].describe())
+    print((secopII_Master['Valor del Contrato']==0).sum()/secopII_Master.shape[0])
+
+    #Eliminar valores superiores al percentil 95 de la distribución
+    q95 = secopII_Master['Valor del Contrato'].quantile(0.975)
+    valor_contratos = secopII_Master.loc[secopII_Master['Valor del Contrato'] < q95, 'Valor del Contrato']
+
+    plt.figure(figsize=(14,5))
+    plt.hist(valor_contratos/1000000, bins=50, rwidth=0.8)
+    plt.ylabel('Frecuencia', fontsize=12)
+    plt.xlabel('Valor del contrato (millones de pesos)', fontsize=12)
+    plt.title('Distribución del valor de los contratos (excluyendo valores superiores al percentil 97.5)', fontsize=16)
+    #plt.ticklabel_format(style='sci', axis='x', scilimits=(2,6))
+
+    #Guardar
+    plt.savefig('created_data/figures/hist_valor_contratos.png')
+
+    count              87387.00
+    mean        659050822683.91
+    std       51356836451844.62
+    min                    0.00
+    25%              9571100.00
+    50%             20292696.00
+    75%             42000000.00
+    max     6325511058088889.00
+    Name: Valor del Contrato, dtype: float64
+    0.02547289642624189
+
+[No description has been provided for this image]
+
+In [19]:
+
+    print(secopII_Master['Tipo de Contrato'].value_counts(normalize=True).head())
+    conteo_modContratacion = secopII_Master['Modalidad de Contratacion'].value_counts()
+    conteo_modContratacion['Otras'] = conteo_modContratacion[3:].sum()
+    conteo_modContratacion = conteo_modContratacion[[0,1,2,-1]]
+
+    plt.figure(figsize=(15,5))
+
+    #Modalidades de contratación
+    plt.subplot(121)
+    ax = conteo_modContratacion.plot(kind='bar')
+    plt.title('(a) Modalidades de contratación', fontsize=16)
+    plt.ylabel('Frecuencia', fontsize=16)
+    plt.ylim([0,60000])
+    for p in ax.patches:
+        ax.annotate(str(round(p.get_height(),2)), (p.get_x() + 0.05, p.get_height() + 1000))
+
+    ax.set_xticklabels(['Directa', 'Régimen \n especial', 'Mínima \n cuantía', 'Otras'])
+    plt.xticks(rotation=0, fontsize=13)
+
+    #Destino de gasto
+    plt.subplot(122)
+    ax1 = secopII_Master['Destino Gasto'].value_counts().plot(kind='bar')
+    plt.title('(b) Destino del gasto', fontsize=16)
+    plt.ylabel('Frecuencia', fontsize=16)
+    plt.ylim([0,50000])
+    plt.xticks(rotation=0, fontsize=13)
+    for p in ax1.patches:
+        ax1.annotate(str(round(p.get_height(),2)), (p.get_x() + 0.12, p.get_height() + 1000))
+
+    #Guardar
+    plt.savefig('created_data/figures/barras_modcontratacion_destgasto.png')
+
+    Prestación de servicios   0.88
+    Otro                      0.04
+    DecreeLaw092/2017         0.03
+    Compraventa               0.02
+    Suministros               0.01
+    Name: Tipo de Contrato, dtype: float64
+
+[No description has been provided for this image]
+
+In [20]:
+
+    # print( secopII_Master['Es Pyme'].value_counts( normalize=True) )
+
+    # print(secopII_Master['TipoDocProveedor'].value_counts(normalize=True))
+
+    ct_docpyme = pd.crosstab(secopII_Master['Es Pyme'], secopII_Master['TipoDocProveedor'], 
+                             margins=True, colnames=['Documento proveedor'])
+    ct_docpyme.loc['All',:] = ct_docpyme.loc['All',:]/secopII_Master.shape[0]
+    ct_docpyme.loc[:,'All'] = ct_docpyme.loc[:,'All']/secopII_Master.shape[0]
+    ct_docpyme.loc['All','All'] = 1
+    ct_docpyme = ct_docpyme.rename(index={'All':'Proporción del total'}, columns={'All':'Proporción del total'})
+    display(ct_docpyme)
+
+    #Convertir a Latex
+    ct_docpyme.to_latex('created_data/figures/tabla_pyme_docProveedor.txt')
+          
+    #Guardar tabla en word
+    ##Código tomado de "James": https://stackoverflow.com/questions/40596518/writing-a-python-pandas-dataframe-to-word-document
+
+    #El save no sobreescribe el documento word, así que se debe tener cuidado de no tener documento creado previamente.
+    # Un try puede solucionar esto
+    # table_doc = docx.Document()  #Crear documento
+
+    # # add a table to the end and create a reference variable
+    # # extra row is so we can add the header row
+    # t = table_doc.add_table(ct_docpyme.shape[0]+1, ct_docpyme.shape[1]+1)
+
+    # #Celda (0,0)
+    # t.cell(0,0).text = 'Documento proveedor \n \n Es Pyme'
+
+    # # add the header rows.
+    # for j in range(ct_docpyme.shape[-1]):
+    #     t.cell(0,j+1).text = ct_docpyme.columns[j]
+
+    # #Agregar indices
+    # for i in range(ct_docpyme.shape[0]):
+    #     t.cell(i+1,0).text = ct_docpyme.index[i]
+
+
+    # # add the rest of the data frame
+    # for i in range(ct_docpyme.shape[0]):
+    #     for j in range(ct_docpyme.shape[-1]):
+    #         t.cell(i+1,j+1).text = str(ct_docpyme.values[i,j])
+
+    # # save the doc
+    # table_doc.save('created_data/figures/tabla_pyme_docProveedor.docx')
+
+  Documento proveedor    Cédula de Ciudadanía   Cédula de Extranjería   NIT       No Definido   Otro    Pasaporte   Tarjeta de Identidad   Proporción del total
+  ---------------------- ---------------------- ----------------------- --------- ------------- ------- ----------- ---------------------- ----------------------
+  Es Pyme                                                                                                                                  
+  No                     68811.00               80.00                   6327.00   298.00        26.00   5.00        1.00                   0.86
+  Si                     6121.00                14.00                   5677.00   0.00          24.00   2.00        1.00                   0.14
+  Proporción del total   0.86                   0.00                    0.14      0.00          0.00    0.00        0.00                   1.00
+
+In [21]:
+
+    print( (secopII_Master['Valor de pago adelantado']!=0).sum() )
+    print( secopII_Master.loc[secopII_Master['Valor de pago adelantado']!=0, 'Valor de pago adelantado'].describe() )
+    print(1332925852.00/20292696.00)
+
+    54
+    count           54.00
+    mean    1928868777.41
+    std     1843766652.48
+    min        5040000.00
+    25%      485903648.00
+    50%     1332925852.00
+    75%     3038197569.00
+    max     7287705201.00
+    Name: Valor de pago adelantado, dtype: float64
+    65.68500567889058
+
+In [22]:
+
+    ## Info tipo adición
+    conteo_tipoadic = secopII_Master.loc[secopII_Master['Tuvo_adiciones']==1, 
+                                         ['Tuvo_adiciones_valor', 'Tuvo_adiciones_tiempo']].value_counts().reset_index()
+    conteo_tipoadic.index = ['Adiciones en tiempo', 'Adiciones en valor', 'Adiciones en tiempo y valor']
+
+    #Gráfica
+    plt.figure(figsize=(14,5))
+
+    #Gráfica izquierda
+    plt.subplot(121)
+    ax = secopII_Master['Tuvo_adiciones'].value_counts().plot(kind='pie', 
+                                                         colors=['b','r'], 
+                                                         labels=['No', 'Si'], labeldistance=1.3,
+                                                         fontsize=14,
+                                                         pctdistance=1.15, autopct="%.1f%%"
+                                                        )
+    plt.title('(a) ¿El contrato tuvo adiciones?', fontsize=16)
+    plt.ylabel(' ')
+
+    #Gráfica derecha
+    plt.subplot(122)
+    v = venn2(subsets=conteo_tipoadic[0], set_labels=conteo_tipoadic.index,
+              set_colors=('r', 'b'), alpha=0.5
+             )
+    plt.title('(b) Distribución de los contratos con adiciones', fontsize=16)
+    for text in v.set_labels:
+        text.set_fontsize(14)
+    for text in v.subset_labels:
+        text.set_fontsize(15)
+
+    #Guardar
+    plt.savefig('created_data/figures/tortaVenn_presencia_adiciones.png')
+
+[No description has been provided for this image]
+
+In [23]:
+
+    print( (secopII_Master['Numero multas SIC proveedor']!=0).sum() )
+    print((secopII_Master['Numero multas SIC proveedor']!=0).sum()/secopII_Master.shape[0])
+    secopII_Master['Numero multas SIC proveedor'].describe()
+    secopII_Master.loc[secopII_Master['Valor acumulado multas SIC proveedor']!=0, 
+                       'Valor acumulado multas SIC proveedor'].describe()
+
+    1167
+    0.013354389096776408
+
+Out[23]:
+
+    count          1151.00
+    mean     1129519986.65
+    std      4589482246.44
+    min          689454.00
+    25%        10309600.00
+    50%        62705945.00
+    75%        62705945.00
+    max     64304254243.00
+    Name: Valor acumulado multas SIC proveedor, dtype: float64
+
+In [24]:
+
+    print(secopII_Master['Segment Name'].value_counts(normalize=True).head(5))
+
+    conteo_segmentos = secopII_Master['Segment Name'].value_counts()
+
+    #Juntar segmentos con pocas observaciones
+    conteo_segmentos[1:].to_frame()
+    conteo_segmentos['Other 45 segments'] = conteo_segmentos[10:].sum()
+    conteo_segmentos = conteo_segmentos.drop(index=conteo_segmentos[10:-1].index)
+
+    plt.figure(figsize=(16,6))
+    squarify.plot(sizes=conteo_segmentos[1:], label=conteo_segmentos.index[1:]             )
+    plt.axis('off')
+
+    Management and Business Professionals and Administrative Services    0.78
+    Healthcare Services                                                  0.07
+    Politics and Civic Affairs Services                                  0.03
+    Engineering and Research and Technology Based Services               0.02
+    Farming and Fishing and Forestry and Wildlife Contracting Services   0.01
+    Name: Segment Name, dtype: float64
+
+Out[24]:
+
+    (0.0, 100.0, 0.0, 100.0)
+
+[No description has been provided for this image]
+
+Análisis exploratorio variables modelación¶
+
+Se proceden a realizar estadísticos y gráficas para detectar la posible
+relación existente entre las variables explicativas y las variables
+respuesta.
+
+In [25]:
+
+    path = 'created_data\SECOPII_Master_2.csv'
+    secopII_Master = pd.read_csv(path)
+    secopII_Master.shape
+
+    # Codigo Segmento Categoria Principal categórica
+    secopII_Master['Codigo Segmento Categoria Principal'] = secopII_Master['Codigo Segmento Categoria Principal'].astype('O')
+
+In [26]:
+
+    secopII_Master.shape
+
+Out[26]:
+
+    (87027, 46)
+
+In [27]:
+
+    secopII_Master.dtypes
+
+Out[27]:
+
+    ID Contrato                                 object
+    Nombre Entidad                              object
+    Nit Entidad                                  int64
+    Sector                                      object
+    Entidad Centralizada                        object
+    Tipo de Contrato                            object
+    Modalidad de Contratacion                   object
+    Justificacion Modalidad de Contratacion     object
+    Fecha de Firma                              object
+    TipoDocProveedor                            object
+    Documento Proveedor                         object
+    Es Grupo                                    object
+    Es Pyme                                     object
+    Habilita Pago Adelantado                    object
+    Liquidación                                 object
+    Obligación Ambiental                        object
+    Valor del Contrato                           int64
+    Saldo CDP                                  float64
+    EsPostConflicto                             object
+    Destino Gasto                               object
+    Proveedores Invitados                      float64
+    Proveedores con Invitacion Directa         float64
+    Conteo de Respuestas a Ofertas             float64
+    Fecha de Publicacion del Proceso            object
+    Fecha de Ultima Publicación                 object
+    Numero_de_procesos_reportados              float64
+    Codigo Segmento Categoria Principal         object
+    Numero multas SIC proveedor                  int64
+    Valor acumulado multas SIC proveedor       float64
+    Tipo Empresa Proveedor                      object
+    Dias Inicio-Firma Contrato                   int64
+    Dias Fin-Inicio Contrato                     int64
+    Dias Inicio-Firma Ejecucion                  int64
+    Dias Fin-Inicio Ejecucion                    int64
+    Dias Proveedor Inscrito                      int64
+    Mes Firma Contrato                          object
+    Proporcion pagada adelantado               float64
+    Saldo CDP respecto Valor                   float64
+    Grupo categoria principal                   object
+    Tipo Empresa Proveedor Resumido             object
+    Tiene_variables_portafolio                   int64
+    Dias Proceso Contratacion Abierto          float64
+    Mes de Publicacion del Proceso              object
+    Tuvo_adiciones_valor                         int64
+    Tuvo_adiciones_tiempo                        int64
+    Tuvo_adiciones                               int64
+    dtype: object
+
+Entidades a eliminar
+
+In [28]:
+
+    secopII_Master[secopII_Master['Sector']=='interior']['Nombre Entidad'].unique()
+    #secopII_Master[secopII_Master['Sector']=='defensa']['Nombre Entidad'].unique()
+
+Out[28]:
+
+    array(['ALCALDÍA LOCAL DE CHAPINERO - FONDO DE DESARROLLO LOCAL'],
+          dtype=object)
+
+In [29]:
+
+    secopII_Master['Sector'].value_counts(normalize=True)
+
+Out[29]:
+
+    Salud y Protección Social           0.41
+    Servicio Público                    0.18
+    Cultura                             0.14
+    Ambiente y Desarrollo Sostenible    0.06
+    Vivienda, Ciudad y Territorio       0.04
+    Transporte                          0.04
+    No aplica/No pertenece              0.02
+    Educación Nacional                  0.02
+    Hacienda y Crédito Público          0.02
+    defensa                             0.02
+    Inclusión Social y Reconciliación   0.01
+    Planeación                          0.01
+    Industria                           0.01
+    Trabajo                             0.01
+    Ley de Justicia                     0.01
+    interior                            0.00
+    Name: Sector, dtype: float64
+
+In [30]:
+
+    ent_excluir = ['INPEC - CARCEL Y PENITENCIARIA DE MEDIA SEGURIDAD DE BOGOTÁ', 
+                   'FONDO DE VIGILANCIA Y SEGURIDAD DE BOGOTÁ D.C EN LIQUIDACIÓN',
+                    'REGION ADMINISTRATIVA Y DE PLANEACION ESPECIAL - RAPE REGION CENTRAL',
+                    'COLEGIO DISTRITAL REPUBLICA DE COLOMBIA', 'CENTRAL ADMINISTRATIVA Y CONTABLE CENAC PERSONAL',
+                    'ESCUELA DE CADETES DE POLICIA GENERAL FRANCISCO DE PAULA SANTANDER'
+                  ]
+    print(secopII_Master['Nombre Entidad'].isin(ent_excluir).value_counts(normalize=True))
+
+    False   0.98
+    True    0.02
+    Name: Nombre Entidad, dtype: float64
+
+In [31]:
+
+    #Eliminar obervaciones
+    secopII_Master = secopII_Master[~secopII_Master['Nombre Entidad'].isin(ent_excluir)]
+
+In [32]:
+
+    secopII_Master.shape
+
+Out[32]:
+
+    (85443, 46)
+
+Listados de variables
+
+In [33]:
+
+    #Variables independientes
+    vars_to_plot = ['Sector', 'Entidad Centralizada',
+                   'Tipo de Contrato', 'Modalidad de Contratacion',
+                   'Justificacion Modalidad de Contratacion', 'TipoDocProveedor',
+                   'Es Grupo', 'Es Pyme', 'Habilita Pago Adelantado', 'Liquidación',
+                   'Obligación Ambiental', 'Valor del Contrato', 'Saldo CDP',
+                   'EsPostConflicto', 'Destino Gasto', 'Proveedores Invitados',
+                   'Proveedores con Invitacion Directa', 'Conteo de Respuestas a Ofertas',
+                   'Numero_de_procesos_reportados',
+                   'Numero multas SIC proveedor', 'Valor acumulado multas SIC proveedor',
+                   'Tipo Empresa Proveedor', 'Dias Inicio-Firma Contrato',
+                   'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+                   'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito',
+                   'Mes Firma Contrato', 'Proporcion pagada adelantado',
+                   'Saldo CDP respecto Valor', 'Grupo categoria principal',
+                   'Tipo Empresa Proveedor Resumido', 'Tiene_variables_portafolio',
+                   'Dias Proceso Contratacion Abierto', 'Mes de Publicacion del Proceso'
+                   ]
+
+    #Variables independientes categóricas
+    expl_cat = ['Sector', 'Entidad Centralizada',
+               'Tipo de Contrato', 'Modalidad de Contratacion',
+               'Justificacion Modalidad de Contratacion', 'TipoDocProveedor',
+               'Es Grupo', 'Es Pyme', 'Habilita Pago Adelantado', 'Liquidación',
+               'Obligación Ambiental', 'EsPostConflicto', 'Destino Gasto',
+               'Codigo Segmento Categoria Principal', 'Tipo Empresa Proveedor',
+               'Mes Firma Contrato', 'Grupo categoria principal',
+               'Tipo Empresa Proveedor Resumido', 'Mes de Publicacion del Proceso'
+               ]
+
+    #Variables independientes numéricas
+    expl_num = ['Valor del Contrato', 'Saldo CDP', 'Proveedores Invitados',
+               'Proveedores con Invitacion Directa', 'Conteo de Respuestas a Ofertas',
+               'Numero_de_procesos_reportados', 'Numero multas SIC proveedor',
+               'Valor acumulado multas SIC proveedor', 'Dias Inicio-Firma Contrato',
+               'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+               'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito',
+               'Proporcion pagada adelantado', 'Saldo CDP respecto Valor',
+               'Tiene_variables_portafolio', 'Dias Proceso Contratacion Abierto'
+               ]
+
+Funciones usadas para generar gráficos y tablas
+
+In [34]:
+
+    #Funciones a usar
+
+    def difStatsTable(base, var_respuesta='Tuvo_adiciones', expl_num=expl_num):
+        '''Genera una tabla para comparar las medias, medianas y desviaciones de variables explicativas numéricas
+        y una variable respuesta
+        Entrada: base: Base de datos de pandas con los datos a usar
+                 var_respuesta: variable de respuesta a usar
+                 expl_num: Usa la lista expl_num creada previamente para filtrar las variables numéricas.
+        Salida: Tabla con estadísticas descriptivas'''
+        statsByAdit = base[expl_num+[var_respuesta]].groupby(var_respuesta).agg(['mean','median','std'])
+        display(pd.concat([statsByAdit,
+                           statsByAdit.diff().iloc[1,:].to_frame().T.rename(index={1:'Diferencia porcentual'}
+                                                                           )/statsByAdit.iloc[0,:]]
+                         ))
+        return
+
+    def plotAll2D(base, var_respuesta, vars_to_plot=vars_to_plot, show_box_fliers=False, normalize='index'):
+        '''Genera gráfica para todas las variables a gráficar contra la variable explicativa, boxplot 
+        si es numérica y heatmap si es categórica.
+        Entrada: base: Base de datos de pandas con los datos a usar
+                 var_respuesta: variable de respuesta a usar
+                 expl_num: Usa la lista expl_num creada previamente para filtrar las variables numéricas.
+                 show_box_fliers: True o False dependiendo si se quieren ver los valores fuera de los bigotes en boxplots.
+                 normalize: Tipo de normalización a efectuar en la matríz de confusión. De acuerdo al parametro de pd.crosstab.
+        Salida: Un gráfica con tantos subgráficas como variables en vars_to_plot
+        '''
+        nf = np.ceil(len(vars_to_plot)/2)
+        plt.figure(figsize=(18,8*nf))
+        plt.subplots_adjust(hspace=2)
+
+        for i, var in enumerate(vars_to_plot):
+            plt.subplot(nf,2,i+1)
+            if base[var].dtype=='O':
+                cross = pd.crosstab(base[var_respuesta], base[var], normalize='index' )
+                sns.heatmap( cross , cmap='YlGnBu', annot=True, annot_kws={'rotation': 90})
+            else:
+                sns.boxplot(x=var_respuesta, y=var, data=base, showfliers = show_box_fliers)
+
+            plt.title(var, fontsize=16)
+        plt.show()  
+        
+        return
+        
+
+Sin discriminar tipo de contrato¶
+
+Calculo del grado de correlación entre las diversas variables
+explicativas y las variables respuesta. En el caso de las variables
+explicativas numéricas se usa la correlación de pearson usual.Y para las
+variables categóricas se usa la V de cramer, que se calcula en base al
+estadístico de la prueba chi cuadrado de independencia, la cual se
+interpreta de manera similar.
+
+In [35]:
+
+    #Para variables numéricas
+    plt.figure(figsize=(10,10))
+    sns.heatmap(secopII_Master.corr()[['Tuvo_adiciones_valor', 'Tuvo_adiciones_tiempo', 'Tuvo_adiciones']], 
+                annot=True, cmap='YlGnBu')
+    plt.title('Correlación entre variables explicativas numéricas y objetivo', fontsize=16)
+    plt.show()
+
+[No description has been provided for this image]
+
+In [36]:
+
+    #Para variables categóricas usando la V de cramer
+    catcorrM = corrcat.corr_matrix(secopII_Master, 
+                                   columns=expl_cat+['Tuvo_adiciones_valor', 'Tuvo_adiciones_tiempo', 'Tuvo_adiciones'] )
+    plt.figure(figsize=(10,12))
+    sns.heatmap(catcorrM[['Tuvo_adiciones_valor', 'Tuvo_adiciones_tiempo', 'Tuvo_adiciones']],
+               annot=True, cmap='YlGnBu')
+    plt.title('V de Cramer entre variables explicativas categóricas y objetivo', fontsize=16)
+    plt.show()
+
+    del catcorrM
+
+[No description has been provided for this image]
+
+Presencia de adiciones¶
+
+Relación entre presencia de adiciones y demás variables explicativas.
+
+In [37]:
+
+    plotAll2D(secopII_Master,'Tuvo_adiciones')  
+
+    for var in ['Valor del Contrato', 'Saldo CDP']:
+        sns.catplot(x='Tuvo_adiciones', y=var, data=secopII_Master)
+        plt.show()
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+In [38]:
+
+    #Estadísticos de variables numéricas por presencia de adiciones
+    difStatsTable(secopII_Master, 'Tuvo_adiciones')
+
++------------+-------------------------------------------+----------------------------------------------+------------------------+------------------------+-----------------------+-----------------------------------------+-----------------------+-------------------------------------+-------------------------+--------------------------+------------------------+--------------------------+--------------------------+------------------------+----------------------------------+--------------------------------------+----------------------+
+|            | Valor del Contrato                        | Saldo CDP                                    | Proveedores Invitados  | Proveedores con        | Conteo de Respuestas  | Numero_de_procesos_reportados           | Numero multas SIC     | Valor acumulado multas SIC          | Dias Inicio-Firma       | Dias Fin-Inicio Contrato | Dias Inicio-Firma      | Dias Fin-Inicio          | Dias Proveedor Inscrito  | Proporcion pagada      | Saldo CDP respecto Valor         | Tiene_variables_portafolio           | Dias Proceso         |
+|            |                                           |                                              |                        | Invitacion Directa     | a Ofertas             |                                         | proveedor             | proveedor                           | Contrato                |                          | Ejecucion              | Ejecucion                |                          | adelantado             |                                  |                                      | Contratacion Abierto |
++------------+-------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+-------+--------+------+-------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+------+--------+------+
+|            | mean        | median      | std           | mean          | median      | std            | mean  | median | std   | mean  | median | std   | mean | median | std   | mean        | median      | std         | mean  | median | std  | mean        | median | std          | mean   | median | std   | mean   | median | std    | mean  | median | std   | mean   | median | std    | mean   | median | std    | mean  | median | std   | mean      | median | std         | mean       | median     | std        | mean | median | std  |
++============+=============+=============+===============+===============+=============+================+=======+========+=======+=======+========+=======+======+========+=======+=============+=============+=============+=======+========+======+=============+========+==============+========+========+=======+========+========+========+=======+========+=======+========+========+========+========+========+========+=======+========+=======+===========+========+=============+============+============+============+======+========+======+
+| 0          | 58837538.86 | 17545621.00 | 615472906.48  | 3161812988.25 | 19080020.00 | 57961084002.72 | 5.69  | 0.00   | 35.33 | 0.15  | 0.00   | 1.94  | 0.02 | 0.00   | 0.76  | 1.03        | 1.00        | 0.18        | 0.22  | 0.00   | 6.95 | 13821305.11 | 0.00   | 522527298.74 | -11.16 | 0.00   | 40.78 | 181.59 | 154.00 | 119.58 | -8.73 | 0.00   | 47.65 | 178.60 | 152.00 | 118.42 | 315.64 | 254.00 | 301.30 | 0.00  | 0.00   | 0.01  | 117888.81 | 1.00   | 27648308.43 | 0.94       | 1.00       | 0.25       | 0.56 | 0.00   | 3.89 |
++------------+-------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+-------+--------+------+-------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+------+--------+------+
+| 1          | 99093103.35 | 25677849.00 | 1107874666.73 | 6699082381.21 | 37199472.00 | 28018419543.90 | 5.27  | 0.00   | 32.89 | 0.15  | 0.00   | 2.34  | 0.02 | 0.00   | 0.56  | 1.03        | 1.00        | 0.18        | 0.21  | 0.00   | 7.54 | 13659380.35 | 0.00   | 544531317.01 | -6.02  | -1.00  | 27.73 | 269.84 | 303.00 | 127.67 | 11.70 | 0.00   | 58.93 | 260.54 | 273.00 | 131.82 | 362.24 | 357.00 | 304.55 | 0.00  | 0.00   | 0.01  | 305.95    | 1.00   | 3548.33     | 0.97       | 1.00       | 0.17       | 0.63 | 0.00   | 4.11 |
++------------+-------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+-------+--------+------+-------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+------+--------+------+
+| Diferencia | 0.68        | 0.46        | 0.80          | 1.12          | 0.95        | -0.52          | -0.07 | NaN    | -0.07 | -0.02 | NaN    | 0.20  | 0.05 | NaN    | -0.25 | 0.00        | 0.00        | 0.03        | -0.05 | NaN    | 0.09 | -0.01       | NaN    | 0.04         | -0.46  | -inf   | -0.32 | 0.49   | 0.97   | 0.07   | -2.34 | NaN    | 0.24  | 0.46   | 0.80   | 0.11   | 0.15   | 0.41   | 0.01   | -0.46 | NaN    | -0.31 | -1.00     | 0.00   | -1.00       | 0.04       | 0.00       | -0.29      | 0.12 | NaN    | 0.06 |
+| porcentual |             |             |               |               |             |                |       |        |       |       |        |       |      |        |       |             |             |             |       |        |      |             |        |              |        |        |       |        |        |        |       |        |       |        |        |        |        |        |        |       |        |       |           |        |             |            |            |            |      |        |      |
++------------+-------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+-------+--------+------+-------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+------+--------+------+
+
+Presencia de adiciones en valor¶
+
+Relación entre presencia de adiciones en valor y demás variables
+explicativas.
+
+In [39]:
+
+    plotAll2D(secopII_Master,'Tuvo_adiciones_valor')
+
+    for var in ['Valor del Contrato', 'Saldo CDP']:
+        sns.catplot(x='Tuvo_adiciones_valor', y=var, data=secopII_Master)
+        plt.show()
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+In [40]:
+
+    #Estadísticos de variables numéricas por presencia de adiciones en valor
+    difStatsTable(secopII_Master, 'Tuvo_adiciones_valor')
+
++------------+------------------------------------------+----------------------------------------------+------------------------+------------------------+------------------------+-----------------------------------------+----------------------+-------------------------------------+-------------------------+--------------------------+------------------------+--------------------------+--------------------------+------------------------+---------------------------------+--------------------------------------+------------------------+
+|            | Valor del Contrato                       | Saldo CDP                                    | Proveedores Invitados  | Proveedores con        | Conteo de Respuestas a | Numero_de_procesos_reportados           | Numero multas SIC    | Valor acumulado multas SIC          | Dias Inicio-Firma       | Dias Fin-Inicio Contrato | Dias Inicio-Firma      | Dias Fin-Inicio          | Dias Proveedor Inscrito  | Proporcion pagada      | Saldo CDP respecto Valor        | Tiene_variables_portafolio           | Dias Proceso           |
+|            |                                          |                                              |                        | Invitacion Directa     | Ofertas                |                                         | proveedor            | proveedor                           | Contrato                |                          | Ejecucion              | Ejecucion                |                          | adelantado             |                                 |                                      | Contratacion Abierto   |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+-------+--------+-------+-------------+-------------+-------------+------+--------+------+-------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+----------+--------+-------------+------------+------------+------------+-------+--------+-------+
+|            | mean        | median      | std          | mean          | median      | std            | mean  | median | std   | mean  | median | std   | mean  | median | std   | mean        | median      | std         | mean | median | std  | mean        | median | std          | mean   | median | std   | mean   | median | std    | mean  | median | std   | mean   | median | std    | mean   | median | std    | mean  | median | std   | mean     | median | std         | mean       | median     | std        | mean  | median | std   |
++============+=============+=============+==============+===============+=============+================+=======+========+=======+=======+========+=======+=======+========+=======+=============+=============+=============+======+========+======+=============+========+==============+========+========+=======+========+========+========+=======+========+=======+========+========+========+========+========+========+=======+========+=======+==========+========+=============+============+============+============+=======+========+=======+
+| 0          | 72267903.27 | 19500000.00 | 856319331.71 | 3954562023.69 | 23211727.50 | 52630955864.35 | 5.89  | 0.00   | 35.68 | 0.16  | 0.00   | 2.13  | 0.02  | 0.00   | 0.75  | 1.03        | 1.00        | 0.18        | 0.21 | 0.00   | 6.98 | 13039746.99 | 0.00   | 521825109.65 | -10.04 | 0.00   | 37.27 | 204.55 | 180.00 | 128.74 | -4.67 | 0.00   | 49.85 | 196.32 | 180.00 | 125.39 | 348.75 | 301.00 | 311.00 | 0.00  | 0.00   | 0.01  | 93970.85 | 1.00   | 24678263.95 | 0.94       | 1.00       | 0.24       | 0.60  | 0.00   | 4.09  |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+-------+--------+-------+-------------+-------------+-------------+------+--------+------+-------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+----------+--------+-------------+------------+------------+------------+-------+--------+-------+
+| 1          | 73727317.33 | 23486400.00 | 591356263.45 | 6343200658.43 | 21068709.00 | 33408365328.22 | 3.92  | 0.00   | 28.30 | 0.12  | 0.00   | 1.87  | 0.01  | 0.00   | 0.38  | 1.03        | 1.00        | 0.17        | 0.26 | 0.00   | 7.96 | 17279101.04 | 0.00   | 568442871.23 | -6.41  | -1.00  | 35.19 | 245.59 | 269.00 | 126.73 | 12.17 | 0.00   | 62.66 | 255.42 | 268.00 | 135.47 | 247.96 | 156.00 | 245.76 | 0.00  | 0.00   | 0.00  | 367.66   | 0.95   | 4946.09     | 0.97       | 1.00       | 0.16       | 0.51  | 0.00   | 3.37  |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+-------+--------+-------+-------------+-------------+-------------+------+--------+------+-------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+----------+--------+-------------+------------+------------+------------+-------+--------+-------+
+| Diferencia | 0.02        | 0.20        | -0.31        | 0.60          | -0.09       | -0.37          | -0.33 | NaN    | -0.21 | -0.25 | NaN    | -0.12 | -0.21 | NaN    | -0.49 | -0.01       | 0.00        | -0.08       | 0.26 | NaN    | 0.14 | 0.33        | NaN    | 0.09         | -0.36  | -inf   | -0.06 | 0.20   | 0.49   | -0.02  | -3.60 | NaN    | 0.26  | 0.30   | 0.49   | 0.08   | -0.29  | -0.48  | -0.21  | -0.65 | NaN    | -0.47 | -1.00    | -0.05  | -1.00       | 0.03       | 0.00       | -0.32      | -0.15 | NaN    | -0.17 |
+| porcentual |             |             |              |               |             |                |       |        |       |       |        |       |       |        |       |             |             |             |      |        |      |             |        |              |        |        |       |        |        |        |       |        |       |        |        |        |        |        |        |       |        |       |          |        |             |            |            |            |       |        |       |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+-------+--------+-------+-------------+-------------+-------------+------+--------+------+-------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+----------+--------+-------------+------------+------------+------------+-------+--------+-------+
+
+In [41]:
+
+    fig = px.histogram(secopII_Master, x = "Sector", color = "Tuvo_adiciones_valor", barmode = "group")
+    fig.show()
+
+In [42]:
+
+    fig = px.histogram(secopII_Master, x = "Valor del Contrato", color = "Tuvo_adiciones_valor", range_x 
+     = [0, 0.2e9], barmode = "group", histnorm = "probability")
+    fig.show()
+
+In [43]:
+
+    fig = px.histogram(secopII_Master, x = "Saldo CDP", color = "Tuvo_adiciones_valor", range_x 
+     = [0, 1e10], barmode = "group", histnorm = "probability")
+    fig.show()
+
+In [44]:
+
+    secopII_Master["Saldo CDP"].describe()
+
+Out[44]:
+
+    count           85443.00
+    mean       4363920725.15
+    std       49873545243.82
+    min                 0.00
+    25%                 0.00
+    50%          22994003.00
+    75%          86566667.00
+    max     3300000000000.00
+    Name: Saldo CDP, dtype: float64
+
+In [45]:
+
+    fig = px.histogram(secopII_Master, x = "Entidad Centralizada", color = "Tuvo_adiciones_valor", barmode = "group",
+                      histnorm = "probability")
+    fig.show()
+
+In [46]:
+
+    fig = px.histogram(secopII_Master, x = "Mes Firma Contrato", color = "Tuvo_adiciones_valor", barmode = "group",
+                      histnorm = "probability",
+                      category_orders={"Mes Firma Contrato":
+                                       ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']}
+                      )
+    fig.show()
+
+In [47]:
+
+    fig = px.histogram(secopII_Master, x = "Modalidad de Contratacion", color = "Tuvo_adiciones_valor", barmode = "group",
+                      histnorm = "probability")
+    fig.show()
+
+In [48]:
+
+    fig = px.histogram(secopII_Master, x = "Mes de Publicacion del Proceso", color = "Tuvo_adiciones_valor", barmode = "group",
+                      histnorm = "probability",
+                      category_orders={"Mes Firma Contrato":
+                                       ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']}
+                      )
+    fig.show()
+
+Presencia de adiciones en tiempo¶
+
+Relación entre presencia de adiciones en tiempo y demás variables
+explicativas.
+
+In [49]:
+
+    plotAll2D(secopII_Master,'Tuvo_adiciones_tiempo')
+
+    for var in ['Valor del Contrato', 'Saldo CDP']:
+        sns.catplot(x='Tuvo_adiciones_tiempo', y=var, data=secopII_Master)
+        plt.show()
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+In [50]:
+
+    #Estadísticos de variables numéricas por presencia de adiciones en valor
+    difStatsTable(secopII_Master, 'Tuvo_adiciones_tiempo')
+
++------------+--------------------------------------------+----------------------------------------------+------------------------+------------------------+-----------------------+-----------------------------------------+------------------------+-------------------------------------+-------------------------+--------------------------+------------------------+--------------------------+--------------------------+------------------------+---------------------------------+--------------------------------------+----------------------+
+|            | Valor del Contrato                         | Saldo CDP                                    | Proveedores Invitados  | Proveedores con        | Conteo de Respuestas  | Numero_de_procesos_reportados           | Numero multas SIC      | Valor acumulado multas SIC          | Dias Inicio-Firma       | Dias Fin-Inicio Contrato | Dias Inicio-Firma      | Dias Fin-Inicio          | Dias Proveedor Inscrito  | Proporcion pagada      | Saldo CDP respecto Valor        | Tiene_variables_portafolio           | Dias Proceso         |
+|            |                                            |                                              |                        | Invitacion Directa     | a Ofertas             |                                         | proveedor              | proveedor                           | Contrato                |                          | Ejecucion              | Ejecucion                |                          | adelantado             |                                 |                                      | Contratacion Abierto |
++------------+--------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+-------+--------+-------+-------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+----------+--------+-------------+------------+------------+------------+------+--------+------+
+|            | mean         | median      | std           | mean          | median      | std            | mean  | median | std   | mean  | median | std   | mean | median | std   | mean        | median      | std         | mean  | median | std   | mean        | median | std          | mean   | median | std   | mean   | median | std    | mean  | median | std   | mean   | median | std    | mean   | median | std    | mean  | median | std   | mean     | median | std         | mean       | median     | std        | mean | median | std  |
++============+==============+=============+===============+===============+=============+================+=======+========+=======+=======+========+=======+======+========+=======+=============+=============+=============+=======+========+=======+=============+========+==============+========+========+=======+========+========+========+=======+========+=======+========+========+========+========+========+========+=======+========+=======+==========+========+=============+============+============+============+======+========+======+
+| 0          | 60206152.90  | 18720000.00 | 609338423.43  | 3533934638.84 | 18800000.00 | 54292221562.26 | 5.25  | 0.00   | 33.87 | 0.14  | 0.00   | 1.90  | 0.02 | 0.00   | 0.70  | 1.03        | 1.00        | 0.17        | 0.22  | 0.00   | 7.16  | 14295103.04 | 0.00   | 532523453.87 | -10.40 | 0.00   | 40.17 | 191.44 | 173.00 | 122.03 | -5.55 | 0.00   | 50.00 | 192.26 | 167.00 | 124.89 | 300.21 | 223.00 | 291.99 | 0.00  | 0.00   | 0.01  | 96126.78 | 1.00   | 24957964.42 | 0.94       | 1.00       | 0.23       | 0.54 | 0.00   | 3.74 |
++------------+--------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+-------+--------+-------+-------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+----------+--------+-------------+------------+------------+------------+------+--------+------+
+| 1          | 125058032.39 | 29412000.00 | 1388687119.54 | 7905829168.92 | 51636367.00 | 22533404383.59 | 6.76  | 0.00   | 36.99 | 0.18  | 0.00   | 2.74  | 0.02 | 0.00   | 0.67  | 1.04        | 1.00        | 0.20        | 0.18  | 0.00   | 7.12  | 11509545.68 | 0.00   | 519665058.14 | -5.21  | 0.00   | 16.82 | 297.52 | 330.00 | 124.27 | 14.29 | 1.00   | 60.15 | 266.98 | 288.00 | 129.33 | 464.89 | 434.00 | 313.82 | 0.00  | 0.00   | 0.01  | 273.25   | 1.00   | 762.78      | 0.96       | 1.00       | 0.19       | 0.79 | 0.00   | 4.80 |
++------------+--------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+-------+--------+-------+-------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+----------+--------+-------------+------------+------------+------------+------+--------+------+
+| Diferencia | 1.08         | 0.57        | 1.28          | 1.24          | 1.75        | -0.58          | 0.29  | NaN    | 0.09  | 0.26  | NaN    | 0.44  | 0.15 | NaN    | -0.05 | 0.01        | 0.00        | 0.17        | -0.19 | NaN    | -0.01 | -0.19       | NaN    | -0.02        | -0.50  | NaN    | -0.58 | 0.55   | 0.91   | 0.02   | -3.57 | inf    | 0.20  | 0.39   | 0.72   | 0.04   | 0.55   | 0.95   | 0.07   | -0.06 | NaN    | -0.08 | -1.00    | 0.00   | -1.00       | 0.02       | 0.00       | -0.17      | 0.45 | NaN    | 0.28 |
+| porcentual |              |             |               |               |             |                |       |        |       |       |        |       |      |        |       |             |             |             |       |        |       |             |        |              |        |        |       |        |        |        |       |        |       |        |        |        |        |        |        |       |        |       |          |        |             |            |            |            |      |        |      |
++------------+--------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+-------+--------+-------+-------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+----------+--------+-------------+------------+------------+------------+------+--------+------+
+
+Contratos diferentes a prestación de servicios¶
+
+Relación entre variables de adiciones y explicativas excluyendo
+prestación de servicios. Se conservan aquellas observaciones en las
+cuales la modalidad de contratación no es "Prestación de servicios".
+
+In [51]:
+
+    secopII_NoPS = secopII_Master[secopII_Master['Tipo de Contrato']!='Prestación de servicios']
+    secopII_NoPS.shape
+
+Out[51]:
+
+    (9714, 46)
+
+In [52]:
+
+    #Para variables numéricas
+    plt.figure(figsize=(10,10))
+    sns.heatmap(secopII_NoPS.corr()[['Tuvo_adiciones_valor', 'Tuvo_adiciones_tiempo', 'Tuvo_adiciones']], 
+                annot=True, cmap='YlGnBu')
+    plt.title('Correlación entre variables explicativas numéricas y objetivo (NoPServicios)', fontsize=16)
+    plt.show()
+
+[No description has been provided for this image]
+
+In [53]:
+
+    #Para variables categóricas usando la V de cramer
+    catcorrM = corrcat.corr_matrix(secopII_NoPS, 
+                                   columns=expl_cat+['Tuvo_adiciones_valor', 'Tuvo_adiciones_tiempo', 'Tuvo_adiciones'] )
+    plt.figure(figsize=(10,12))
+    sns.heatmap(catcorrM[['Tuvo_adiciones_valor', 'Tuvo_adiciones_tiempo', 'Tuvo_adiciones']],
+               annot=True, cmap='YlGnBu')
+    plt.title('V de Cramer entre variables explicativas categóricas y objetivo (NoPServicios)', fontsize=16)
+    plt.show()
+
+    del catcorrM
+
+[No description has been provided for this image]
+
+Presencia de adiciones¶
+
+Relación entre presencia de adiciones y demás variables explicativas.
+
+In [54]:
+
+    print('No Prestación de Servicios')
+    plotAll2D(secopII_NoPS,'Tuvo_adiciones')
+
+    for var in ['Valor del Contrato', 'Saldo CDP']:
+        sns.catplot(x='Tuvo_adiciones', y=var, data=secopII_NoPS)
+        plt.show()
+
+    No Prestación de Servicios
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+In [55]:
+
+    print('No Prestación de Servicios')
+    difStatsTable(secopII_NoPS, 'Tuvo_adiciones')
+
+    No Prestación de Servicios
+
++------------+--------------------------------------------+----------------------------------------------+------------------------+------------------------+-----------------------+-----------------------------------------+------------------------+--------------------------------------+-------------------------+--------------------------+------------------------+--------------------------+--------------------------+------------------------+---------------------------+--------------------------------------+-----------------------+
+|            | Valor del Contrato                         | Saldo CDP                                    | Proveedores Invitados  | Proveedores con        | Conteo de Respuestas  | Numero_de_procesos_reportados           | Numero multas SIC      | Valor acumulado multas SIC proveedor | Dias Inicio-Firma       | Dias Fin-Inicio Contrato | Dias Inicio-Firma      | Dias Fin-Inicio          | Dias Proveedor Inscrito  | Proporcion pagada      | Saldo CDP respecto Valor  | Tiene_variables_portafolio           | Dias Proceso          |
+|            |                                            |                                              |                        | Invitacion Directa     | a Ofertas             |                                         | proveedor              |                                      | Contrato                |                          | Ejecucion              | Ejecucion                |                          | adelantado             |                           |                                      | Contratacion Abierto  |
++------------+--------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+-------+--------+-------+-------------+--------+---------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+--------+--------+---------+------------+------------+------------+------+--------+-------+
+|            | mean         | median      | std           | mean          | median      | std            | mean  | median | std   | mean  | median | std   | mean | median | std   | mean        | median      | std         | mean  | median | std   | mean        | median | std           | mean   | median | std   | mean   | median | std    | mean  | median | std   | mean   | median | std    | mean   | median | std    | mean  | median | std   | mean   | median | std     | mean       | median     | std        | mean | median | std   |
++============+==============+=============+===============+===============+=============+================+=======+========+=======+=======+========+=======+======+========+=======+=============+=============+=============+=======+========+=======+=============+========+===============+========+========+=======+========+========+========+=======+========+=======+========+========+========+========+========+========+=======+========+=======+========+========+=========+============+============+============+======+========+=======+
+| 0          | 250343538.74 | 8826830.00  | 1730596862.22 | 506997047.59  | 0.00        | 2673195605.36  | 28.66 | 0.00   | 81.60 | 0.34  | 0.00   | 3.15  | 0.12 | 0.00   | 2.14  | 1.17        | 1.00        | 0.37        | 1.42  | 0.00   | 18.39 | 89443113.06 | 0.00   | 1414036481.44 | -6.55  | 1.00   | 34.03 | 110.11 | 59.00  | 137.64 | -4.18 | 1.00   | 38.35 | 107.49 | 59.00  | 129.03 | 468.35 | 389.00 | 404.92 | 0.00  | 0.00   | 0.02  | 134.00 | 0.00   | 7782.55 | 0.93       | 1.00       | 0.26       | 2.75 | 0.00   | 8.37  |
++------------+--------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+-------+--------+-------+-------------+--------+---------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+--------+--------+---------+------------+------------+------------+------+--------+-------+
+| 1          | 597392619.27 | 26564085.50 | 3524756119.31 | 4299817280.74 | 89902956.50 | 20289392335.38 | 40.36 | 0.00   | 90.47 | 0.48  | 0.00   | 4.51  | 0.14 | 0.00   | 1.58  | 1.23        | 1.00        | 0.42        | 1.39  | 0.00   | 14.79 | 83474680.72 | 0.00   | 990963007.54  | -15.23 | -1.00  | 34.08 | 247.74 | 206.00 | 163.57 | 30.44 | 3.00   | 79.51 | 194.52 | 125.50 | 169.90 | 533.49 | 579.50 | 423.54 | 0.00  | 0.00   | 0.02  | 219.67 | 1.00   | 654.73  | 0.96       | 1.00       | 0.19       | 4.22 | 0.00   | 10.74 |
++------------+--------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+-------+--------+-------+-------------+--------+---------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+--------+--------+---------+------------+------------+------------+------+--------+-------+
+| Diferencia | 1.39         | 2.01        | 1.04          | 7.48          | inf         | 6.59           | 0.41  | NaN    | 0.11  | 0.41  | NaN    | 0.43  | 0.13 | NaN    | -0.26 | 0.06        | 0.00        | 0.13        | -0.02 | NaN    | -0.20 | -0.07       | NaN    | -0.30         | 1.33   | -2.00  | 0.00  | 1.25   | 2.49   | 0.19   | -8.28 | 2.00   | 1.07  | 0.81   | 1.13   | 0.32   | 0.14   | 0.49   | 0.05   | -0.20 | NaN    | -0.14 | 0.64   | inf    | -0.92   | 0.04       | 0.00       | -0.25      | 0.54 | NaN    | 0.28  |
+| porcentual |              |             |               |               |             |                |       |        |       |       |        |       |      |        |       |             |             |             |       |        |       |             |        |               |        |        |       |        |        |        |       |        |       |        |        |        |        |        |        |       |        |       |        |        |         |            |            |            |      |        |       |
++------------+--------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+-------+--------+-------+-------------+--------+---------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+--------+--------+---------+------------+------------+------------+------+--------+-------+
+
+Presencia de adiciones en valor¶
+
+Relación entre presencia de adiciones en valor y demás variables
+explicativas.
+
+In [56]:
+
+    print('No Prestación de Servicios')
+    plotAll2D(secopII_NoPS,'Tuvo_adiciones_valor')
+
+    for var in ['Valor del Contrato', 'Saldo CDP']:
+        sns.catplot(x='Tuvo_adiciones_valor', y=var, data=secopII_NoPS)
+        plt.show()
+
+    No Prestación de Servicios
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+In [57]:
+
+    print('No Prestación de Servicios')
+    difStatsTable(secopII_NoPS, 'Tuvo_adiciones_valor')
+
+    No Prestación de Servicios
+
++------------+--------------------------------------------+----------------------------------------------+------------------------+------------------------+-----------------------+-----------------------------------------+-----------------------+---------------------------------------+------------------------+--------------------------+------------------------+--------------------------+--------------------------+------------------------+---------------------------+--------------------------------------+----------------------+
+|            | Valor del Contrato                         | Saldo CDP                                    | Proveedores Invitados  | Proveedores con        | Conteo de Respuestas  | Numero_de_procesos_reportados           | Numero multas SIC     | Valor acumulado multas SIC proveedor  | Dias Inicio-Firma      | Dias Fin-Inicio Contrato | Dias Inicio-Firma      | Dias Fin-Inicio          | Dias Proveedor Inscrito  | Proporcion pagada      | Saldo CDP respecto Valor  | Tiene_variables_portafolio           | Dias Proceso         |
+|            |                                            |                                              |                        | Invitacion Directa     | a Ofertas             |                                         | proveedor             |                                       | Contrato               |                          | Ejecucion              | Ejecucion                |                          | adelantado             |                           |                                      | Contratacion Abierto |
++------------+--------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+------+--------+-------+--------------+--------+---------------+-------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+--------+--------+---------+------------+------------+------------+------+--------+------+
+|            | mean         | median      | std           | mean          | median      | std            | mean  | median | std   | mean  | median | std   | mean | median | std   | mean        | median      | std         | mean | median | std   | mean         | median | std           | mean  | median | std   | mean   | median | std    | mean  | median | std   | mean   | median | std    | mean   | median | std    | mean  | median | std   | mean   | median | std     | mean       | median     | std        | mean | median | std  |
++============+==============+=============+===============+===============+=============+================+=======+========+=======+=======+========+=======+======+========+=======+=============+=============+=============+======+========+=======+==============+========+===============+=======+========+=======+========+========+========+=======+========+=======+========+========+========+========+========+========+=======+========+=======+========+========+=========+============+============+============+======+========+======+
+| 0          | 335632518.25 | 11611472.00 | 2407993182.18 | 1566602995.12 | 0.00        | 9800669763.31  | 31.17 | 0.00   | 83.39 | 0.36  | 0.00   | 3.60  | 0.13 | 0.00   | 2.07  | 1.18        | 1.00        | 0.38        | 1.25 | 0.00   | 16.94 | 78019898.04  | 0.00   | 1290226425.63 | -9.31 | 0.00   | 33.82 | 139.31 | 89.00  | 156.67 | 5.79  | 1.00   | 56.65 | 119.76 | 60.00  | 140.79 | 497.50 | 438.00 | 409.95 | 0.00  | 0.00   | 0.02  | 171.94 | 0.00   | 6935.52 | 0.93       | 1.00       | 0.25       | 3.02 | 0.00   | 9.09 |
++------------+--------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+------+--------+-------+--------------+--------+---------------+-------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+--------+--------+---------+------------+------------+------------+------+--------+------+
+| 1          | 477759000.91 | 34850969.00 | 2227230409.63 | 1828363238.98 | 25697000.00 | 19947294095.14 | 40.45 | 1.00   | 93.19 | 0.55  | 0.00   | 3.66  | 0.14 | 0.00   | 1.09  | 1.26        | 1.00        | 0.44        | 2.83 | 0.00   | 21.43 | 176427477.59 | 0.00   | 1448698892.68 | -6.51 | 0.00   | 38.04 | 242.58 | 198.00 | 141.49 | 5.10  | 1.00   | 46.23 | 247.81 | 198.00 | 154.80 | 391.05 | 217.00 | 412.10 | 0.00  | 0.00   | 0.02  | 35.95  | 0.96   | 172.28  | 0.95       | 1.00       | 0.22       | 4.57 | 0.00   | 9.60 |
++------------+--------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+------+--------+-------+--------------+--------+---------------+-------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+--------+--------+---------+------------+------------+------------+------+--------+------+
+| Diferencia | 0.42         | 2.00        | -0.08         | 0.17          | inf         | 1.04           | 0.30  | inf    | 0.12  | 0.51  | NaN    | 0.02  | 0.13 | NaN    | -0.47 | 0.07        | 0.00        | 0.15        | 1.26 | NaN    | 0.27  | 1.26         | NaN    | 0.12          | -0.30 | NaN    | 0.12  | 0.74   | 1.22   | -0.10  | -0.12 | 0.00   | -0.18 | 1.07   | 2.30   | 0.10   | -0.21  | -0.50  | 0.01   | -0.26 | NaN    | -0.21 | -0.79  | inf    | -0.98   | 0.01       | 0.00       | -0.09      | 0.51 | NaN    | 0.06 |
+| porcentual |              |             |               |               |             |                |       |        |       |       |        |       |      |        |       |             |             |             |      |        |       |              |        |               |       |        |       |        |        |        |       |        |       |        |        |        |        |        |        |       |        |       |        |        |         |            |            |            |      |        |      |
++------------+--------------+-------------+---------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+-------+-------------+-------------+-------------+------+--------+-------+--------------+--------+---------------+-------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+--------+--------+---------+------------+------------+------------+------+--------+------+
+
+Presencia de adiciones en tiempo¶
+
+Relación entre presencia de adiciones en tiempo y demás variables
+explicativas.
+
+In [58]:
+
+    print('No Prestación de Servicios')
+    plotAll2D(secopII_NoPS,'Tuvo_adiciones_tiempo')
+
+    for var in ['Valor del Contrato', 'Saldo CDP']:
+        sns.catplot(x='Tuvo_adiciones_tiempo', y=var, data=secopII_NoPS)
+        plt.show()
+
+    No Prestación de Servicios
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+In [59]:
+
+    print('No Prestación de Servicios')
+    difStatsTable(secopII_NoPS, 'Tuvo_adiciones_tiempo')
+
+    No Prestación de Servicios
+
++------------+--------------------------------------------+-----------------------------------------------+------------------------+------------------------+------------------------+-----------------------------------------+------------------------+---------------------------------------+-------------------------+--------------------------+-------------------------+--------------------------+--------------------------+------------------------+---------------------------+--------------------------------------+-----------------------+
+|            | Valor del Contrato                         | Saldo CDP                                     | Proveedores Invitados  | Proveedores con        | Conteo de Respuestas a | Numero_de_procesos_reportados           | Numero multas SIC      | Valor acumulado multas SIC proveedor  | Dias Inicio-Firma       | Dias Fin-Inicio Contrato | Dias Inicio-Firma       | Dias Fin-Inicio          | Dias Proveedor Inscrito  | Proporcion pagada      | Saldo CDP respecto Valor  | Tiene_variables_portafolio           | Dias Proceso          |
+|            |                                            |                                               |                        | Invitacion Directa     | Ofertas                |                                         | proveedor              |                                       | Contrato                |                          | Ejecucion               | Ejecucion                |                          | adelantado             |                           |                                      | Contratacion Abierto  |
++------------+--------------+-------------+---------------+---------------+--------------+----------------+-------+--------+-------+-------+--------+-------+-------+--------+-------+-------------+-------------+-------------+-------+--------+-------+--------------+--------+---------------+--------+--------+-------+--------+--------+--------+--------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+--------+--------+---------+------------+------------+------------+------+--------+-------+
+|            | mean         | median      | std           | mean          | median       | std            | mean  | median | std   | mean  | median | std   | mean  | median | std   | mean        | median      | std         | mean  | median | std   | mean         | median | std           | mean   | median | std   | mean   | median | std    | mean   | median | std   | mean   | median | std    | mean   | median | std    | mean  | median | std   | mean   | median | std     | mean       | median     | std        | mean | median | std   |
++============+==============+=============+===============+===============+==============+================+=======+========+=======+=======+========+=======+=======+========+=======+=============+=============+=============+=======+========+=======+==============+========+===============+========+========+=======+========+========+========+========+========+=======+========+========+========+========+========+========+=======+========+=======+========+========+=========+============+============+============+======+========+=======+
+| 0          | 273100443.91 | 10951384.50 | 1810514487.08 | 534182949.08  | 0.00         | 3037052561.08  | 30.11 | 0.00   | 83.49 | 0.37  | 0.00   | 3.26  | 0.13  | 0.00   | 2.08  | 1.18        | 1.00        | 0.38        | 1.59  | 0.00   | 18.99 | 100437302.57 | 0.00   | 1434064550.34 | -6.66  | 0.00   | 34.58 | 121.90 | 60.00  | 141.82 | -3.60  | 1.00   | 39.21 | 120.84 | 60.00  | 137.61 | 461.50 | 379.00 | 406.86 | 0.00  | 0.00   | 0.02  | 123.71 | 0.00   | 7439.72 | 0.93       | 1.00       | 0.26       | 2.94 | 0.00   | 8.49  |
++------------+--------------+-------------+---------------+---------------+--------------+----------------+-------+--------+-------+-------+--------+-------+-------+--------+-------+-------------+-------------+-------------+-------+--------+-------+--------------+--------+---------------+--------+--------+-------+--------+--------+--------+--------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+--------+--------+---------+------------+------------+------------+------+--------+-------+
+| 1          | 622929167.83 | 20000000.00 | 3785793712.84 | 5369534031.43 | 179052343.50 | 22888814009.07 | 38.89 | 0.00   | 87.41 | 0.42  | 0.00   | 4.59  | 0.12  | 0.00   | 1.65  | 1.21        | 1.00        | 0.41        | 0.78  | 0.00   | 10.08 | 42398827.12  | 0.00   | 680147449.69  | -17.50 | -2.00  | 31.71 | 248.02 | 196.00 | 173.90 | 39.02  | 5.00   | 85.31 | 173.65 | 107.00 | 171.30 | 578.00 | 632.00 | 414.56 | 0.00  | 0.00   | 0.02  | 282.73 | 1.00   | 734.47  | 0.97       | 1.00       | 0.18       | 3.98 | 0.00   | 11.09 |
++------------+--------------+-------------+---------------+---------------+--------------+----------------+-------+--------+-------+-------+--------+-------+-------+--------+-------+-------------+-------------+-------------+-------+--------+-------+--------------+--------+---------------+--------+--------+-------+--------+--------+--------+--------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+--------+--------+---------+------------+------------+------------+------+--------+-------+
+| Diferencia | 1.28         | 0.83        | 1.09          | 9.05          | inf          | 6.54           | 0.29  | NaN    | 0.05  | 0.13  | NaN    | 0.41  | -0.10 | NaN    | -0.21 | 0.03        | 0.00        | 0.08        | -0.51 | NaN    | -0.47 | -0.58        | NaN    | -0.53         | 1.63   | -inf   | -0.08 | 1.03   | 2.27   | 0.23   | -11.83 | 4.00   | 1.18  | 0.44   | 0.78   | 0.24   | 0.25   | 0.67   | 0.02   | -0.10 | NaN    | -0.07 | 1.29   | inf    | -0.90   | 0.04       | 0.00       | -0.30      | 0.35 | NaN    | 0.31  |
+| porcentual |              |             |               |               |              |                |       |        |       |       |        |       |       |        |       |             |             |             |       |        |       |              |        |               |        |        |       |        |        |        |        |        |       |        |        |        |        |        |        |       |        |       |        |        |         |            |            |            |      |        |       |
++------------+--------------+-------------+---------------+---------------+--------------+----------------+-------+--------+-------+-------+--------+-------+-------+--------+-------+-------------+-------------+-------------+-------+--------+-------+--------------+--------+---------------+--------+--------+-------+--------+--------+--------+--------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+--------+--------+---------+------------+------------+------------+------+--------+-------+
+
+Contratos de prestación de servicios¶
+
+Relación entre variables de adiciones y explicativas incluyendo solo
+contratos de prestación de servicios. Se conservan aquellas
+observaciones en las cuales la modalidad de contratación es "Prestación
+de servicios".
+
+In [60]:
+
+    secopII_PServicios = secopII_Master[secopII_Master['Tipo de Contrato']=='Prestación de servicios']
+    secopII_PServicios.drop(columns='Tipo de Contrato')
+    print(secopII_PServicios.shape)
+
+    #Dado que queda un único valor para tipo de contrato eliminar variables
+    expl_cat_NoTipoContrato = [var for var in expl_cat if var!='Tipo de Contrato']
+
+    (75729, 46)
+
+In [61]:
+
+    #Para variables numéricas
+    plt.figure(figsize=(10,10))
+    sns.heatmap(secopII_PServicios.corr()[['Tuvo_adiciones_valor', 'Tuvo_adiciones_tiempo', 'Tuvo_adiciones']], 
+                annot=True, cmap='YlGnBu')
+    plt.title('Correlación entre variables explicativas numéricas y objetivo (Prestación de Servicios)', fontsize=16)
+    plt.show()
+
+[No description has been provided for this image]
+
+In [62]:
+
+    #Para variables categóricas usando la V de cramer
+    catcorrM = corrcat.corr_matrix(secopII_PServicios, 
+                                   columns=expl_cat_NoTipoContrato+['Tuvo_adiciones_valor', 'Tuvo_adiciones_tiempo', 'Tuvo_adiciones'] )
+    plt.figure(figsize=(10,12))
+    sns.heatmap(catcorrM[['Tuvo_adiciones_valor', 'Tuvo_adiciones_tiempo', 'Tuvo_adiciones']],
+               annot=True, cmap='YlGnBu')
+    plt.title('V de Cramer entre variables explicativas categóricas y objetivo (Prestación de Servicios)', fontsize=16)
+    plt.show()
+
+    del catcorrM
+
+[No description has been provided for this image]
+
+Presencia de adiciones¶
+
+In [63]:
+
+    print('Solo Prestación de Servicios')
+    plotAll2D(secopII_PServicios,'Tuvo_adiciones')
+
+    for var in ['Valor del Contrato', 'Saldo CDP']:
+        sns.catplot(x='Tuvo_adiciones', y=var, data=secopII_PServicios)
+        plt.show()
+
+    Solo Prestación de Servicios
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+In [64]:
+
+    print('Solo Prestación de Servicios')
+    difStatsTable(secopII_PServicios, 'Tuvo_adiciones')
+
+    Solo Prestación de Servicios
+
++------------+------------------------------------------+----------------------------------------------+------------------------+------------------------+----------------------+-----------------------------------------+----------------------+------------------------------------+-------------------------+--------------------------+------------------------+--------------------------+--------------------------+------------------------+----------------------------------+--------------------------------------+------------------------+
+|            | Valor del Contrato                       | Saldo CDP                                    | Proveedores Invitados  | Proveedores con        | Conteo de Respuestas | Numero_de_procesos_reportados           | Numero multas SIC    | Valor acumulado multas SIC         | Dias Inicio-Firma       | Dias Fin-Inicio Contrato | Dias Inicio-Firma      | Dias Fin-Inicio          | Dias Proveedor Inscrito  | Proporcion pagada      | Saldo CDP respecto Valor         | Tiene_variables_portafolio           | Dias Proceso           |
+|            |                                          |                                              |                        | Invitacion Directa     | a Ofertas            |                                         | proveedor            | proveedor                          | Contrato                |                          | Ejecucion              | Ejecucion                |                          | adelantado             |                                  |                                      | Contratacion Abierto   |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+------+-------------+-------------+-------------+------+--------+------+------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+-------+--------+-------+
+|            | mean        | median      | std          | mean          | median      | std            | mean  | median | std   | mean  | median | std   | mean | median | std  | mean        | median      | std         | mean | median | std  | mean       | median | std          | mean   | median | std   | mean   | median | std    | mean  | median | std   | mean   | median | std    | mean   | median | std    | mean  | median | std   | mean      | median | std         | mean       | median     | std        | mean  | median | std   |
++============+=============+=============+==============+===============+=============+================+=======+========+=======+=======+========+=======+======+========+======+=============+=============+=============+======+========+======+============+========+==============+========+========+=======+========+========+========+=======+========+=======+========+========+========+========+========+========+=======+========+=======+===========+========+=============+============+============+============+=======+========+=======+
+| 0          | 31996040.58 | 18098848.00 | 79486524.12  | 3533912230.91 | 20638000.00 | 61872732470.16 | 2.50  | 0.00   | 20.38 | 0.12  | 0.00   | 1.71  | 0.00 | 0.00   | 0.12 | 1.01        | 1.00        | 0.12        | 0.05 | 0.00   | 2.73 | 3222145.66 | 0.00   | 173709557.13 | -11.81 | 0.00   | 41.60 | 191.61 | 170.00 | 113.28 | -9.37 | 0.00   | 48.78 | 188.57 | 162.00 | 113.35 | 294.23 | 234.00 | 277.14 | 0.00  | 0.00   | 0.00  | 134393.33 | 1.00   | 29522386.97 | 0.94       | 1.00       | 0.24       | 0.26  | 0.00   | 2.60  |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+------+-------------+-------------+-------------+------+--------+------+------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+-------+--------+-------+
+| 1          | 46334880.62 | 25610000.00 | 115289950.85 | 6953108240.19 | 35927647.00 | 28703769098.59 | 1.59  | 0.00   | 13.93 | 0.11  | 0.00   | 1.97  | 0.00 | 0.00   | 0.30 | 1.01        | 1.00        | 0.12        | 0.08 | 0.00   | 6.29 | 6267578.74 | 0.00   | 472652745.01 | -5.04  | -1.00  | 26.78 | 272.18 | 309.00 | 123.03 | 9.72  | 0.00   | 55.94 | 267.53 | 289.00 | 125.11 | 344.11 | 330.00 | 283.10 | 0.00  | 0.00   | 0.00  | 315.09    | 1.00   | 3725.25     | 0.97       | 1.00       | 0.17       | 0.26  | 0.00   | 2.26  |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+------+-------------+-------------+-------------+------+--------+------+------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+-------+--------+-------+
+| Diferencia | 0.45        | 0.42        | 0.45         | 0.97          | 0.74        | -0.54          | -0.37 | NaN    | -0.32 | -0.10 | NaN    | 0.15  | 2.24 | NaN    | 1.52 | 0.00        | 0.00        | 0.01        | 0.57 | NaN    | 1.31 | 0.95       | NaN    | 1.72         | -0.57  | -inf   | -0.36 | 0.42   | 0.82   | 0.09   | -2.04 | NaN    | 0.15  | 0.42   | 0.78   | 0.10   | 0.17   | 0.41   | 0.02   | -1.00 | NaN    | -1.00 | -1.00     | 0.00   | -1.00       | 0.03       | 0.00       | -0.29      | -0.02 | NaN    | -0.13 |
+| porcentual |             |             |              |               |             |                |       |        |       |       |        |       |      |        |      |             |             |             |      |        |      |            |        |              |        |        |       |        |        |        |       |        |       |        |        |        |        |        |        |       |        |       |           |        |             |            |            |            |       |        |       |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+------+-------------+-------------+-------------+------+--------+------+------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+-------+--------+-------+
+
+Presencia de adiciones en tiempo¶
+
+In [65]:
+
+    print('Solo Prestación de Servicios')
+    plotAll2D(secopII_PServicios,'Tuvo_adiciones_tiempo')
+
+    for var in ['Valor del Contrato', 'Saldo CDP']:
+        sns.catplot(x='Tuvo_adiciones_tiempo', y=var, data=secopII_PServicios)
+        plt.show()
+
+    Solo Prestación de Servicios
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+In [66]:
+
+    print('Solo Prestación de Servicios')
+    difStatsTable(secopII_PServicios, 'Tuvo_adiciones_tiempo')
+
+    Solo Prestación de Servicios
+
++------------+------------------------------------------+----------------------------------------------+------------------------+------------------------+----------------------+-----------------------------------------+----------------------+------------------------------------+-------------------------+--------------------------+------------------------+--------------------------+--------------------------+------------------------+----------------------------------+--------------------------------------+-----------------------+
+|            | Valor del Contrato                       | Saldo CDP                                    | Proveedores Invitados  | Proveedores con        | Conteo de Respuestas | Numero_de_procesos_reportados           | Numero multas SIC    | Valor acumulado multas SIC         | Dias Inicio-Firma       | Dias Fin-Inicio Contrato | Dias Inicio-Firma      | Dias Fin-Inicio          | Dias Proveedor Inscrito  | Proporcion pagada      | Saldo CDP respecto Valor         | Tiene_variables_portafolio           | Dias Proceso          |
+|            |                                          |                                              |                        | Invitacion Directa     | a Ofertas            |                                         | proveedor            | proveedor                          | Contrato                |                          | Ejecucion              | Ejecucion                |                          | adelantado             |                                  |                                      | Contratacion Abierto  |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+------+-------------+-------------+-------------+------+--------+------+------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+------+--------+-------+
+|            | mean        | median      | std          | mean          | median      | std            | mean  | median | std   | mean  | median | std   | mean | median | std  | mean        | median      | std         | mean | median | std  | mean       | median | std          | mean   | median | std   | mean   | median | std    | mean  | median | std   | mean   | median | std    | mean   | median | std    | mean  | median | std   | mean      | median | std         | mean       | median     | std        | mean | median | std   |
++============+=============+=============+==============+===============+=============+================+=======+========+=======+=======+========+=======+======+========+======+=============+=============+=============+======+========+======+============+========+==============+========+========+=======+========+========+========+=======+========+=======+========+========+========+========+========+========+=======+========+=======+===========+========+=============+============+============+============+======+========+=======+
+| 0          | 33995913.74 | 18994368.00 | 84984111.79  | 3903245665.57 | 20000000.00 | 57516671806.43 | 2.25  | 0.00   | 18.98 | 0.11  | 0.00   | 1.66  | 0.00 | 0.00   | 0.16 | 1.01        | 1.00        | 0.12        | 0.06 | 0.00   | 3.60 | 3689803.85 | 0.00   | 253592299.45 | -10.86 | 0.00   | 40.78 | 200.00 | 180.00 | 116.53 | -5.79 | 0.00   | 51.16 | 201.06 | 180.00 | 120.33 | 280.36 | 213.00 | 267.92 | 0.00  | 0.00   | 0.00  | 107946.08 | 1.00   | 26449717.90 | 0.95       | 1.00       | 0.23       | 0.25 | 0.00   | 2.49  |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+------+-------------+-------------+-------------+------+--------+------+------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+------+--------+-------+
+| 1          | 49962322.28 | 30000000.00 | 124089481.26 | 8288387768.58 | 49500000.00 | 22455280414.29 | 1.89  | 0.00   | 15.41 | 0.14  | 0.00   | 2.33  | 0.00 | 0.00   | 0.31 | 1.02        | 1.00        | 0.13        | 0.09 | 0.00   | 6.56 | 6850403.27 | 0.00   | 490789227.94 | -3.35  | 0.00   | 12.15 | 304.98 | 339.00 | 113.08 | 10.56 | 1.00   | 54.41 | 281.05 | 303.00 | 115.39 | 447.83 | 428.00 | 291.90 | 0.00  | 0.00   | 0.00  | 271.82    | 1.00   | 766.98      | 0.96       | 1.00       | 0.19       | 0.30 | 0.00   | 2.48  |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+------+-------------+-------------+-------------+------+--------+------+------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+------+--------+-------+
+| Diferencia | 0.47        | 0.58        | 0.46         | 1.12          | 1.48        | -0.61          | -0.16 | NaN    | -0.19 | 0.24  | NaN    | 0.41  | 0.63 | NaN    | 0.90 | 0.00        | 0.00        | 0.11        | 0.63 | NaN    | 0.82 | 0.86       | NaN    | 0.94         | -0.69  | NaN    | -0.70 | 0.52   | 0.88   | -0.03  | -2.82 | inf    | 0.06  | 0.40   | 0.68   | -0.04  | 0.60   | 1.01   | 0.09   | -1.00 | NaN    | -1.00 | -1.00     | 0.00   | -1.00       | 0.02       | 0.00       | -0.15      | 0.21 | NaN    | -0.01 |
+| porcentual |             |             |              |               |             |                |       |        |       |       |        |       |      |        |      |             |             |             |      |        |      |            |        |              |        |        |       |        |        |        |       |        |       |        |        |        |        |        |        |       |        |       |           |        |             |            |            |            |      |        |       |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+------+-------------+-------------+-------------+------+--------+------+------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+------+--------+-------+
+
+Presencia de adiciones en valor¶
+
+In [67]:
+
+    print('Solo Prestación de Servicios')
+    plotAll2D(secopII_PServicios,'Tuvo_adiciones_valor')
+
+    for var in ['Valor del Contrato', 'Saldo CDP']:
+        sns.catplot(x='Tuvo_adiciones_valor', y=var, data=secopII_PServicios)
+        plt.show()
+
+    Solo Prestación de Servicios
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+[No description has been provided for this image]
+
+In [68]:
+
+    print('Solo Prestación de Servicios')
+    difStatsTable(secopII_PServicios, 'Tuvo_adiciones_valor')
+
+    Solo Prestación de Servicios
+
++------------+------------------------------------------+----------------------------------------------+------------------------+------------------------+----------------------+-----------------------------------------+----------------------+------------------------------------+-------------------------+--------------------------+------------------------+--------------------------+--------------------------+------------------------+----------------------------------+--------------------------------------+------------------------+
+|            | Valor del Contrato                       | Saldo CDP                                    | Proveedores Invitados  | Proveedores con        | Conteo de Respuestas | Numero_de_procesos_reportados           | Numero multas SIC    | Valor acumulado multas SIC         | Dias Inicio-Firma       | Dias Fin-Inicio Contrato | Dias Inicio-Firma      | Dias Fin-Inicio          | Dias Proveedor Inscrito  | Proporcion pagada      | Saldo CDP respecto Valor         | Tiene_variables_portafolio           | Dias Proceso           |
+|            |                                          |                                              |                        | Invitacion Directa     | a Ofertas            |                                         | proveedor            | proveedor                          | Contrato                |                          | Ejecucion              | Ejecucion                |                          | adelantado             |                                  |                                      | Contratacion Abierto   |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+------+-------------+-------------+-------------+------+--------+------+------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+-------+--------+-------+
+|            | mean        | median      | std          | mean          | median      | std            | mean  | median | std   | mean  | median | std   | mean | median | std  | mean        | median      | std         | mean | median | std  | mean       | median | std          | mean   | median | std   | mean   | median | std    | mean  | median | std   | mean   | median | std    | mean   | median | std    | mean  | median | std   | mean      | median | std         | mean       | median     | std        | mean  | median | std   |
++============+=============+=============+==============+===============+=============+================+=======+========+=======+=======+========+=======+======+========+======+=============+=============+=============+======+========+======+============+========+==============+========+========+=======+========+========+========+=======+========+=======+========+========+========+========+========+========+=======+========+=======+===========+========+=============+============+============+============+=======+========+=======+
+| 0          | 35105243.84 | 19752000.00 | 86411516.28  | 4291520381.25 | 24750000.00 | 56092982953.45 | 2.35  | 0.00   | 19.38 | 0.13  | 0.00   | 1.83  | 0.00 | 0.00   | 0.18 | 1.01        | 1.00        | 0.12        | 0.06 | 0.00   | 3.86 | 3870575.86 | 0.00   | 274171277.68 | -10.14 | 0.00   | 37.73 | 213.75 | 183.00 | 121.51 | -6.15 | 0.00   | 48.64 | 207.12 | 181.00 | 119.17 | 327.76 | 288.00 | 288.26 | 0.00  | 0.00   | 0.00  | 107206.56 | 1.00   | 26361967.93 | 0.94       | 1.00       | 0.23       | 0.26  | 0.00   | 2.56  |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+------+-------------+-------------+-------------+------+--------+------+------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+-------+--------+-------+
+| 1          | 45412030.53 | 23000000.00 | 121083129.71 | 6659608805.56 | 20403000.00 | 34131471736.21 | 1.44  | 0.00   | 12.99 | 0.09  | 0.00   | 1.68  | 0.00 | 0.00   | 0.26 | 1.01        | 1.00        | 0.11        | 0.08 | 0.00   | 5.93 | 6125688.80 | 0.00   | 443773128.56 | -6.41  | -1.00  | 34.98 | 245.80 | 272.00 | 125.64 | 12.67 | 0.00   | 63.63 | 255.96 | 272.00 | 134.00 | 237.93 | 151.00 | 226.28 | 0.00  | 0.00   | 0.00  | 390.91    | 0.95   | 5115.48     | 0.98       | 1.00       | 0.15       | 0.24  | 0.00   | 2.17  |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+------+-------------+-------------+-------------+------+--------+------+------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+-------+--------+-------+
+| Diferencia | 0.29        | 0.16        | 0.40         | 0.55          | -0.18       | -0.39          | -0.39 | NaN    | -0.33 | -0.31 | NaN    | -0.08 | 1.66 | NaN    | 0.45 | -0.00       | 0.00        | -0.03       | 0.35 | NaN    | 0.53 | 0.58       | NaN    | 0.62         | -0.37  | -inf   | -0.07 | 0.15   | 0.49   | 0.03   | -3.06 | NaN    | 0.31  | 0.24   | 0.50   | 0.12   | -0.27  | -0.48  | -0.22  | -1.00 | NaN    | -1.00 | -1.00     | -0.05  | -1.00       | 0.04       | 0.00       | -0.34      | -0.10 | NaN    | -0.15 |
+| porcentual |             |             |              |               |             |                |       |        |       |       |        |       |      |        |      |             |             |             |      |        |      |            |        |              |        |        |       |        |        |        |       |        |       |        |        |        |        |        |        |       |        |       |           |        |             |            |            |            |       |        |       |
++------------+-------------+-------------+--------------+---------------+-------------+----------------+-------+--------+-------+-------+--------+-------+------+--------+------+-------------+-------------+-------------+------+--------+------+------------+--------+--------------+--------+--------+-------+--------+--------+--------+-------+--------+-------+--------+--------+--------+--------+--------+--------+-------+--------+-------+-----------+--------+-------------+------------+------------+------------+-------+--------+-------+

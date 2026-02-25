@@ -1,0 +1,3797 @@
+SECOP II - Modelación¶
+
+En el presente notebook se realizan las pruebas para entrenar y guardar
+modelos predictivos con los cuales se pretende detectar anormalidades en
+la contratación pública de Bogotá. Con tal objetivo, en este punto se
+usa como insumo la base de datos SECOPII_Master(_2), creada previamente.
+Base con la cual se proceden a realizar modelos de clasificación
+binarios para 3 diferentes variables objetivo que determinan si el
+contrato tuvo alguna adición del respectivo tipo o no;
+Tuvo_adiciones_valor,Tuvo_adiciones_tiempo y Tuvo_adiciones.
+Adicionalmente, se realizan modelos teniendo en cuenta todos los
+contratos así como modelos con datos diferenciados por el tipo de
+contrato como prestación de servicios.
+
+Los modelos generados son guardados en la carpeta
+created_data/trained_models en el directorio, así mismo, los datos
+usados, SECOP_II_Master2, se encuentra el la carpeta created_data.
+
+- En los AIC y BIC domina el efecto del número de variables.
+- Los resultados de las duraciones (días entre A y B fecha) como
+  variables relevantes son consistentes con el documento de Gallego,
+  Rivero, Martinez (2018).
+
+------------------------------------------------------------------------
+
+Posible trabajo posterior (No realizado durante el proyecto)
+
+- Balancear hacia arriba los datos para modelos de contratos diferentes
+  a prestación de servicio debido al bajo número de observaciones.
+- Buscar arboles de inferencia condicional.
+- Algoritmo SMOTE para balanceo.
+
+In [264]:
+
+    import sys
+    print(sys.executable)
+    print(sys.getdefaultencoding())
+
+    c:\Users\Home\anaconda3\envs\vigia\python.exe
+    utf-8
+
+In [265]:
+
+    import os
+    import shap
+    import joblib
+
+    import pandas as pd
+    import numpy as np
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    # sklearn 0.24.1
+    from sklearn.utils import resample
+    from sklearn import preprocessing
+    from sklearn.model_selection import train_test_split, cross_val_score
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import accuracy_score,recall_score, precision_score, confusion_matrix, roc_auc_score, roc_curve, log_loss
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.feature_selection import SelectFromModel
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.inspection import plot_partial_dependence
+    from sklearn import tree
+
+In [266]:
+
+    os.getcwd()
+
+Out[266]:
+
+    'd:\\Documents\\vigia_article'
+
+La base SECOPII_Master_2_models es la SECOPII_Master_2 base sin las
+variables 'Documento Proveedor', 'Fecha de Firma', 'Nit Entidad', 'Fecha
+de Publicacion del Proceso' y 'Fecha de Ultima Publicación'.
+
+In [267]:
+
+    base = pd.read_csv("created_data/SECOPII_Master_2_models.csv")
+
+    # Eliminar nulos de contratos sin proceso
+    base.dropna(inplace=True)
+
+In [268]:
+
+    base.shape
+
+Out[268]:
+
+    (80306, 41)
+
+In [269]:
+
+    # Codigo Segmento Categoria Principal categórica
+    base['Codigo Segmento Categoria Principal'] = base['Codigo Segmento Categoria Principal'].astype('O')
+
+In [270]:
+
+    base.head(2)
+
+Out[270]:
+
+      ID Contrato          Nombre Entidad                                      Sector                             Entidad Centralizada   Tipo de Contrato          Modalidad de Contratacion   Justificacion Modalidad de Contratacion   TipoDocProveedor       Es Grupo   Es Pyme   ...   Proporcion pagada adelantado   Saldo CDP respecto Valor   Grupo categoria principal   Tipo Empresa Proveedor Resumido   Tiene_variables_portafolio   Dias Proceso Contratacion Abierto   Mes de Publicacion del Proceso   Tuvo_adiciones_valor   Tuvo_adiciones_tiempo   Tuvo_adiciones
+  --- -------------------- --------------------------------------------------- ---------------------------------- ---------------------- ------------------------- --------------------------- ----------------------------------------- ---------------------- ---------- --------- ----- ------------------------------ -------------------------- --------------------------- --------------------------------- ---------------------------- ----------------------------------- -------------------------------- ---------------------- ----------------------- ----------------
+  0   CO1.PCCNTR.1442517   UNIDAD ADMINISTRATIVA ESPECIAL DE SERVICIOS PÚ...   Ambiente y Desarrollo Sostenible   Descentralizada        Prestación de servicios   Contratación directa        ServiciosProfesionales                    Cédula de Ciudadanía   No         No        ...   0.0                            0.0                        Servicios administrativos   Persona Natural colombiana        1                            0.0                                 Mar                              0                      0                       0
+  1   CO1.PCCNTR.890256    INSTITUTO DISTRITAL DE RECREACIÓN Y DEPORTE         Cultura                            Descentralizada        Prestación de servicios   Contratación directa        ServiciosProfesionales                    Cédula de Ciudadanía   No         No        ...   0.0                            6.0                        Servicios administrativos   Persona Natural colombiana        1                            0.0                                 Mar                              0                      0                       0
+
+2 rows × 41 columns
+
+Listados de variables
+
+In [271]:
+
+    #Listado de variables a realizar one hot encoding sin incluir "Tipo de Contrato"
+    vars_categoricas = ["Sector", "Entidad Centralizada", "Modalidad de Contratacion", 
+                        "Justificacion Modalidad de Contratacion", "TipoDocProveedor", 
+                        "Es Grupo", "Es Pyme", "Habilita Pago Adelantado", "Liquidación",
+                        "Obligación Ambiental", "EsPostConflicto", "Destino Gasto",
+                        "Tipo Empresa Proveedor", "Mes Firma Contrato", 
+                        "Grupo categoria principal", "Tipo Empresa Proveedor Resumido",
+                        "Mes de Publicacion del Proceso", "Codigo Segmento Categoria Principal"
+                        ]
+    #Variables a excluir al momento de entrenar modelos
+    vars_a_excluir = ["ID Contrato", "Saldo CDP", "Saldo CDP respecto Valor", "Nombre Entidad", 
+                        "Tuvo_adiciones_valor", "Tuvo_adiciones_tiempo", "Tuvo_adiciones", 
+                        "Tiene_variables_portafolio"
+                        ]
+    #Variables a excluir para tener en cuenta solo sucesos antes de ejecución.
+    vars_ejecucion = ['Liquidación_No', 'Liquidación_Si', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato',
+                        'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 
+                        'Proporcion pagada adelantado', 'Codigo Segmento Categoria Principal_80000000'
+                        ]
+    # Esta última variable se incluye para no repetir información en los modelos sin variables de ejecución dado que está la
+    # variable del grupo equivalente.
+
+Funciones creadas¶
+
+Conjunto de funciones creadas debido a los procesos repetitivos
+realizados
+
+Funciones útiles para mostrar resultados de modelos
+
+In [272]:
+
+    # Gráficas
+    def corr_Matrix(data):
+        '''
+        Gráfica la matríz de correlación entre todas las variables 
+        de la base de datos usada.
+        '''
+        f,ax = plt.subplots(figsize = (15,14))
+        sns.heatmap(data.corr(),cmap = 'ocean_r', annot = True, cbar = False )
+        ax.set_title('Correlation matrix')
+        plt.show()
+
+
+    def plot_ROC(model, X_test, y_test, scaler, model_name='Model', figsize=(5,3)):
+        '''
+        Gráfica la curva ROC y calcula el AUC para un modelo entrenado dados unos datos de prueba.
+        Entradas:
+                model: modelo sklearn entrenado del que se usa el método predict_proba()
+                X_test: variables independientes de prueba.
+                Y_test: variable dependiente de prueba.
+                scaler: objeto preprocessing.StandardScaler() entrenado junto al modelo para escalar X_test.
+                model_name: string con el nombre del modelo que se pasa para usar como leyenda de la curva ROC
+        Salida:
+                Gráfica curva ROC e impresión del AUC.
+        '''
+        ns_probs = [0 for _ in range(len(y_test))]
+        lr_probs = model.predict_proba(scaler.transform(X_test))
+        lr_probs = lr_probs[:, 1]
+        
+        lr_auc = roc_auc_score(y_test, lr_probs)
+        print("Model: ROC AUC = {:1.3f}".format(lr_auc))
+
+        ns_fpr, ns_tpr, _ = roc_curve(y_test, ns_probs)
+        lr_fpr, lr_tpr, _ = roc_curve(y_test, lr_probs)
+
+        plt.figure(figsize=figsize)
+        plt.plot(ns_fpr, ns_tpr, linestyle = '--') 
+        plt.plot(lr_fpr, lr_tpr, marker = '.', label = model_name)
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.legend(loc="lower right")
+        plt.title('ROC curve')
+        plt.show()
+        
+        
+    def plot_CM(y_true, y_pred, plot=False, title='Matríz de confusión (1: adición)',
+               xlabel='Predicción', ylabel='Observación', tickslabel=['No','Sí'], 
+               savedir=None):
+        '''
+        Tabla de matríz de confusión
+        '''
+        cm = confusion_matrix(y_true, y_pred)
+        cm_df = pd.DataFrame(cm, index = tickslabel, columns = tickslabel)
+        cm_df.index.name = ylabel; cm_df.columns.name = xlabel
+        
+        # Visualizando la matriz de confusión como gráfica
+        if plot==True:
+            sns.heatmap( cm_df, 
+                        annot=True, fmt='2.1f', cmap='ocean_r',annot_kws={'fontsize':16},
+                        cbar=False, square=True, linecolor='black', linewidths=0.2 )
+            plt.title(title)
+            plt.xlabel(xlabel, fontsize=13)
+            plt.ylabel(ylabel, fontsize=13)
+            if savedir:
+                plt.savefig(savedir)
+            plt.show()
+        else:
+            display(cm_df)
+            return cm_df
+
+El balanceo de los datos se decide hacer mediante la reducción de las
+observaciones para las cuales la variable objetivo toma el valor menos
+frecuente. Esto debido a que se tienen suficientes observaciones y no se
+encontró mejoría en el desempeño al aumentar el número de muestras.
+
+In [273]:
+
+    def balance(base, target, seed=123):
+        '''
+        Función para balancear las bases de datos hacia el valor de la variables objetivo con menos observaciones.
+        Entradas:
+                base: base de pandas a balancear.
+                target: nombre de la variable objetivo respecto a la que se balanceará.
+        Salida:
+                df_downsample: base balanceada.
+        '''
+        df_majority = base[base[target] == 0]
+        df_minority = base[base[target] == 1]
+        
+        n = min(base[target].value_counts())
+        df_majority_downsampled = resample(df_majority, replace = False, n_samples = n, random_state = seed)
+        df_downsampled = pd.concat([df_majority_downsampled, df_minority])
+        
+        return df_downsampled
+
+Funciones para ejecutar modelos
+
+In [274]:
+
+    def feature_selection(X, y, threshold=None):
+        '''
+        Selección de variables estadísticamente significativas mediante random forest
+        Entradas: X, y: Variables independietes y dependientes como base y serie de pandas respectivamente.
+        Salida: X_varSelec: Pandas dataframe solo con las variables significativas.
+        '''
+        #Random state de 42 para replicar modelos aleatorios y demás procedimientos.
+        sel = SelectFromModel(RandomForestClassifier(n_estimators = 100, random_state=42), threshold=threshold) 
+        sel.fit(X, y)
+        
+        variables_significativas = np.where(sel.get_support() == True)
+        nombres_columnas = []
+        for idx, i in enumerate(variables_significativas):
+            nombres_columnas.append(X.columns[i])
+        nombres_columnas = list(nombres_columnas[0])
+        print("Variables estadísticamente significativas: \n{}".format(nombres_columnas))
+        
+        X_varSelec = sel.transform(X)
+        X_varSelec = pd.DataFrame(X_varSelec, columns = nombres_columnas)
+        
+        return X_varSelec
+
+    def feature_selection_b(X, y):
+        '''
+        Selección de variables estadísticamente significativas mediante random forest
+        Se usan las variables que tengan una importancia mayor a 1.3 veces la importancia media.
+        Entradas: X, y: Variables independietes y dependientes como base y serie de pandas respectivamente.
+        Salida: X_varSelec: Pandas dataframe solo con las variables significativas.
+        '''
+        #Random state de 42 para replicar modelos aleatorios y demás procedimientos.
+        sel = SelectFromModel(RandomForestClassifier(n_estimators = 100, random_state=42), threshold="1.3*median") 
+        sel.fit(X, y)
+        
+        variables_significativas = np.where(sel.get_support() == True)
+        nombres_columnas = []
+        for idx, i in enumerate(variables_significativas):
+            nombres_columnas.append(X.columns[i])
+        nombres_columnas = list(nombres_columnas[0])
+        print("Variables estadísticamente significativas: \n{}".format(nombres_columnas))
+        
+        X_varSelec = sel.transform(X)
+        X_varSelec = pd.DataFrame(X_varSelec, columns = nombres_columnas)
+        
+        return X_varSelec
+
+    def reg_log(X, y, get_train=False):
+        '''
+        Modelo de regresión logítica.
+        Función para la realización de modelos mediante regresión logística. Imprime accuracy de la validación cruzada
+        y datos de prueba , así como el recall en los datos de prueba.
+        Entradas: 
+                X: base de pandas con variables independientes.
+                Y: serie de pandas con la variable objetivo.
+        Salidas:
+                rl: modelo de regresión logística entrenado.
+                X_test, y_test: Datos de prueba, transformados en el caso de X.
+                y_pred: valores de la variable respuesta estimados.
+                scaler: objeto para escalar valores entrenado.
+        '''
+        #Random state de 42 para replicar modelos aleatorios y demás procedimientos.
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.3, random_state = 42, stratify = y)
+        scaler = preprocessing.StandardScaler().fit(X_train)
+        X_train = scaler.transform(X_train)
+        
+        rl = LogisticRegression(max_iter = 500)
+        vc = cross_val_score(rl, X_train, y_train, cv = 10, scoring = "accuracy")
+        accuracy = vc.mean()
+        print("Accuracy para Regresión Logística con validación cruzada: {:1.4f} ".format(accuracy) )
+        
+        rl = LogisticRegression(max_iter = 500)
+        rl.fit(X_train, y_train)
+
+        # Mostrar métricas
+        y_pred = rl.predict(scaler.transform(X_test))
+        print("El accuracy del test es: {:1.4f}".format( accuracy_score(y_test, y_pred) ))
+        print("La sensitividad(recall) del test es: {:1.4f}".format( recall_score(y_test, y_pred) ))
+        print("La precisión del test es: {:1.4f}".format( precision_score(y_test, y_pred) ))
+        
+        
+        #Criterios de información
+        y_prob = rl.predict_proba(X_train)
+        LL = -log_loss(y_train, y_prob)
+        K = len(rl.coef_[0]) + 1 
+        N = X_train.shape[0]
+        BIC = K*np.log(N) - 2*LL
+        AIC = 2*K - 2*LL
+        print("BIC: {:1.2f}".format(BIC))
+        print("AIC: {:1.2f}".format(AIC))
+        
+        if get_train: # To get PDP
+            return rl, X_test, y_test, y_pred, scaler, X_train, y_train
+        else:
+            return rl, X_test, y_test, y_pred, scaler
+
+
+    def random_forest(X, y, get_train=False):
+        '''
+        Modelo random forest para clasificación.
+        Entradas: 
+                X: base de pandas con variables independientes.
+                Y: serie de pandas con la variable objetivo.
+        Salidas:
+                arb: modelo de random forest entrenado.
+                X_test, y_test: Datos de prueba.
+                y_pred: valores de la variable respuesta estimados.
+                scaler: objeto para escalar valores entrenado.    
+        '''
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.3, random_state = 42, stratify = y)
+        scaler = preprocessing.StandardScaler().fit(X_train)
+        
+        #Random state de 42 para replicar modelos aleatorios y demás procedimientos.
+        arb = RandomForestClassifier(n_estimators = 100, random_state=42)
+        arb.fit(scaler.transform(X_train), y_train)
+        
+        y_pred_arb = arb.predict(scaler.transform(X_test))
+        
+        print("Accuracy del test: {:1.4f}".format( accuracy_score(y_test, y_pred_arb) ))
+        print("La sensitividad(recall) del test es: {:1.4f}".format( recall_score(y_test, y_pred_arb) ))
+        print("La precisión del test es: {:1.4f}".format( precision_score(y_test, y_pred_arb) ))
+
+        if get_train: # To get PDP
+            return arb, X_test, y_test, y_pred_arb, scaler, X_train, y_train
+        else:
+            return arb, X_test, y_test, y_pred_arb, scaler
+
+Revisión variables¶
+
+Revisión nulos
+
+In [275]:
+
+    base.dropna(inplace=True)
+
+In [276]:
+
+    base.isna().sum().sort_values(ascending=False).head(10)
+
+Out[276]:
+
+    ID Contrato                             0
+    Codigo Segmento Categoria Principal     0
+    Valor acumulado multas SIC proveedor    0
+    Tipo Empresa Proveedor                  0
+    Dias Inicio-Firma Contrato              0
+    Dias Fin-Inicio Contrato                0
+    Dias Inicio-Firma Ejecucion             0
+    Dias Fin-Inicio Ejecucion               0
+    Dias Proveedor Inscrito                 0
+    Mes Firma Contrato                      0
+    dtype: int64
+
+Revisión estadísticas descriptivas
+
+In [277]:
+
+    base.shape
+
+Out[277]:
+
+    (80306, 41)
+
+In [278]:
+
+    vars_explicativas = ['Sector', 'Entidad Centralizada',
+            'Tipo de Contrato', 'Modalidad de Contratacion',
+            'Justificacion Modalidad de Contratacion', 'TipoDocProveedor',
+            'Es Grupo', 'Es Pyme', 'Habilita Pago Adelantado', 'Liquidación',
+            'Obligación Ambiental', 'Valor del Contrato', 'Saldo CDP',
+            'EsPostConflicto', 'Destino Gasto', 'Proveedores Invitados',
+            'Proveedores con Invitacion Directa', 'Conteo de Respuestas a Ofertas',
+            'Numero_de_procesos_reportados', 'Codigo Segmento Categoria Principal',
+            'Numero multas SIC proveedor', 'Valor acumulado multas SIC proveedor',
+            'Tipo Empresa Proveedor', 'Dias Inicio-Firma Contrato',
+            'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+            'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito',
+            'Mes Firma Contrato', 'Proporcion pagada adelantado',
+            'Dias Proceso Contratacion Abierto', 'Mes de Publicacion del Proceso',
+            'Saldo CDP respecto Valor', 'Grupo categoria principal',
+            'Tipo Empresa Proveedor Resumido']
+
+In [279]:
+
+    print('Número de variables explicativas:', len(vars_explicativas))
+    base[vars_explicativas].dtypes.value_counts()
+
+    Número de variables explicativas: 35
+
+Out[279]:
+
+    object     19
+    float64     9
+    int64       7
+    dtype: int64
+
+Variables numéricas
+
+In [280]:
+
+    summ_num = base[vars_explicativas].describe().T
+    summ_num = summ_num.reset_index().rename(columns={'index':'name_spanish'})
+    # Agregar nombres en inglés
+    summ_num['name_english'] = ['Value', 'Budget balance', 'Number of invited providers', 
+                                'Number of direct invited providers', 'Number of answers', 
+                                'Number of processes', 'Number of SIC sanctions', 
+                                'Value of SIC sanctions', 'Sign-start contract days', 
+                                'Start-end contract days', 'Sign-start execution days', 
+                                'Start-end execution days', 'Days provider registered', 
+                                'Advance payment percentage', 'Days process open', 'Balance/value']
+    summ_num.to_excel('created_data/tables/explanatory_variables_summary.xlsx',
+                        sheet_name='numeric', index=False)
+
+In [281]:
+
+    summ_num.head()
+
+Out[281]:
+
+      name_spanish                         count     mean           std            min   25%          50%          75%            max            name_english
+  --- ------------------------------------ --------- -------------- -------------- ----- ------------ ------------ -------------- -------------- ------------------------------------
+  0   Valor del Contrato                   80306.0   7.245500e+07   7.974456e+08   1.0   10025890.0   20444050.0   4.175340e+07   8.585894e+10   Value
+  1   Saldo CDP                            80306.0   4.648927e+09   5.143002e+10   0.0   0.0          25000000.0   1.169755e+08   3.300000e+12   Budget balance
+  2   Proveedores Invitados                80306.0   5.749969e+00   3.491432e+01   0.0   0.0          0.0          0.000000e+00   1.866000e+03   Number of invited providers
+  3   Proveedores con Invitacion Directa   80306.0   1.560655e-01   2.129986e+00   0.0   0.0          0.0          0.000000e+00   1.550000e+02   Number of direct invited providers
+  4   Conteo de Respuestas a Ofertas       80306.0   1.657410e-02   6.977325e-01   0.0   0.0          0.0          0.000000e+00   1.530000e+02   Number of answers
+
+Variables categóricas
+
+In [282]:
+
+    vars_cat = ['Sector', 'Entidad Centralizada', 'Tipo de Contrato', 'Modalidad de Contratacion', 'Justificacion Modalidad de Contratacion', 'TipoDocProveedor', 'Es Grupo', 'Es Pyme', 'Habilita Pago Adelantado', 'Liquidación', 'Obligación Ambiental', 'EsPostConflicto', 'Destino Gasto', 'Codigo Segmento Categoria Principal', 'Tipo Empresa Proveedor', 'Mes Firma Contrato', 'Mes de Publicacion del Proceso', 'Grupo categoria principal', 'Tipo Empresa Proveedor Resumido']
+    summ_cat = base[vars_cat].describe().T
+    summ_cat['relative_freq'] = summ_cat['freq']/summ_cat['count']
+
+    summ_cat = summ_cat.reset_index().rename(columns={'index':'name_spanish'})
+    # Agregar nombres en inglés
+    summ_cat['name_english'] = ['Sector', 'Centralized entity', 'Contract type', 'Procurement procedure', 'Procurement procedure justification', 'Provider ID type', 'Is group', 'Is pyme', 'Allow pay in advance', 'Sold out', 'Environmental obligation', 'Post-conflict', 'Expenditure purpose', 'Product segment to contract', 'Company type', 'Month of sign', 'Month of publication', 'Product group to contract', 'Company type aggregation']
+
+    summ_cat.to_excel('created_data/tables/explanatory_variables_summary.xlsx',
+                        sheet_name='categorical', index=False)
+
+Guardar en excel
+
+In [283]:
+
+    # Guardar en un solo archivo
+    pandas_writer = pd.ExcelWriter('created_data/tables/explanatory_variables_summary.xlsx', engine = 'openpyxl')
+
+    summ_num.to_excel(pandas_writer, sheet_name='numeric', index=False)
+    summ_cat.to_excel(pandas_writer, sheet_name='categorical', index=False)
+
+    pandas_writer.close()
+
+In [284]:
+
+    del summ_num, vars_cat, summ_cat
+
+In [285]:
+
+    base.Sector.value_counts(1).to_frame()
+
+Out[285]:
+
+                                      Sector
+  ----------------------------------- ----------
+  Salud y Protección Social           0.445135
+  Servicio Público                    0.176712
+  Cultura                             0.120053
+  Ambiente y Desarrollo Sostenible    0.060469
+  Vivienda, Ciudad y Territorio       0.041292
+  Transporte                          0.036710
+  No aplica/No pertenece              0.024905
+  Hacienda y Crédito Público          0.018579
+  Educación Nacional                  0.017720
+  defensa                             0.017085
+  Inclusión Social y Reconciliación   0.014793
+  Planeación                          0.014445
+  Industria                           0.010609
+  Ley de Justicia                     0.001494
+
+In [286]:
+
+    base.shape
+
+Out[286]:
+
+    (80306, 41)
+
+Tuvo_adiciones_valor como variable respuesta¶
+
+Compendio de procedimientos realizados.
+
+In [287]:
+
+    #Balancear bases de datos
+    df_downsampled_AV = balance(base, "Tuvo_adiciones_valor")
+
+    # La terminación "_AV" en los nombres se refiere a Adiciones en Valor
+    y_down_AV = df_downsampled_AV["Tuvo_adiciones_valor"]
+
+    X_down = pd.get_dummies(data = df_downsampled_AV, columns = vars_categoricas+["Tipo de Contrato"])
+    X_down = X_down.drop(columns = vars_a_excluir)
+
+In [288]:
+
+    df_downsampled_AV.shape
+
+Out[288]:
+
+    (28740, 41)
+
+In [289]:
+
+    X_down.shape
+
+Out[289]:
+
+    (28740, 208)
+
+In [290]:
+
+    pd.crosstab(X_down['Tipo de Contrato_Prestación de servicios'], y_down_AV, margins=True, normalize='index')
+
+Out[290]:
+
+  Tuvo_adiciones_valor                       0          1
+  ------------------------------------------ ---------- ----------
+  Tipo de Contrato_Prestación de servicios              
+  0                                          0.594878   0.405122
+  1                                          0.491426   0.508574
+  All                                        0.500000   0.500000
+
+In [291]:
+
+    pd.crosstab(X_down['Tipo de Contrato_Prestación de servicios'], y_down_AV, margins=True)
+
+Out[291]:
+
+  Tuvo_adiciones_valor                       0       1       All
+  ------------------------------------------ ------- ------- -------
+  Tipo de Contrato_Prestación de servicios                   
+  0                                          1417    965     2382
+  1                                          12953   13405   26358
+  All                                        14370   14370   28740
+
+El balanceo para los contratos no es tan bueno en contratos diferentes a
+prestación de servicios.
+
+Formatos a tener al procesar los datos para modelos en app
+
+In [292]:
+
+    vars = ['Valor del Contrato', 'Dias Inicio-Firma Contrato',
+    'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+    'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito',
+    'Sector_Cultura', 'Proveedores Invitados', 
+    'Dias Proceso Contratacion Abierto', 
+    'Grupo categoria principal_Servicios administrativos',
+    'Justificacion Modalidad de Contratacion_Decreto 092 de 2017']
+    X_down[vars].dtypes
+
+Out[292]:
+
+    Valor del Contrato                                               int64
+    Dias Inicio-Firma Contrato                                       int64
+    Dias Fin-Inicio Contrato                                         int64
+    Dias Inicio-Firma Ejecucion                                      int64
+    Dias Fin-Inicio Ejecucion                                        int64
+    Dias Proveedor Inscrito                                          int64
+    Sector_Cultura                                                   uint8
+    Proveedores Invitados                                          float64
+    Dias Proceso Contratacion Abierto                              float64
+    Grupo categoria principal_Servicios administrativos              uint8
+    Justificacion Modalidad de Contratacion_Decreto 092 de 2017      uint8
+    dtype: object
+
+Modelos sin diferenciar tipo de contrato¶
+
+Selección de variables¶
+
+Estas se seleccionan mediante el clasificador de Random Forest donde se
+escogen aquellas vaiables estadísticamente significativas.
+
+In [293]:
+
+    X_fselec = feature_selection(X_down, y_down_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible', 'Sector_Cultura', 'Sector_No aplica/No pertenece', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Sector_Transporte', 'Sector_Vivienda, Ciudad y Territorio', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación directa', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'Justificacion Modalidad de Contratacion_ServiciosProfesionales', 'Liquidación_No', 'Liquidación_Si', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Mes Firma Contrato_Abr', 'Mes Firma Contrato_Ene', 'Mes Firma Contrato_Feb', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Mes de Publicacion del Proceso_Abr', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Mar', 'Codigo Segmento Categoria Principal_80000000', 'Codigo Segmento Categoria Principal_85000000']
+
+Se realiza nuevamente la selección de variables entre aquellas arrojadas
+por la selección anterior con el proposito de reducir nuevamente el
+conjunto de variables relevantes.
+
+In [294]:
+
+    X_fselec2 = feature_selection(X_fselec, y_down_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Sector_Cultura']
+
+Regresión logística¶
+
+Utilizamos validación cruzada con 10 folds y luego evaluamos sobre el
+conjunto de prueba.
+
+Regresión logística usando todas las variables independientes
+
+In [295]:
+
+    print('Modelo usando regresión logística con todas las variables')
+    regLog, X_test, y_test, y_pred, scaler = reg_log(X_down, y_down_AV)
+
+    plot_CM(y_test, y_pred)
+    plot_ROC(regLog, X_test, y_test, scaler, model_name='Regresión logítica con todas las variables')
+
+    Modelo usando regresión logística con todas las variables
+
+    Accuracy para Regresión Logística con validación cruzada: 0.7971 
+    El accuracy del test es: 0.7998
+    La sensitividad(recall) del test es: 0.8209
+    La precisión del test es: 0.7877
+    BIC: 2071.97
+    AIC: 418.91
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3357   954
+  Sí            772    3539
+
+    Model: ROC AUC = 0.878
+
+[No description has been provided for this image]
+
+Regresión logística con variables de la primera selección de variables
+
+In [296]:
+
+    regLog2, X_test2, y_test2, y_pred2, scaler2 = reg_log(X_fselec, y_down_AV)
+
+    plot_CM(y_test2, y_pred2)
+    plot_ROC(regLog2, X_test2, y_test2, scaler2, model_name='Regresión logística 1ra selección de variables')
+
+    Accuracy para Regresión Logística con validación cruzada: 0.7882 
+    El accuracy del test es: 0.7898
+    La sensitividad(recall) del test es: 0.8135
+    La precisión del test es: 0.7767
+    BIC: 347.78
+    AIC: 70.95
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3303   1008
+  Sí            804    3507
+
+    Model: ROC AUC = 0.875
+
+[No description has been provided for this image]
+
+Regresión logística con variables de la segunda selección de variables
+
+In [297]:
+
+    regLog3, X_test3, y_test3, y_pred3, scaler3 = reg_log(X_fselec2, y_down_AV)
+
+    plot_CM(y_test3, y_pred3)
+    plot_ROC(regLog3, X_test3, y_test3, scaler3, model_name='Logistic regression 2nd feature selection')
+
+    Accuracy para Regresión Logística con validación cruzada: 0.7404 
+    El accuracy del test es: 0.7426
+    La sensitividad(recall) del test es: 0.7539
+    La precisión del test es: 0.7373
+    BIC: 80.37
+    AIC: 17.09
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3153   1158
+  Sí            1061   3250
+
+    Model: ROC AUC = 0.821
+
+[No description has been provided for this image]
+
+In [298]:
+
+    print(X_fselec2.columns)
+    print(regLog3.coef_[0])
+
+    Index(['Valor del Contrato', 'Dias Inicio-Firma Contrato',
+           'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+           'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito',
+           'Sector_Cultura'],
+          dtype='object')
+    [-0.04325953 -1.255394   -3.46810791  1.95644501  3.90311353 -0.40195825
+     -0.71941369]
+
+In [299]:
+
+    plot_CM(y_test3, y_pred3, plot=True, title='Regresión logística')
+
+[No description has been provided for this image]
+
+Note que los resultados son muy similares a los del modelo anterior,
+tanto para la matriz de confusión como para el AUC-ROC. Así,
+naturalmente, nos quedamos con el modelo más simple de los dos.
+
+Regresión logística con variables de la segunda selección de variables
+más sectores relevantes según primera selección de variables
+
+In [300]:
+
+    vars_sel2_psectores = ['Valor del Contrato',
+                           'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato',
+                           'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion',
+                           'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible',
+                           'Sector_Cultura', 'Sector_No aplica/No pertenece',
+                           'Sector_Salud y Protección Social', 'Sector_Servicio Público',
+                           'Sector_Transporte', 'Sector_Vivienda, Ciudad y Territorio'
+                          ]
+
+In [301]:
+
+    X_fselec2_sectores = X_fselec[vars_sel2_psectores]
+
+In [302]:
+
+    regLog_sec, X_test_sec, y_test_sec, y_pred_sec, scaler_sec = reg_log(X_fselec2_sectores, y_down_AV)
+
+    plot_CM(y_test_sec, y_pred_sec)
+    plot_ROC(regLog_sec, X_test_sec, y_test_sec, scaler_sec, model_name='Regresión logística variables sector')
+
+    Accuracy para Regresión Logística con validación cruzada: 0.7740 
+    El accuracy del test es: 0.7745
+    La sensitividad(recall) del test es: 0.7912
+    La precisión del test es: 0.7657
+    BIC: 139.75
+    AIC: 29.02
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3267   1044
+  Sí            900    3411
+
+    Model: ROC AUC = 0.852
+
+[No description has been provided for this image]
+
+Bosque aleatorio¶
+
+Ejemplificación del arbol de decisión
+
+In [303]:
+
+    treeclf = DecisionTreeClassifier(random_state=42, max_depth=3).fit(X_fselec2, y_down_AV)
+
+In [304]:
+
+    plt.figure(figsize=(20,10))
+    out = tree.plot_tree(treeclf, 
+                         filled=True, 
+                         feature_names=X_fselec2.columns, 
+                         class_names=['No adición', 'Adición'],
+                         fontsize=12
+                        )
+    # plt.savefig('created_data/figures/mapa_ejemploarbol.png')
+
+[No description has been provided for this image]
+
+Bosque aleatorio con primera elección de variables
+
+In [305]:
+
+    forest, X_test, y_test, y_pred_forest, scaler = random_forest(X_fselec, y_down_AV)
+
+    plot_CM(y_test, y_pred_forest)
+    plot_ROC(forest, X_test, y_test, scaler, model_name='Bosque aleatorio 1ra selección de variables')
+
+    Accuracy del test: 0.8952
+    La sensitividad(recall) del test es: 0.8778
+    La precisión del test es: 0.9094
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3934   377
+  Sí            527    3784
+
+    Model: ROC AUC = 0.960
+
+[No description has been provided for this image]
+
+Bosque aleatorio con segunda elección de variables
+
+In [306]:
+
+    forest2, X_test2, y_test2, y_pred_forest2, scaler2, X_train2, y_train2 = random_forest(X_fselec2, y_down_AV, get_train=True)
+
+    plot_CM(y_test2, y_pred_forest2),
+    plot_ROC(forest2, X_test2, y_test2, scaler2, model_name='Bosque aleatorio 2da selección de variables', figsize=(5,3))
+
+    Accuracy del test: 0.8747
+    La sensitividad(recall) del test es: 0.8492
+    La precisión del test es: 0.8949
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3881   430
+  Sí            650    3661
+
+    Model: ROC AUC = 0.943
+
+[No description has been provided for this image]
+
+Comparar resultados de modelo con todos los datos entre tipo de contrato
+prestación de servicios
+
+In [307]:
+
+    X_test2_comp = X_down.iloc[X_test2.index]
+
+    pd.crosstab(X_test2_comp['Tipo de Contrato_Prestación de servicios'], y_test2, margins=True, normalize='index')
+
+Out[307]:
+
+  Tuvo_adiciones_valor                       0          1
+  ------------------------------------------ ---------- ----------
+  Tipo de Contrato_Prestación de servicios              
+  0                                          0.617368   0.382632
+  1                                          0.489030   0.510970
+  All                                        0.500000   0.500000
+
+In [308]:
+
+    (X_test2_comp[X_fselec2.columns].values == X_test2.values).all()
+
+Out[308]:
+
+    True
+
+In [309]:
+
+    y_by_ps = pd.DataFrame({'True':y_test2, 'Predicted':y_pred_forest2,
+                            'PS': X_test2_comp['Tipo de Contrato_Prestación de servicios']},
+                           index=y_test2.index)
+    ps_bool_idx = y_by_ps['PS'] == 1
+
+    # Comparar medidas
+    ps_acc = accuracy_score(y_by_ps.loc[ps_bool_idx, 'True'], y_by_ps.loc[ps_bool_idx, 'Predicted'])
+    ps_rec = recall_score(y_by_ps.loc[ps_bool_idx, 'True'], y_by_ps.loc[ps_bool_idx, 'Predicted'])
+    print('Prestación de servicios: acc:{:.4f}, recall:{:.4f}'.format(ps_acc, ps_rec))
+    plot_CM(y_by_ps.loc[ps_bool_idx, 'True'], y_by_ps.loc[ps_bool_idx, 'Predicted'])
+
+    nps_acc = accuracy_score(y_by_ps.loc[~ps_bool_idx, 'True'], y_by_ps.loc[~ps_bool_idx, 'Predicted'])
+    nps_rec = recall_score(y_by_ps.loc[~ps_bool_idx, 'True'], y_by_ps.loc[~ps_bool_idx, 'Predicted'])
+    print('Diferente a prestación de servicios: acc:{:.4f}, recall:{:.4f}'.format(nps_acc, nps_rec))
+    plot_CM(y_by_ps.loc[~ps_bool_idx, 'True'], y_by_ps.loc[~ps_bool_idx, 'Predicted']);
+
+    Prestación de servicios: acc:0.8832, recall:0.8630
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3487   369
+  Sí            552    3477
+
+    Diferente a prestación de servicios: acc:0.7843, recall:0.6525
+
+  Predicción    No    Sí
+  ------------- ----- -----
+  Observación         
+  No            394   61
+  Sí            98    184
+
+Importancia de variables¶
+
+In [245]:
+
+    forest_importances = pd.Series(forest2.feature_importances_,
+                                    index=X_fselec2.columns)
+    forest_importances.sort_values(ascending=False)
+
+Out[245]:
+
+    Dias Fin-Inicio Ejecucion      0.232508
+    Dias Fin-Inicio Contrato       0.195581
+    Dias Proveedor Inscrito        0.178211
+    Valor del Contrato             0.145847
+    Dias Inicio-Firma Ejecucion    0.109677
+    Dias Inicio-Firma Contrato     0.084416
+    Sector_Cultura                 0.053760
+    dtype: float64
+
+In [ ]:
+
+    %%time
+    X_train_sc = pd.DataFrame(scaler2.transform(X_train2), columns=X_train2.columns)
+    variables = list(X_train2.columns)
+    eng_vars = ['Contract value', 'Sign-start contract days', 'Start-end contract days',
+                'Sign-start execution days', 'Start-end execution days',
+                'Days provider registered', 'Sector (Culture)']
+    eng_vars = dict(zip(variables, eng_vars))
+
+    plt.figure(figsize=(16, 8))
+    plt.subplots_adjust(hspace=0.3)
+    #plt.suptitle('Random Forest - Additions in value', fontsize=18, y=0.92)
+    for n, var in enumerate(variables[:-1]): # Exclude sector -1
+        ax = plt.subplot(2, 3, n+1)
+        plot_partial_dependence(forest2, 
+                                X_train_sc,
+                                [var],
+                                ax=ax, line_kw={"color": "#2351a2", "linewidth":3})
+        plt.xlabel(f'{eng_vars[var]}', fontsize=14)
+        plt.ylabel('Partial dependence', fontsize=12)
+    plt.savefig('created_data/figures/PDP_RF_AdValor.svg')
+
+In [ ]:
+
+    # Encontrar umbrales para agregar al PDP
+
+    # Valores de interés a desescalar basado en análisis de figuras previas
+    valores_interes = {'Valor del Contrato': [-0.08, -0.08],
+                        'Dias Inicio-Firma Contrato': [-0.28, -0.28],
+                        'Dias Fin-Inicio Contrato': [-0.86, 0.32],
+                        'Dias Inicio-Firma Ejecucion': [0.07, 0.55],
+                        'Dias Fin-Inicio Ejecucion':[0.52, 1.1],
+                        'Dias Proveedor Inscrito': [-0.25, -0.25],
+                        'Sector_Cultura': [3.494203, 3.494203]
+                    }
+    valores_interes = pd.DataFrame(valores_interes)
+    valores_interes_origi = pd.DataFrame(scaler2.inverse_transform(valores_interes), columns=valores_interes.columns)
+    valores_interes_origi = valores_interes_origi.astype(int).applymap(lambda x : "{:,}".format(x)).to_dict(orient='list')
+
+In [ ]:
+
+    display(valores_interes)
+    display(valores_interes_origi)
+
+      Valor del Contrato   Dias Inicio-Firma Contrato   Dias Fin-Inicio Contrato   Dias Inicio-Firma Ejecucion   Dias Fin-Inicio Ejecucion   Dias Proveedor Inscrito   Sector_Cultura
+  --- -------------------- ---------------------------- -------------------------- ----------------------------- --------------------------- ------------------------- ----------------
+  0   -0.08                -0.28                        -0.86                      0.07                          0.52                        -0.25                     3.494203
+  1   -0.08                -0.28                        0.32                       0.55                          1.10                        -0.25                     3.494203
+
+    {'Valor del Contrato': ['23,713,303', '23,713,303'],
+     'Dias Inicio-Firma Contrato': ['-20', '-20'],
+     'Dias Fin-Inicio Contrato': ['116', '269'],
+     'Dias Inicio-Firma Ejecucion': ['7', '34'],
+     'Dias Fin-Inicio Ejecucion': ['296', '372'],
+     'Dias Proveedor Inscrito': ['228', '228'],
+     'Sector_Cultura': ['0', '0']}
+
+In [ ]:
+
+    %%time
+    variables = list(X_train2.columns)
+    eng_vars = ['Contract value', 'Sign-start contract days', 'Start-end contract days',
+                'Sign-start execution days', 'Start-end execution days',
+                'Days supplier registered', 'Sector (Culture)']
+    eng_vars = dict(zip(variables, eng_vars))
+
+    #plt.figure(figsize=(16, 8))
+    #plt.subplots_adjust(hspace=0.3)
+    #plt.suptitle('Random Forest - Additions in value', fontsize=18, y=0.92)
+    for n, var in enumerate(variables[:-1]): # Exclude sector -1
+        #ax = plt.subplot(2, 3, n+1)
+        plt.figure()
+        plot_partial_dependence(forest2, 
+                                X_train_sc,
+                                [var],
+                                #ax=ax, 
+                                line_kw={"color": "#2351a2", "linewidth":3})
+        plt.xlabel(f'{eng_vars[var]}', fontsize=14)
+        plt.ylabel('Partial dependence', fontsize=14)
+
+        # Add vertical lines
+        x_lines = list(set(valores_interes[var]))
+        line_unit = 'COP' if var == 'Valor del Contrato' else 'days'
+        for i in range(len(x_lines)):
+            plt.axvline(x=x_lines[i], color='r', linestyle='--')
+            plt.text(x_lines[i], plt.ylim()[1]*1.001, 
+                f'{valores_interes_origi[var][i]} {line_unit}',
+                color='r', fontsize=14)
+
+        # Save subplots
+        plt.savefig(f'created_data/figures/PDP_RF_AdValor/PDP_RF_AdValor_{eng_vars[var]}.jpeg')
+        plt.show()
+
+    #plt.savefig('created_data/figures/PDP_RF_AdValor/PDP_RF_AdValor.svg')
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    Wall time: 8min 3s
+
+    # SHAP values
+    shap.initjs()
+    explainer = shap.TreeExplainer(forest2)
+    #shap_values = explainer.shap_values(X_test_sc)
+
+    # SHAP summary
+    eng_vars_list = ['Contract value', 'Sign-start contract days', 'Start-end contract days',
+                'Sign-start execution days', 'Start-end execution days',
+                'Days supplier registered', 'Sector (Culture)']
+    shap.summary_plot(shap_values[1], X_test_sc, feature_names=eng_vars_list, show=False)
+    plt.savefig('created_data/figures/SHAP_RF_AdValor.jpeg')
+    plt.show()
+
+    sv = explainer(X_test_sc)
+    exp = shap.Explanation(sv.values[:,:,1], 
+                        sv.base_values[:,1], 
+                        data=X_test_sc.values, 
+                        feature_names=X_test_sc.columns)
+
+In [310]:
+
+    #Guardar modelo
+    print(joblib.__version__)
+    print('Variables del modelos:',X_fselec2.columns)
+    filename = 'created_data/trained_models/model_secopII_AdValor_TipoContratoTodos_rf.pkl'
+    joblib.dump(forest2, filename)  #Modelo
+
+    filename_scaler = 'created_data/trained_models/scaler_secopII_AdValor_TipoContratoTodos_rf.pkl'
+    joblib.dump(scaler2, filename_scaler)  #scaler
+
+    1.0.1
+    Variables del modelos: Index(['Valor del Contrato', 'Dias Inicio-Firma Contrato',
+           'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+           'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito',
+           'Sector_Cultura'],
+          dtype='object')
+
+Out[310]:
+
+    ['created_data/trained_models/scaler_secopII_AdValor_TipoContratoTodos_rf.pkl']
+
+In [ ]:
+
+    filename = 'created_data/trained_models/model_secopII_AdValor_TipoContratoTodos_rf.pkl'
+    pp = joblib.load(filename)
+
+In [ ]:
+
+    del pp
+
+Guardar variables para comparaciones posteriores
+
+rf: Random forest, TO: Todas las observaciones, TV: Todas las Variables
+
+In [ ]:
+
+    rf_TO_TV = forest2
+    X_test_TO_TV, y_test_TO_TV = X_test2, y_test2
+    y_pred_TO_TV = y_pred_forest2
+    scaler_TO_TV = scaler2
+    X_train_TO_TV, y_train_TO_TV = X_train2, y_train2
+
+Bosque aleatorio vs regresión logística¶
+
+con segunda selección de variables, adiciones en valor
+
+In [ ]:
+
+    # Confirmar que los datos de test en ambos son iguales
+    (y_test2 == y_test3).all()
+
+Out[ ]:
+
+    True
+
+In [ ]:
+
+    # Crear predicciones
+    ns_probs = [0 for _ in range(len(y_test2))]
+    lr_probs = regLog3.predict_proba(scaler3.transform(X_test2))[:, 1]
+    rf_probs = forest2.predict_proba(scaler2.transform(X_test2))[:, 1]
+
+    lr_auc = roc_auc_score(y_test2, lr_probs)
+    rf_auc = roc_auc_score(y_test2, rf_probs)
+
+    ns_fpr, ns_tpr, _ = roc_curve(y_test2, ns_probs)
+    lr_fpr, lr_tpr, _ = roc_curve(y_test2, lr_probs)
+    rf_fpr, rf_tpr, _ = roc_curve(y_test2, rf_probs)
+
+    #plt.figure(figsize=(10,8))
+    plt.plot(ns_fpr, ns_tpr, linestyle = '--') 
+    plt.plot(lr_fpr, lr_tpr, marker = '.', label = 'Logistic Regression (AUC = {:1.3F})'.format(lr_auc))
+    plt.plot(rf_fpr, rf_tpr, marker = '.', label = 'Random Forest (AUC = {:1.3F})'.format(rf_auc))
+    plt.xlim([-0.001,1.001])
+    plt.ylim([-0.001,1.001])
+    plt.xlabel('False positive rate', fontsize=12)
+    plt.ylabel('True positive rate', fontsize=12)
+    plt.legend(loc="lower right")
+    plt.suptitle('ROC curve', fontsize=14)
+    plt.title('Cost overruns')
+
+    # plt.savefig('created_data/figures/ROC_AValor_muestracompleta.png')
+    plt.savefig('created_data/figures/ROC_AValor_muestracompleta.svg')
+
+[No description has been provided for this image]
+
+In [ ]:
+
+    # plt.figure(figsize=(12,5))
+    # plt.subplot(121)
+    # plot_CM(y_test3, y_pred3, plot=True, title='Regresión logística')
+    # plt.subplot(122)
+    # plot_CM(y_test2, y_pred_forest2, plot=True, title='Bosque aleatorio')
+    plt.figure(figsize=(10,4))
+
+    plt.subplot(121)
+    cm = confusion_matrix(y_test2, y_pred2)
+    cm_df = pd.DataFrame(cm, index = ['No','Yes'], columns = ['No','Yes'])
+
+    sns.heatmap( cm_df, 
+                annot=True, fmt='2.1f', cmap='ocean_r',annot_kws={'fontsize':16},
+                cbar=False, square=True, linecolor='black', linewidths=0.2 )
+    plt.title('Logistic Regression')
+    plt.xlabel('Predicted', fontsize=13)
+    plt.ylabel('Observed', fontsize=13)
+
+    plt.subplot(122)
+    cm = confusion_matrix(y_test2, y_pred_forest2)
+    cm_df = pd.DataFrame(cm, index = ['No','Yes'], columns = ['No','Yes'])
+
+    sns.heatmap( cm_df, 
+                annot=True, fmt='2.1f', cmap='ocean_r',annot_kws={'fontsize':16},
+                cbar=False, square=True, linecolor='black', linewidths=0.2 )
+    plt.title('Random Forest')
+    plt.xlabel('Predicted', fontsize=13)
+    plt.ylabel('Observed', fontsize=13)
+
+    # plt.savefig('created_data/figures/MatConf_AValor_muestracompleta.png')
+    plt.savefig('created_data/figures/MatConf_AValor_muestracompleta.svg')
+
+[No description has been provided for this image]
+
+Excluir variables de ejecución.¶
+
+Y tiempos pactados en el contrato
+
+In [247]:
+
+    #Eliminar variables de ejecución y días
+    X_down = X_down.drop(columns=vars_ejecucion)
+
+Selección de variables
+
+In [248]:
+
+    X_fselec = feature_selection(X_down, y_down_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible', 'Sector_Cultura', 'Sector_No aplica/No pertenece', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Sector_Transporte', 'Sector_Vivienda, Ciudad y Territorio', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación directa', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'Justificacion Modalidad de Contratacion_ServiciosProfesionales', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Destino Gasto_No Definido', 'Mes Firma Contrato_Abr', 'Mes Firma Contrato_Ago', 'Mes Firma Contrato_Ene', 'Mes Firma Contrato_Feb', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Mes de Publicacion del Proceso_Abr', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Mar', 'Codigo Segmento Categoria Principal_85000000']
+
+In [249]:
+
+    X_fselec.shape
+
+Out[249]:
+
+    (28740, 30)
+
+In [250]:
+
+    X_fselec2 = feature_selection(X_fselec, y_down_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Proveedor Inscrito', 'Sector_Cultura']
+
+In [251]:
+
+    X_fselec3 = feature_selection(X_fselec, y_down_AV, threshold="1.3*median")
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Proveedor Inscrito', 'Sector_Cultura', 'Sector_Salud y Protección Social', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)']
+
+Bosque aleatorio
+
+In [252]:
+
+    #Primera selección de variables
+    forest, X_test, y_test, y_pred_forest, scaler = random_forest(X_fselec, y_down_AV)
+
+    plot_CM(y_test, y_pred_forest)
+    plot_ROC(forest, X_test, y_test, scaler, model_name='Bosque aleatorio 1ra selección de variables')
+
+    Accuracy del test: 0.8138
+    La sensitividad(recall) del test es: 0.8109
+    La precisión del test es: 0.8157
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3521   790
+  Sí            815    3496
+
+    Model: ROC AUC = 0.901
+
+[No description has been provided for this image]
+
+Segunda selección de variables
+
+In [253]:
+
+    forest2, X_test2, y_test2, y_pred_forest2, scaler2, X_train2, y_train2 = random_forest(X_fselec2, y_down_AV, get_train = True)
+
+    plot_CM(y_test2, y_pred_forest2)
+    plot_ROC(forest2, X_test2, y_test2, scaler2, model_name='Bosque aleatorio 2da selección de variables')
+
+    Accuracy del test: 0.6996
+    La sensitividad(recall) del test es: 0.6989
+    La precisión del test es: 0.6999
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3019   1292
+  Sí            1298   3013
+
+    Model: ROC AUC = 0.789
+
+[No description has been provided for this image]
+
+In [254]:
+
+    plt.figure()
+    plot_CM(y_test2, y_pred_forest2, plot=True, title='Random forest with pre-execution variables',
+           xlabel='Predicted', ylabel='Observed', tickslabel=['No','Yes'],
+            savedir='created_data/figures/MatConf_AValor_preejecucion.svg')
+
+[No description has been provided for this image]
+
+Modelo ajuste umbral selección¶
+
+In [257]:
+
+    forest3, X_test3, y_test3, y_pred_forest3, scaler3, X_train3, y_train3 = random_forest(X_fselec3, y_down_AV, get_train = True)
+
+    plot_CM(y_test3, y_pred_forest3)
+    plot_ROC(forest3, X_test3, y_test3, scaler3, model_name='Bosque aleatorio 3ra selección de variables')
+
+    Accuracy del test: 0.7606
+    La sensitividad(recall) del test es: 0.7620
+    La precisión del test es: 0.7599
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3273   1038
+  Sí            1026   3285
+
+    Model: ROC AUC = 0.850
+
+[No description has been provided for this image]
+
+In [258]:
+
+    plt.figure()
+    plot_CM(y_test3, y_pred_forest3, plot=True, title='Random forest with pre-execution variables',
+           xlabel='Predicted', ylabel='Observed', tickslabel=['No','Yes'],
+            savedir='created_data/figures/MatConf_AValor_preejecucion_b.svg')
+
+[No description has been provided for this image]
+
+Grafico de Dependencia Parcial
+
+In [259]:
+
+    forest_importances = pd.Series(forest3.feature_importances_,
+                                    index=X_fselec3.columns)
+    forest_importances.sort_values(ascending=False)
+
+Out[259]:
+
+    Valor del Contrato                                         0.436031
+    Dias Proveedor Inscrito                                    0.367706
+    Sector_Salud y Protección Social                           0.047509
+    Sector_Cultura                                             0.043157
+    Justificacion Modalidad de Contratacion_Regla aplicable    0.033563
+    Proveedores Invitados                                      0.029381
+    Grupo categoria principal_Servicios administrativos        0.022360
+    Grupo categoria principal_Servicios(No Admin)              0.020292
+    dtype: float64
+
+In [260]:
+
+    %%time
+    X_train_sc = pd.DataFrame(scaler3.transform(X_train3), columns=X_train3.columns)
+    variables = list(X_train3.columns)
+    eng_vars = ['Contract value', ' Number of invited suppliers', 'Days supplier registered',
+                'Sector (Culture)', 'Sector (Health)', 
+                'Procurement procedure justification (Applicable rule)',
+                'Product/Service category (Administrative services)', 
+                'Product/Service category (Non Administrative services)'
+                ]
+    eng_vars = dict(zip(variables, eng_vars))
+
+    plt.figure(figsize=(16, 8))
+    plt.subplots_adjust(hspace=0.3)
+    for n, var in enumerate(variables):
+        ax = plt.subplot(2, 4, n+1)
+        plot_partial_dependence(forest3, 
+                                X_train_sc,
+                                [var],
+                                ax=ax, line_kw={"color": "#2351a2", "linewidth":3})
+        plt.xlabel(f'{eng_vars[var]}', fontsize=14)
+        plt.ylabel('Partial dependence', fontsize=12)
+
+    Wall time: 5min 8s
+
+[No description has been provided for this image]
+
+Generar PDP individuales con anotaciones
+
+In [261]:
+
+    # Encontrar umbrales para agregar al PDP
+
+    # Valores de interés a desescalar basado en análisis de figuras previas
+    # Para facilidad en la destandarización todos tienen dos puntos
+    valores_interes = {'Valor del Contrato': [-0.105, -0.105],
+                        'Proveedores Invitados': [-0.14, 0.11],
+                        'Dias Proveedor Inscrito': [-0.35, -0.35],
+                        'Sector_Cultura': [X_train_sc['Sector_Cultura'].min(), X_train_sc['Sector_Cultura'].max()],
+                        'Sector_Salud y Protección Social': [X_train_sc['Sector_Salud y Protección Social'].min(), X_train_sc['Sector_Salud y Protección Social'].max()],
+                        'Justificacion Modalidad de Contratacion_Regla aplicable': [X_train_sc['Justificacion Modalidad de Contratacion_Regla aplicable'].min(), X_train_sc['Justificacion Modalidad de Contratacion_Regla aplicable'].max()],
+                        'Grupo categoria principal_Servicios administrativos': [X_train_sc['Grupo categoria principal_Servicios administrativos'].min(), X_train_sc['Grupo categoria principal_Servicios administrativos'].max()],
+                        'Grupo categoria principal_Servicios(No Admin)': [X_train_sc['Grupo categoria principal_Servicios(No Admin)'].min(), X_train_sc['Grupo categoria principal_Servicios(No Admin)'].max()]
+                    }
+    valores_interes = pd.DataFrame(valores_interes)
+    valores_interes_origi = pd.DataFrame(scaler3.inverse_transform(valores_interes), columns=valores_interes.columns)
+    valores_interes_origi = valores_interes_origi.astype(int).applymap(lambda x : "{:,}".format(x)).to_dict(orient='list')
+
+    # Unidades
+    line_unit = dict(zip(X_train_sc.columns, ['COP', '', 'Days']+ ['']*5))
+
+    bin_vars = ['Sector_Cultura',
+                'Sector_Salud y Protección Social',
+                'Justificacion Modalidad de Contratacion_Regla aplicable',
+                'Grupo categoria principal_Servicios administrativos',
+                'Grupo categoria principal_Servicios(No Admin)']
+
+In [262]:
+
+    %%time
+    for n, var in enumerate(variables):
+        plt.figure()
+        plot_partial_dependence(forest3, 
+                                X_train_sc,
+                                [var], 
+                                line_kw={"color": "#2351a2", "linewidth":3})
+        plt.xlabel(f'{eng_vars[var]}', fontsize=14)
+        plt.ylabel('Partial dependence', fontsize=14)
+
+        # Add vertical lines
+        x_lines = list(valores_interes[var].unique())
+        if var in bin_vars:
+            line_values = ['No', 'Yes']
+        else:
+            line_values = valores_interes_origi[var]
+        for i in range(len(x_lines)):
+            plt.axvline(x=x_lines[i], color='r', linestyle='--')
+            plt.text(x_lines[i], plt.ylim()[1]*1.001, 
+                f'{line_values[i]} {line_unit[var]}',
+                color='r', fontsize=14)
+
+        # Save subplots
+        dir_name = eng_vars[var].replace('/', '_')
+        plt.savefig(f'created_data/figures/PDP_RF_AdValor_Prejec/PDP_RF_AdValor_Prejec_{dir_name}.jpeg')
+        plt.show()
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    Wall time: 5min 14s
+
+Guardar modelo
+
+In [91]:
+
+    #Guardar modelo
+    print('Variables del modelos:',X_fselec2.columns)
+    filename = 'created_data/trained_models/modelos_preejecucion/model_preejec_secopII_AdValor_TipoContratoTodos_rf.pkl'
+    joblib.dump(forest2, filename)  #Modelo
+
+    filename_scaler = 'created_data/trained_models/modelos_preejecucion/scaler_preejec_secopII_AdValor_TipoContratoTodos_rf.pkl'
+    joblib.dump(scaler2, filename_scaler)  #scaler
+
+    Variables del modelos: Index(['Valor del Contrato', 'Dias Proveedor Inscrito', 'Sector_Cultura'], dtype='object')
+
+Out[91]:
+
+    ['CreatedData/trained_models/modelos_preejecucion/scaler_preejec_secopII_AdValor_TipoContratoTodos_rf.pkl']
+
+Guardar variables para comparaciones posteriores
+
+rf: Random forest, TO: Todas las observaciones, VPE: Variables
+prejecución
+
+In [92]:
+
+    rf_TO_VPE = forest3
+    X_test_TO_VPE, y_test_TO_VPE = X_test3, y_test3
+    y_pred_TO_VPE = y_pred_forest3
+    scaler_TO_VPE = scaler3
+
+Comparación todas variables vs preejecución¶
+
+Con segunda elección de variables y todas las observaciones (sin
+distinguir por tipo de contrato)
+
+In [93]:
+
+    rf_TO_TV
+    X_test_TO_TV, y_test_TO_TV
+    y_pred_TO_TV
+    scaler_TO_TV
+
+Out[93]:
+
+    StandardScaler()
+
+In [94]:
+
+    (y_test_TO_TV == y_test_TO_VPE).all()
+
+Out[94]:
+
+    True
+
+In [95]:
+
+    # Crear predicciones
+    ns_probs = [0 for _ in range(len(y_test_TO_TV))]
+    TV_probs = rf_TO_TV.predict_proba(scaler_TO_TV.transform(X_test_TO_TV))[:, 1]
+    VPE_probs = rf_TO_VPE.predict_proba(scaler_TO_VPE.transform(X_test_TO_VPE))[:, 1]
+
+    TV_auc = roc_auc_score(y_test_TO_TV, TV_probs)
+    VPE_auc = roc_auc_score(y_test_TO_VPE, VPE_probs)
+
+    ns_fpr, ns_tpr, _ = roc_curve(y_test_TO_TV, ns_probs)
+    TV_fpr, TV_tpr, _ = roc_curve(y_test_TO_TV, TV_probs)
+    VPE_fpr, VPE_tpr, _ = roc_curve(y_test_TO_VPE, VPE_probs)
+
+    #plt.figure(figsize=(10,8))
+    plt.plot(ns_fpr, ns_tpr, linestyle = '--') 
+    plt.plot(TV_fpr, TV_tpr, marker = '.', label = 'All variables (AUC = {:1.3F})'.format(TV_auc))
+    plt.plot(VPE_fpr, VPE_tpr, marker = '.', label = 'Pre-execution variables (AUC = {:1.3F})'.format(VPE_auc))
+    plt.xlim([-0.001,1.001])
+    plt.ylim([-0.001,1.001])
+    plt.xlabel('False positive rate', fontsize=12)
+    plt.ylabel('True positive rate', fontsize=12)
+    plt.legend(loc="lower right")
+    plt.suptitle('ROC curve', fontsize=14)
+    plt.title('Additions in value')
+
+    plt.savefig('created_data/figures/ROC_AValor_todasvariables_vs_preejecucion_b.svg')
+
+[No description has been provided for this image]
+
+Modelos para contratos de prestación de servicios¶
+
+Se filtran las observaciones por la variable Tipo de Contrato
+conservando aquellos del tipo "Prestación de servicios".
+
+In [139]:
+
+    df_downsampled_AV["Tipo de Contrato"].value_counts()
+
+Out[139]:
+
+    Prestación de servicios       26358
+    Decreto 092 de 2017             898
+    Otro                            414
+    Suministros                     325
+    Compraventa                     285
+    Interventoría                   144
+    Obra                            124
+    Consultoría                      72
+    Seguros                          64
+    Arrendamiento de inmuebles       56
+    Name: Tipo de Contrato, dtype: int64
+
+In [140]:
+
+    X_prestacion = df_downsampled_AV[df_downsampled_AV["Tipo de Contrato"] == "Prestación de servicios"]
+    y_prestacion_AV = X_prestacion["Tuvo_adiciones_valor"]
+
+    X_prestacion = X_prestacion.drop(columns = vars_a_excluir+["Tipo de Contrato"])
+    X_prestacion = pd.get_dummies(data = X_prestacion, columns = vars_categoricas)
+
+In [141]:
+
+    y_prestacion_AV.value_counts(normalize=True)
+
+Out[141]:
+
+    1    0.508574
+    0    0.491426
+    Name: Tuvo_adiciones_valor, dtype: float64
+
+No hay problema con el balanceo
+
+Selección de variables¶
+
+Se realiza el proceso de selección de variables mediante bosque
+aleatorio con la submuestra de contratos del tipo prestación de
+servicios. Esto debido a que al revisar las correlaciones se vio que
+pueden existir un conjunto de relaciones diferentes los presentados con
+todos los datos.
+
+In [142]:
+
+    X_fselec_Pservicios = feature_selection(X_prestacion, y_prestacion_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible', 'Sector_Cultura', 'Sector_No aplica/No pertenece', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Sector_Vivienda, Ciudad y Territorio', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación directa', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'Justificacion Modalidad de Contratacion_ServiciosProfesionales', 'Liquidación_No', 'Liquidación_Si', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Mes Firma Contrato_Abr', 'Mes Firma Contrato_Ene', 'Mes Firma Contrato_Feb', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Mes de Publicacion del Proceso_Abr', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Codigo Segmento Categoria Principal_80000000', 'Codigo Segmento Categoria Principal_85000000']
+
+Se repite el procedimiento de selección de variables.
+
+In [143]:
+
+    X_fselec_Pservicios2 = feature_selection(X_fselec_Pservicios, y_prestacion_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Sector_Cultura']
+
+Regresión logística¶
+
+Modelo con primera selección de variables
+
+In [144]:
+
+    regLog_prest, X_test_prest, y_test_prest, y_pred_prest, scaler_prest = reg_log(X_fselec_Pservicios, y_prestacion_AV)
+
+    plot_CM(y_test_prest, y_pred_prest)
+    plot_ROC(regLog_prest, X_test_prest, y_test_prest, scaler_prest, 
+             model_name='Regresión logística 1ra selección de variables')
+
+    Accuracy para Regresión Logística con validación cruzada: 0.7990 
+    El accuracy del test es: 0.7949
+    La sensitividad(recall) del test es: 0.8173
+    La precisión del test es: 0.7875
+    BIC: 325.07
+    AIC: 66.92
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            2999   887
+  Sí            735    3287
+
+    Model: ROC AUC = 0.885
+
+[No description has been provided for this image]
+
+Modelo con primera selección de variables
+
+In [145]:
+
+    regLog_prest2, X_test_prest2, y_test_prest2, y_pred_prest2, scaler_prest2 = reg_log(X_fselec_Pservicios2, y_prestacion_AV)
+
+    display(plot_CM(y_test_prest2, y_pred_prest2))
+    plot_ROC(regLog_prest2, X_test_prest2, y_test_prest2, scaler_prest2, 
+             model_name='Regresión logística 2da selección de variables')
+
+    Accuracy para Regresión Logística con validación cruzada: 0.7567 
+    El accuracy del test es: 0.7614
+    La sensitividad(recall) del test es: 0.7618
+    La precisión del test es: 0.7673
+    BIC: 79.64
+    AIC: 17.06
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            2957   929
+  Sí            958    3064
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            2957   929
+  Sí            958    3064
+
+    Model: ROC AUC = 0.845
+
+[No description has been provided for this image]
+
+Bosque aleatorio¶
+
+Modelo con el primer conjunto de variables seleccionadas.
+
+In [146]:
+
+    forest, X_test, y_test, y_pred_forest, scaler = random_forest(X_fselec_Pservicios, y_prestacion_AV)
+
+    plot_CM(y_test, y_pred_forest)
+    plot_ROC(forest, X_test, y_test, scaler, 
+             model_name='Bosque aleatorio 1ra selección de variables')
+
+    Accuracy del test: 0.9005
+    La sensitividad(recall) del test es: 0.8846
+    La precisión del test es: 0.9168
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3563   323
+  Sí            464    3558
+
+    Model: ROC AUC = 0.962
+
+[No description has been provided for this image]
+
+Modelo con el segundo conjunto de variables seleccionadas.
+
+In [147]:
+
+    X_fselec_Pservicios2.columns
+
+Out[147]:
+
+    Index(['Valor del Contrato', 'Dias Inicio-Firma Contrato',
+           'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+           'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito',
+           'Sector_Cultura'],
+          dtype='object')
+
+In [151]:
+
+    forest2, X_test2, y_test2, y_pred_forest2, scaler2, X_train2, y_train2 = random_forest(X_fselec_Pservicios2, y_prestacion_AV, get_train=True)
+
+    plot_CM(y_test2, y_pred_forest2)
+    plot_ROC(forest2, X_test2, y_test2, scaler2, 
+            model_name='Bosque aleatorio 2da selección de variables')
+
+    Accuracy del test: 0.8829
+    La sensitividad(recall) del test es: 0.8615
+    La precisión del test es: 0.9038
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3517   369
+  Sí            557    3465
+
+    Model: ROC AUC = 0.948
+
+[No description has been provided for this image]
+
+PDP modelo prestación de servisio PS
+
+In [149]:
+
+    forest_importances = pd.Series(forest2.feature_importances_,
+                                    index=X_fselec_Pservicios2.columns)
+    forest_importances.sort_values(ascending=False)
+
+Out[149]:
+
+    Dias Fin-Inicio Ejecucion      0.231527
+    Dias Fin-Inicio Contrato       0.196464
+    Dias Proveedor Inscrito        0.177657
+    Valor del Contrato             0.142131
+    Dias Inicio-Firma Ejecucion    0.110549
+    Dias Inicio-Firma Contrato     0.085054
+    Sector_Cultura                 0.056618
+    dtype: float64
+
+In [153]:
+
+    %%time
+    X_train_sc = pd.DataFrame(scaler2.transform(X_train2), columns=X_train2.columns)
+    variables = list(X_train2.columns)
+    eng_vars = ['Contract value', 'Sign-start contract days', 'Start-end contract days',
+                'Sign-start execution days', 'Start-end execution days',
+                'Days provider registered', 'Sector (Culture)']
+    eng_vars = dict(zip(variables, eng_vars))
+
+    plt.figure(figsize=(16, 8))
+    plt.subplots_adjust(hspace=0.3)
+    for n, var in enumerate(variables):
+        ax = plt.subplot(2, 4, n+1)
+        plot_partial_dependence(forest2, 
+                                X_train_sc,
+                                [var],
+                                ax=ax, line_kw={"color": "#2351a2", "linewidth":3})
+        plt.xlabel(f'{eng_vars[var]}', fontsize=14)
+        plt.ylabel('Partial dependence', fontsize=12)
+
+    Wall time: 8min
+
+[No description has been provided for this image]
+
+PDP con marcadores
+
+In [164]:
+
+    # Encontrar umbrales para agregar al PDP
+
+    # Valores de interés a desescalar basado en análisis de figuras previas
+    valores_interes = {'Valor del Contrato': [-0.17, -0.17],
+                        'Dias Inicio-Firma Contrato': [-0.32, -0.32],
+                        'Dias Fin-Inicio Contrato': [-0.6, 0.32],
+                        'Dias Inicio-Firma Ejecucion': [0.07, 0.45],
+                        'Dias Fin-Inicio Ejecucion':[0.25, 1.1],
+                        'Dias Proveedor Inscrito': [-0.6, -0.6],
+                        'Sector_Cultura': [X_train_sc['Sector_Cultura'].min(), X_train_sc['Sector_Cultura'].max()]
+                    }
+    valores_interes = pd.DataFrame(valores_interes)
+    valores_interes_origi = pd.DataFrame(scaler2.inverse_transform(valores_interes), columns=valores_interes.columns)
+    valores_interes_origi = valores_interes_origi.astype(int).applymap(lambda x : "{:,}".format(x)).to_dict(orient='list')
+
+    # Unidades
+    line_unit = dict(zip(X_train_sc.columns, ['COP']+ ['Days']*5+['']))
+
+    bin_vars = ['Sector_Cultura']
+
+In [165]:
+
+    %%time
+    # Listado de variables de anterior visualizacion
+    for n, var in enumerate(variables):
+        plt.figure()
+        plot_partial_dependence(forest2, 
+                                X_train_sc,
+                                [var], 
+                                line_kw={"color": "#2351a2", "linewidth":3})
+        plt.xlabel(f'{eng_vars[var]}', fontsize=14)
+        plt.ylabel('Partial dependence', fontsize=14)
+
+        # Add vertical lines
+        x_lines = list(valores_interes[var].unique())
+        if var in bin_vars:
+            line_values = ['No', 'Yes']
+        else:
+            line_values = valores_interes_origi[var]
+        for i in range(len(x_lines)):
+            plt.axvline(x=x_lines[i], color='r', linestyle='--')
+            plt.text(x_lines[i], plt.ylim()[1]*1.001, 
+                f'{line_values[i]} {line_unit[var]}',
+                color='r', fontsize=14)
+
+        # Save subplots
+        dir_name = eng_vars[var].replace('/', '_')
+        plt.savefig(f'created_data/figures/PDP_RF_AdValor_PS/PDP_RF_AdValor_PS_{dir_name}.jpeg')
+        plt.show()
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    Wall time: 7min 11s
+
+Guardar variables para comparaciones posteriores
+
+rf: Random forest, PS: Prestación de servicios, TV: Todas las Variables
+
+In [105]:
+
+    rf_PS_TV = forest2
+    X_test_PS_TV, y_test_PS_TV = X_test2, y_test2
+    y_pred_PS_TV = y_pred_forest2
+    scaler_PS_TV = scaler2
+
+In [106]:
+
+    #Guardar modelo
+    print('Variables del modelos:',X_fselec_Pservicios2.columns)
+    filename = 'created_data/trained_models/model_secopII_AdValor_TipoContratoPreServicios_rf.pkl'
+    joblib.dump(forest2, filename)
+
+    filename_scaler = 'created_data/trained_models/scaler_secopII_AdValor_TipoContratoPreServicios_rf.pkl'
+    joblib.dump(scaler2, filename_scaler)
+
+    Variables del modelos: Index(['Valor del Contrato', 'Dias Inicio-Firma Contrato',
+           'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+           'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito',
+           'Sector_Cultura'],
+          dtype='object')
+
+Out[106]:
+
+    ['CreatedData/trained_models/scaler_secopII_AdValor_TipoContratoPreServicios_rf.pkl']
+
+Excluir variables de ejecución.¶
+
+Y tiempos pactados en el contrato
+
+In [107]:
+
+    X_prestacion = X_prestacion.drop(columns=vars_ejecucion)
+
+Selección de variables
+
+In [108]:
+
+    X_fselec_Pservicios = feature_selection(X_prestacion, y_prestacion_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible', 'Sector_Cultura', 'Sector_No aplica/No pertenece', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Sector_Transporte', 'Sector_Vivienda, Ciudad y Territorio', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación directa', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'Justificacion Modalidad de Contratacion_ServiciosProfesionales', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Mes Firma Contrato_Abr', 'Mes Firma Contrato_Ene', 'Mes Firma Contrato_Feb', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Mes de Publicacion del Proceso_Abr', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Mar', 'Codigo Segmento Categoria Principal_85000000']
+
+In [109]:
+
+    X_fselec_Pservicios2 = feature_selection(X_fselec_Pservicios, y_prestacion_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Proveedor Inscrito', 'Sector_Cultura']
+
+Bosque aleatorio
+
+In [110]:
+
+    #Primera selección de variables
+    forest, X_test, y_test, y_pred_forest, scaler = random_forest(X_fselec_Pservicios, y_prestacion_AV)
+
+    plot_CM(y_test, y_pred_forest)
+    plot_ROC(forest, X_test, y_test, scaler, 
+             model_name='Bosque aleatorio 1ra selección de variables')
+
+    Accuracy del test: 0.8238
+    La sensitividad(recall) del test es: 0.8294
+    La precisión del test es: 0.8251
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3179   707
+  Sí            686    3336
+
+    Model: ROC AUC = 0.906
+
+[No description has been provided for this image]
+
+In [111]:
+
+    #Segunda selección de variables
+    forest2, X_test2, y_test2, y_pred_forest2, scaler2 = random_forest(X_fselec_Pservicios2, y_prestacion_AV)
+
+    plot_CM(y_test2, y_pred_forest2)
+    plot_ROC(forest2, X_test2, y_test2, scaler2, 
+             model_name='Bosque aleatorio 2da selección de variables')
+
+    Accuracy del test: 0.7073
+    La sensitividad(recall) del test es: 0.7277
+    La precisión del test es: 0.7058
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            2666   1220
+  Sí            1095   2927
+
+    Model: ROC AUC = 0.794
+
+[No description has been provided for this image]
+
+Guardar modelos
+
+In [112]:
+
+    #Guardar modelo
+    print('Variables del modelos:',X_fselec_Pservicios2.columns)
+    filename = 'created_data/trained_models/modelos_preejecucion/model_preejec_secopII_AdValor_TipoContratoPreServicios_rf.pkl'
+    joblib.dump(forest2, filename)
+
+    filename_scaler = 'created_data/trained_models/modelos_preejecucion/scaler_preejec_secopII_AdValor_TipoContratoPreServicios_rf.pkl'
+    joblib.dump(scaler2, filename_scaler)
+
+    Variables del modelos: Index(['Valor del Contrato', 'Dias Proveedor Inscrito', 'Sector_Cultura'], dtype='object')
+
+Out[112]:
+
+    ['CreatedData/trained_models/modelos_preejecucion/scaler_preejec_secopII_AdValor_TipoContratoPreServicios_rf.pkl']
+
+In [113]:
+
+    rf_PS_TV
+    X_test_PS_TV, y_test_PS_TV
+    y_pred_PS_TV
+    scaler_PS_TV
+
+Out[113]:
+
+    StandardScaler()
+
+Modelos para contratos diferentes a prestación de servicios¶
+
+Debido al bajo número de contratos diferentes a prestación de servicios
+no es idoneo balancear los datos por medio de downsampling.
+
+In [166]:
+
+    df_downsampled_AV['Tipo de Contrato'].value_counts()
+
+Out[166]:
+
+    Prestación de servicios       26358
+    Decreto 092 de 2017             898
+    Otro                            414
+    Suministros                     325
+    Compraventa                     285
+    Interventoría                   144
+    Obra                            124
+    Consultoría                      72
+    Seguros                          64
+    Arrendamiento de inmuebles       56
+    Name: Tipo de Contrato, dtype: int64
+
+In [167]:
+
+    df_NOprestacion_comp = df_downsampled_AV[df_downsampled_AV["Tipo de Contrato"] != "Prestación de servicios"]
+    y_NOprestacion_AV = df_NOprestacion_comp["Tuvo_adiciones_valor"]
+
+    X_NOprestacion = df_NOprestacion_comp.drop(columns = vars_a_excluir+["Tipo de Contrato"]).copy()
+    X_NOprestacion = pd.get_dummies(data = X_NOprestacion, columns = vars_categoricas)
+
+In [168]:
+
+    X_NOprestacion.shape
+
+Out[168]:
+
+    (2382, 188)
+
+In [169]:
+
+    y_NOprestacion_AV.value_counts(normalize=True)
+
+Out[169]:
+
+    0    0.594878
+    1    0.405122
+    Name: Tuvo_adiciones_valor, dtype: float64
+
+Nuevo balanceo por downsampling
+
+In [170]:
+
+    df_NOprest_downsampled_AV = balance(df_NOprestacion_comp, "Tuvo_adiciones_valor")
+    y_NOprest_downsampled_AV = df_NOprest_downsampled_AV["Tuvo_adiciones_valor"]
+
+    X_NOprest_downsampled_AV = df_NOprest_downsampled_AV.drop(columns = vars_a_excluir+["Tipo de Contrato"]).copy()
+    X_NOprest_downsampled_AV = pd.get_dummies(data = X_NOprest_downsampled_AV, columns = vars_categoricas)
+
+In [171]:
+
+    y_NOprest_downsampled_AV.value_counts()
+
+Out[171]:
+
+    0    965
+    1    965
+    Name: Tuvo_adiciones_valor, dtype: int64
+
+In [172]:
+
+    X_NOprest_downsampled_AV.shape
+
+Out[172]:
+
+    (1930, 186)
+
+Al ser menos observaciones hay registros de variables que se pierden,
+por tanto menos variables dummies.
+
+Selección de variables¶
+
+In [173]:
+
+    X_fselec_NOprestacion = feature_selection(X_NOprestacion, y_NOprestacion_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto', 'Sector_Cultura', 'Sector_Ley de Justicia', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación Directa (con ofertas)', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Decreto 092 de 2017', 'Justificacion Modalidad de Contratacion_No existe pluralidad de oferentes en el mercado', 'TipoDocProveedor_Cédula de Ciudadanía', 'TipoDocProveedor_NIT', 'Es Pyme_No', 'Es Pyme_Si', 'Liquidación_No', 'Liquidación_Si', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Tipo Empresa Proveedor_Persona Natural colombiana', 'Mes Firma Contrato_Dic', 'Mes Firma Contrato_Mar', 'Mes Firma Contrato_Nov', 'Mes Firma Contrato_Sep', 'Grupo categoria principal_Productos manufacturados', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Tipo Empresa Proveedor Resumido_Persona Natural colombiana', 'Mes de Publicacion del Proceso_Ago', 'Mes de Publicacion del Proceso_Ene', 'Codigo Segmento Categoria Principal_80000000', 'Codigo Segmento Categoria Principal_85000000']
+
+In [174]:
+
+    X_fselec_NOprestacion2 = feature_selection(X_fselec_NOprestacion, y_NOprestacion_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto', 'Grupo categoria principal_Servicios administrativos']
+
+In [175]:
+
+    X_fselec_NOprestacion2.shape
+
+Out[175]:
+
+    (2382, 9)
+
+Selección de variables con nuevo downsampling.
+
+En adelante en los nombres de variables downsampled = downs
+
+In [176]:
+
+    X_fselec_NOprest_downs = feature_selection(X_NOprest_downsampled_AV, y_NOprest_downsampled_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Numero_de_procesos_reportados', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Entidad Centralizada_Centralizada', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Decreto 092 de 2017', 'Justificacion Modalidad de Contratacion_No existe pluralidad de oferentes en el mercado', 'TipoDocProveedor_Cédula de Ciudadanía', 'TipoDocProveedor_NIT', 'Es Pyme_No', 'Es Pyme_Si', 'Liquidación_No', 'Liquidación_Si', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Tipo Empresa Proveedor_Persona Natural colombiana', 'Mes Firma Contrato_Dic', 'Mes Firma Contrato_Mar', 'Mes Firma Contrato_Sep', 'Grupo categoria principal_Productos manufacturados', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Tipo Empresa Proveedor Resumido_Persona Natural colombiana', 'Mes de Publicacion del Proceso_Ago', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Nov', 'Mes de Publicacion del Proceso_Sep', 'Codigo Segmento Categoria Principal_80000000', 'Codigo Segmento Categoria Principal_85000000']
+
+In [177]:
+
+    X_fselec_NOprest_downs2 = feature_selection(X_fselec_NOprest_downs, y_NOprest_downsampled_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Grupo categoria principal_Servicios administrativos', 'Codigo Segmento Categoria Principal_80000000', 'Codigo Segmento Categoria Principal_85000000']
+
+Regresión logística¶
+
+Regresión logística con todas las variables de la muestra.
+
+In [127]:
+
+    regLog_noserv, X_test_noserv, y_test_noserv, y_pred_noserv, scaler_noserv = reg_log(X_NOprestacion, y_NOprestacion_AV)
+
+    plot_CM(y_test_noserv, y_pred_noserv)
+    plot_ROC(regLog_noserv, X_test_noserv, y_test_noserv, scaler_noserv)
+
+    Accuracy para Regresión Logística con validación cruzada: 0.7223 
+    El accuracy del test es: 0.7245
+    La sensitividad(recall) del test es: 0.7034
+    La precisión del test es: 0.6476
+    BIC: 1403.02
+    AIC: 378.87
+
+  Predicción    No    Sí
+  ------------- ----- -----
+  Observación         
+  No            314   111
+  Sí            86    204
+
+    Model: ROC AUC = 0.802
+
+[No description has been provided for this image]
+
+70,34% de contratos con adiciones bien clasificados
+
+Modelo con la segunda selección de variables
+
+A continuación de muestra que respecto al anterior mantiene el accuracy
+pero cae notoriamente la sensitividad.
+
+In [128]:
+
+    regLog_noserv2, X_test_noserv2, y_test_noserv2, y_pred_noserv2, scaler_noserv2 = reg_log(X_fselec_NOprestacion2, 
+                                                                                             y_NOprestacion_AV)
+
+    plot_CM(y_test_noserv2, y_pred_noserv2)
+    plot_ROC(regLog_noserv2, X_test_noserv2, y_test_noserv2, scaler_noserv2)
+
+    Accuracy para Regresión Logística con validación cruzada: 0.7049 
+    El accuracy del test es: 0.7259
+    La sensitividad(recall) del test es: 0.6552
+    La precisión del test es: 0.6643
+    BIC: 75.34
+    AIC: 21.16
+
+  Predicción    No    Sí
+  ------------- ----- -----
+  Observación         
+  No            329   96
+  Sí            100   190
+
+    Model: ROC AUC = 0.768
+
+[No description has been provided for this image]
+
+Bosques aleatorios¶
+
+Usando solo las variables significativas de la segunda selección de
+variables se encuentra que todavía hay margen de mejora.
+
+In [179]:
+
+    forest_noserv, X_test_noserv, y_test_noserv, y_pred_forest_noserv, scaler_noserv, X_train_noserv, y_train_noserv = random_forest(X_fselec_NOprestacion2, 
+                                                                                                     y_NOprestacion_AV, get_train=True)
+
+    plot_CM(y_test_noserv, y_pred_forest_noserv)
+    plot_ROC(forest_noserv, X_test_noserv, y_test_noserv, scaler_noserv)
+
+    Accuracy del test: 0.7916
+    La sensitividad(recall) del test es: 0.7034
+    La precisión del test es: 0.7640
+
+  Predicción    No    Sí
+  ------------- ----- -----
+  Observación         
+  No            362   63
+  Sí            86    204
+
+    Model: ROC AUC = 0.872
+
+[No description has been provided for this image]
+
+PDP para NO prestación de servicios
+
+In [180]:
+
+    forest_importances = pd.Series(forest_noserv.feature_importances_,
+                                    index=X_fselec_NOprestacion2.columns)
+    forest_importances.sort_values(ascending=False)
+
+Out[180]:
+
+    Dias Fin-Inicio Contrato                               0.194439
+    Dias Fin-Inicio Ejecucion                              0.189878
+    Valor del Contrato                                     0.139488
+    Dias Proveedor Inscrito                                0.109281
+    Dias Inicio-Firma Ejecucion                            0.088728
+    Proveedores Invitados                                  0.088557
+    Dias Inicio-Firma Contrato                             0.079777
+    Grupo categoria principal_Servicios administrativos    0.068583
+    Dias Proceso Contratacion Abierto                      0.041270
+    dtype: float64
+
+In [183]:
+
+    %%time
+    X_train_sc = pd.DataFrame(scaler_noserv.transform(X_train_noserv), columns=X_train_noserv.columns)
+    variables = list(X_train_noserv.columns)
+    eng_vars = ['Contract value', ' Number of invited suppliers',
+                'Sign-start contract days', 'Start-end contract days',
+                'Sign-start execution days', 'Start-end execution days',
+                'Days provider registered', 'Advertisement period',
+                'Product/Service category (Administrative services)', 
+                ]
+    eng_vars = dict(zip(variables, eng_vars))
+
+    plt.figure(figsize=(16, 12))
+    plt.subplots_adjust(hspace=0.3)
+    for n, var in enumerate(variables):
+        ax = plt.subplot(3, 3, n+1)
+        plot_partial_dependence(forest_noserv, 
+                                X_train_sc,
+                                [var],
+                                ax=ax, line_kw={"color": "#2351a2", "linewidth":3})
+        plt.xlabel(f'{eng_vars[var]}', fontsize=14)
+        plt.ylabel('Partial dependence', fontsize=12)
+
+    Wall time: 1min 29s
+
+[No description has been provided for this image]
+
+Marcadores en PDP
+
+In [196]:
+
+    # Encontrar umbrales para agregar al PDP
+
+    # Valores de interés a desescalar basado en análisis de figuras previas
+    valores_interes = {'Valor del Contrato': [-0.14, -0.14],
+                        'Proveedores Invitados': [-0.4, 0],
+                        'Dias Inicio-Firma Contrato': [-0.5, -0.5],
+                        'Dias Fin-Inicio Contrato': [-0.5, 0.9],
+                        'Dias Inicio-Firma Ejecucion': [-0.02, 0.65],
+                        'Dias Fin-Inicio Ejecucion':[-0.5, -0.5],
+                        'Dias Proveedor Inscrito': [-1.1, 0.9],
+                        'Dias Proceso Contratacion Abierto': [4, 4],
+                        'Grupo categoria principal_Servicios administrativos': [X_train_sc['Grupo categoria principal_Servicios administrativos'].min(), X_train_sc['Grupo categoria principal_Servicios administrativos'].max()]
+                    }
+    valores_interes = pd.DataFrame(valores_interes)
+    valores_interes_origi = pd.DataFrame(scaler_noserv.inverse_transform(valores_interes), columns=valores_interes.columns)
+    valores_interes_origi = valores_interes_origi.astype(int).applymap(lambda x : "{:,}".format(x)).to_dict(orient='list')
+
+    # Unidades
+    line_unit = dict(zip(X_train_sc.columns, ['COP', '']+ ['Days']*6+['']))
+
+    bin_vars = ['Grupo categoria principal_Servicios administrativos']
+
+In [197]:
+
+    %%time
+    # Listado de variables de anterior visualizacion
+    for n, var in enumerate(variables):
+        plt.figure()
+        plot_partial_dependence(forest_noserv, 
+                                X_train_sc,
+                                [var], 
+                                line_kw={"color": "#2351a2", "linewidth":3})
+        plt.xlabel(f'{eng_vars[var]}', fontsize=14)
+        plt.ylabel('Partial dependence', fontsize=14)
+
+        # Add vertical lines
+        x_lines = list(valores_interes[var].unique())
+        if var in bin_vars:
+            line_values = ['No', 'Yes']
+        else:
+            line_values = valores_interes_origi[var]
+        for i in range(len(x_lines)):
+            plt.axvline(x=x_lines[i], color='r', linestyle='--')
+            plt.text(x_lines[i], plt.ylim()[1]*1.001, 
+                f'{line_values[i]} {line_unit[var]}',
+                color='r', fontsize=14)
+
+        # Save subplots
+        dir_name = eng_vars[var].replace('/', '_')
+        plt.savefig(f'created_data/figures/PDP_RF_AdValor_NoPS/PDP_RF_AdValor_NoPS_{dir_name}.jpeg')
+        plt.show()
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    <Figure size 640x480 with 0 Axes>
+
+[No description has been provided for this image]
+
+    Wall time: 1min 30s
+
+Guardar variables para comparaciones posteriores
+
+rf: Random forest, NoPS: Diferente de Prestación de servicios, TV: Todas
+las Variables
+
+In [130]:
+
+    rf_NoPS_TV = forest_noserv
+    X_test_NoPS_TV, y_test_NoPS_TV = X_test_noserv, y_test_noserv
+    y_pred_NoPS_TV = y_pred_forest_noserv
+    scaler_NoPS_TV = scaler_noserv
+
+In [131]:
+
+    #Guardar modelo
+    print('Variables del modelo:',X_fselec_NOprestacion2.columns)
+    filename = 'created_data/trained_models/model_secopII_AdValor_TipoContratoNOPreServicios_rf.pkl'
+    joblib.dump(forest_noserv, filename)
+
+    filename_scaler = 'created_data/trained_models/scaler_secopII_AdValor_TipoContratoNOPreServicios_rf.pkl'
+    joblib.dump(scaler_noserv, filename_scaler)
+
+    Variables del modelo: Index(['Valor del Contrato', 'Proveedores Invitados',
+           'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato',
+           'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion',
+           'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto',
+           'Grupo categoria principal_Servicios administrativos'],
+          dtype='object')
+
+Out[131]:
+
+    ['CreatedData/trained_models/scaler_secopII_AdValor_TipoContratoNOPreServicios_rf.pkl']
+
+Bosque aleatorio vs regresión logística con segunda selección de
+variables.
+
+In [132]:
+
+    # Crear predicciones
+    ns_probs = [0 for _ in range(len(y_test_noserv))]
+    lr_probs = regLog_noserv2.predict_proba(scaler_noserv.transform(X_test_noserv))[:, 1]
+    rf_probs = forest_noserv.predict_proba(scaler_noserv.transform(X_test_noserv))[:, 1]
+
+    lr_auc = roc_auc_score(y_test_noserv, lr_probs)
+    rf_auc = roc_auc_score(y_test_noserv, rf_probs)
+
+    ns_fpr, ns_tpr, _ = roc_curve(y_test_noserv, ns_probs)
+    lr_fpr, lr_tpr, _ = roc_curve(y_test_noserv, lr_probs)
+    rf_fpr, rf_tpr, _ = roc_curve(y_test_noserv, rf_probs)
+
+    #plt.figure(figsize=(10,8))
+    plt.plot(ns_fpr, ns_tpr, linestyle = '--') 
+    plt.plot(lr_fpr, lr_tpr, marker = '.', label = 'Regresión logística (AUC = {:1.3F})'.format(lr_auc))
+    plt.plot(rf_fpr, rf_tpr, marker = '.', label = 'Bosque aleatorio (AUC = {:1.3F})'.format(rf_auc))
+    plt.xlim([-0.001,1.001])
+    plt.ylim([-0.001,1.001])
+    plt.xlabel('Tasa de falsos positivos', fontsize=12)
+    plt.ylabel('Tasa de verdaderos positivos', fontsize=12)
+    plt.legend(loc="lower right")
+    plt.suptitle('Curva ROC', fontsize=14)
+    plt.title('Adiciones en valor en contratos diferentes a prestación de servicios')
+
+    plt.savefig('created_data/figures/ROC_AValor_SinPrestacionServicios.png')
+
+[No description has been provided for this image]
+
+Bosque aleatorio con segunda selección de variables y nuevo balanceo
+
+In [133]:
+
+    [fo_noserv_downs, X_test_noserv_downs, y_test_noserv_downs,
+            y_pred_fo_noserv_downs, scaler_noserv_downs] = random_forest(X_fselec_NOprest_downs2, 
+                                                                        y_NOprest_downsampled_AV)
+
+    plot_CM(y_test_noserv_downs, y_pred_fo_noserv_downs)
+    plot_ROC(fo_noserv_downs, X_test_noserv_downs, y_test_noserv_downs, scaler_noserv_downs)
+
+    Accuracy del test: 0.7876
+    La sensitividad(recall) del test es: 0.7405
+    La precisión del test es: 0.8168
+
+  Predicción    No    Sí
+  ------------- ----- -----
+  Observación         
+  No            242   48
+  Sí            75    214
+
+    Model: ROC AUC = 0.883
+
+[No description has been provided for this image]
+
+Excluir variables de ejecución¶
+
+In [134]:
+
+    X_NOprestacion = X_NOprestacion.drop(columns=vars_ejecucion)
+
+Selección de variables
+
+In [135]:
+
+    X_fselec_NOprestacion = feature_selection(X_NOprestacion, y_NOprestacion_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Numero_de_procesos_reportados', 'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto', 'Sector_Cultura', 'Sector_Ley de Justicia', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación Directa (con ofertas)', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Decreto 092 de 2017', 'Justificacion Modalidad de Contratacion_No existe pluralidad de oferentes en el mercado', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'TipoDocProveedor_Cédula de Ciudadanía', 'TipoDocProveedor_NIT', 'Es Pyme_No', 'Es Pyme_Si', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Tipo Empresa Proveedor_Persona Natural colombiana', 'Mes Firma Contrato_Ago', 'Mes Firma Contrato_Dic', 'Mes Firma Contrato_Mar', 'Mes Firma Contrato_Nov', 'Mes Firma Contrato_Oct', 'Mes Firma Contrato_Sep', 'Grupo categoria principal_Productos manufacturados', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Tipo Empresa Proveedor Resumido_Persona Natural colombiana', 'Tipo Empresa Proveedor Resumido_Sociedad por acciones simplificada', 'Mes de Publicacion del Proceso_Ago', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Jul', 'Mes de Publicacion del Proceso_Nov', 'Mes de Publicacion del Proceso_Oct', 'Mes de Publicacion del Proceso_Sep', 'Codigo Segmento Categoria Principal_85000000']
+
+In [136]:
+
+    X_fselec_NOprestacion2 = feature_selection(X_fselec_NOprestacion, y_NOprestacion_AV)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto', 'Grupo categoria principal_Servicios administrativos', 'Codigo Segmento Categoria Principal_85000000']
+
+Bosque aleatorio
+
+In [137]:
+
+    forest_noserv, X_test_noserv, y_test_noserv, y_pred_forest_noserv, scaler_noserv = random_forest(X_fselec_NOprestacion2, 
+                                                                                                     y_NOprestacion_AV)
+
+    plot_CM(y_test_noserv, y_pred_forest_noserv)
+    plot_ROC(forest_noserv, X_test_noserv, y_test_noserv, scaler_noserv)
+
+    Accuracy del test: 0.7049
+    La sensitividad(recall) del test es: 0.6345
+    La precisión del test es: 0.6367
+
+  Predicción    No    Sí
+  ------------- ----- -----
+  Observación         
+  No            320   105
+  Sí            106   184
+
+    Model: ROC AUC = 0.793
+
+[No description has been provided for this image]
+
+Guardar modelo
+
+In [138]:
+
+    #Guardar modelo
+    print('Variables del modelo:',X_fselec_NOprestacion2.columns)
+    filename = 'created_data/trained_models/modelos_preejecucion/model_preejec_secopII_AdValor_TipoContratoNOPreServicios_rf.pkl'
+    joblib.dump(forest_noserv, filename)
+
+    filename_scaler = 'created_data/trained_models/modelos_preejecucion/scaler_preejec_secopII_AdValor_TipoContratoNOPreServicios_rf.pkl'
+    joblib.dump(scaler_noserv, filename_scaler)
+
+    Variables del modelo: Index(['Valor del Contrato', 'Proveedores Invitados',
+           'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto',
+           'Grupo categoria principal_Servicios administrativos',
+           'Codigo Segmento Categoria Principal_85000000'],
+          dtype='object')
+
+Out[138]:
+
+    ['CreatedData/trained_models/modelos_preejecucion/scaler_preejec_secopII_AdValor_TipoContratoNOPreServicios_rf.pkl']
+
+Comparación modelos todas observaciones vs Prestación de servicios vs No Prestación de servicios¶
+
+In [139]:
+
+    rf_NoPS_TV
+    X_test_NoPS_TV, y_test_NoPS_TV
+    y_pred_NoPS_TV
+    scaler_NoPS_TV
+
+Out[139]:
+
+    StandardScaler()
+
+In [140]:
+
+    plt.figure(figsize=(10,4))
+
+    # Prestación de servicios
+    plt.subplot(121)
+    cm = confusion_matrix(y_test_PS_TV, y_pred_PS_TV)
+    cm_df = pd.DataFrame(cm, index = ['No','Yes'], columns = ['No','Yes'])
+
+    sns.heatmap( cm_df, 
+                annot=True, fmt='2.1f', cmap='ocean_r',annot_kws={'fontsize':16},
+                cbar=False, square=True, linecolor='black', linewidths=0.2 )
+    plt.title('Professional services')
+    plt.xlabel('Predicted', fontsize=13)
+    plt.ylabel('Observed', fontsize=13)
+
+    # ¡NO! Prestación de servicios
+    plt.subplot(122)
+    cm = confusion_matrix(y_test_NoPS_TV, y_pred_NoPS_TV)
+    cm_df = pd.DataFrame(cm, index = ['No','Yes'], columns = ['No','Yes'])
+
+    sns.heatmap( cm_df, 
+                annot=True, fmt='2.1f', cmap='ocean_r',annot_kws={'fontsize':16},
+                cbar=False, square=True, linecolor='black', linewidths=0.2 )
+    plt.title('Other contracts')
+    plt.xlabel('Predicted', fontsize=13)
+    plt.ylabel('Observed', fontsize=13)
+
+    plt.savefig('created_data/figures/MatConf_AValor_PS_vs_NoPS.svg')
+
+[No description has been provided for this image]
+
+In [141]:
+
+    # Crear predicciones
+    ns_probs = [0 for _ in range(len(y_test_TO_TV))]
+    TO_probs = rf_TO_TV.predict_proba(scaler_TO_TV.transform(X_test_TO_TV))[:, 1]
+    PS_probs = rf_PS_TV.predict_proba(scaler_PS_TV.transform(X_test_PS_TV))[:, 1]
+    NoPS_probs = rf_NoPS_TV.predict_proba(scaler_NoPS_TV.transform(X_test_NoPS_TV))[:, 1]
+
+    TO_auc = roc_auc_score(y_test_TO_TV, TO_probs)
+    PS_auc = roc_auc_score(y_test_PS_TV, PS_probs)
+    NoPS_auc = roc_auc_score(y_test_NoPS_TV, NoPS_probs)
+
+    ns_fpr, ns_tpr, _ = roc_curve(y_test_TO_TV, ns_probs)
+    TO_fpr, TO_tpr, _ = roc_curve(y_test_TO_TV, TO_probs)
+    PS_fpr, PS_tpr, _ = roc_curve(y_test_PS_TV, PS_probs)
+    NoPS_fpr, NoPS_tpr, _ = roc_curve(y_test_NoPS_TV, NoPS_probs)
+
+    #plt.figure(figsize=(10,8))
+    plt.plot(ns_fpr, ns_tpr, linestyle = '--') 
+    plt.plot(TO_fpr, TO_tpr, marker = '.', label = 'All observations (AUC = {:1.3F})'.format(TO_auc))
+    plt.plot(PS_fpr, PS_tpr, marker = '.', label = 'Professional services (AUC = {:1.3F})'.format(PS_auc))
+    plt.plot(NoPS_fpr, NoPS_tpr, marker = '.', label = 'Other contracts (AUC = {:1.3F})'.format(NoPS_auc))
+    plt.xlim([-0.001,1.001])
+    plt.ylim([-0.001,1.001])
+    plt.xlabel('False positive rate', fontsize=12)
+    plt.ylabel('True positive rate', fontsize=12)
+    plt.legend(loc="lower right")
+    plt.suptitle('ROC curve', fontsize=14)
+    plt.title('Additions in value')
+
+    plt.savefig('created_data/figures/ROC_AValor_PS_vs_NoPS_VS_All.svg')
+
+[No description has been provided for this image]
+
+Tuvo_adiciones_tiempo como variable respuesta¶
+
+In [311]:
+
+    #El termino "_AT" al final se refiere a Adiciones en Tiempo
+    df_downsampled_AT = balance(base, "Tuvo_adiciones_tiempo")
+
+    X_down = pd.get_dummies(data = df_downsampled_AT, columns =  vars_categoricas+["Tipo de Contrato"])
+    X_down = X_down.drop(columns = vars_a_excluir)
+
+    y2_down_AT = df_downsampled_AT["Tuvo_adiciones_tiempo"]
+
+In [312]:
+
+    df_downsampled_AT.shape
+
+Out[312]:
+
+    (31286, 41)
+
+Modelos sin diferenciar tipo de contrato¶
+
+Selección de variables¶
+
+In [313]:
+
+    X_fselec = feature_selection(X_down, y2_down_AT)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible', 'Sector_Cultura', 'Sector_No aplica/No pertenece', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación directa', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Decreto 092 de 2017', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Mes Firma Contrato_Ene', 'Mes Firma Contrato_Feb', 'Mes Firma Contrato_Jul', 'Mes Firma Contrato_Mar', 'Grupo categoria principal_Servicios administrativos', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Mar', 'Codigo Segmento Categoria Principal_70000000', 'Codigo Segmento Categoria Principal_80000000', 'Tipo de Contrato_Decreto 092 de 2017', 'Tipo de Contrato_Prestación de servicios']
+
+In [314]:
+
+    X_fselec2 = feature_selection(X_fselec, y2_down_AT)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito']
+
+Bosque aleatorio¶
+
+Modelo con variables de la primera selección.
+
+In [315]:
+
+    forest, X_test, y_test, y_pred_forest, scaler = random_forest(X_fselec, y2_down_AT)
+    plot_CM(y_test, y_pred_forest)
+    plot_ROC(forest, X_test, y_test, scaler)
+
+    Accuracy del test: 0.9023
+    La sensitividad(recall) del test es: 0.9077
+    La precisión del test es: 0.8980
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            4209   484
+  Sí            433    4260
+
+    Model: ROC AUC = 0.964
+
+[No description has been provided for this image]
+
+Modelo con variables de la segunda selección.
+
+In [316]:
+
+    forest2, X_test2, y_test2, y_pred_forest2, scaler2 = random_forest(X_fselec2, y2_down_AT)
+    plot_CM(y_test2, y_pred_forest2)
+    plot_ROC(forest2, X_test2, y_test2, scaler2)
+
+    Accuracy del test: 0.8593
+    La sensitividad(recall) del test es: 0.8675
+    La precisión del test es: 0.8535
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3994   699
+  Sí            622    4071
+
+    Model: ROC AUC = 0.936
+
+[No description has been provided for this image]
+
+In [317]:
+
+    #Guardar modelo
+    print(joblib.__version__)
+    print('Variables del modelo', X_fselec2.columns)
+    filename = 'created_data/trained_models/model_secopII_AdTiempo_TipoContratoTodos_rf.pkl'
+    joblib.dump(forest2, filename)
+
+    filename_scaler = 'created_data/trained_models/scaler_secopII_AdTiempo_TipoContratoTodos_rf.pkl'
+    joblib.dump(scaler2, filename_scaler)
+
+    1.0.1
+    Variables del modelo Index(['Valor del Contrato', 'Dias Inicio-Firma Contrato',
+           'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+           'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito'],
+          dtype='object')
+
+Out[317]:
+
+    ['created_data/trained_models/scaler_secopII_AdTiempo_TipoContratoTodos_rf.pkl']
+
+Excluir variables de ejecución¶
+
+In [149]:
+
+    X_down = X_down.drop(columns=vars_ejecucion)
+
+Selección de variables
+
+In [150]:
+
+    X_fselec.shape
+
+Out[150]:
+
+    (31286, 30)
+
+In [151]:
+
+    X_fselec = feature_selection(X_down, y2_down_AT)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible', 'Sector_Cultura', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Sector_Vivienda, Ciudad y Territorio', 'Sector_defensa', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Justificacion Modalidad de Contratacion_Decreto 092 de 2017', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'Es Pyme_No', 'Es Pyme_Si', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Mes Firma Contrato_Ene', 'Mes Firma Contrato_Feb', 'Mes Firma Contrato_Mar', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Mar', 'Codigo Segmento Categoria Principal_70000000', 'Codigo Segmento Categoria Principal_85000000', 'Tipo de Contrato_Decreto 092 de 2017', 'Tipo de Contrato_Prestación de servicios']
+
+In [152]:
+
+    X_fselec2 = feature_selection(X_fselec, y2_down_AT)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Proveedor Inscrito', 'Mes Firma Contrato_Feb']
+
+Bosque aleatorio
+
+In [153]:
+
+    forest, X_test, y_test, y_pred_forest, scaler = random_forest(X_fselec, y2_down_AT)
+    plot_CM(y_test, y_pred_forest)
+    plot_ROC(forest, X_test, y_test, scaler)
+
+    Accuracy del test: 0.8035
+    La sensitividad(recall) del test es: 0.8140
+    La precisión del test es: 0.7973
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3722   971
+  Sí            873    3820
+
+    Model: ROC AUC = 0.889
+
+[No description has been provided for this image]
+
+In [154]:
+
+    forest2, X_test2, y_test2, y_pred_forest2, scaler2 = random_forest(X_fselec2, y2_down_AT)
+    plot_CM(y_test2, y_pred_forest2)
+    plot_ROC(forest2, X_test2, y_test2, scaler2)
+
+    Accuracy del test: 0.7004
+    La sensitividad(recall) del test es: 0.7027
+    La precisión del test es: 0.6995
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3276   1417
+  Sí            1395   3298
+
+    Model: ROC AUC = 0.779
+
+[No description has been provided for this image]
+
+Guardar modelo
+
+In [155]:
+
+    #Guardar modelo
+    print('Variables del modelo', X_fselec2.columns)
+    filename = 'created_data/trained_models/modelos_preejecucion/model_preejec_secopII_AdTiempo_TipoContratoTodos_rf.pkl'
+    joblib.dump(forest2, filename)
+
+    filename_scaler = 'created_data/trained_models/modelos_preejecucion/scaler_preejec_secopII_AdTiempo_TipoContratoTodos_rf.pkl'
+    joblib.dump(scaler2, filename_scaler)
+
+    Variables del modelo Index(['Valor del Contrato', 'Dias Proveedor Inscrito',
+           'Mes Firma Contrato_Feb'],
+          dtype='object')
+
+Out[155]:
+
+    ['CreatedData/trained_models/modelos_preejecucion/scaler_preejec_secopII_AdTiempo_TipoContratoTodos_rf.pkl']
+
+Modelos para contratos de prestación de servicios¶
+
+Se filtran las observaciones por la variable Tipo de Contrato
+conservando aquellos del tipo "Prestación de servicios".
+
+In [156]:
+
+    X_prestacion = df_downsampled_AT[df_downsampled_AT["Tipo de Contrato"] == "Prestación de servicios"]
+    y_prestacion_AT = X_prestacion["Tuvo_adiciones_tiempo"]
+
+    X_prestacion = X_prestacion.drop(columns = vars_a_excluir+["Tipo de Contrato"])
+    X_prestacion = pd.get_dummies(data = X_prestacion, columns = vars_categoricas)
+
+Selección de variables¶
+
+In [157]:
+
+    X_fselec_Pservicios = feature_selection(X_prestacion, y_prestacion_AT)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible', 'Sector_Cultura', 'Sector_No aplica/No pertenece', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Mes Firma Contrato_Ene', 'Mes Firma Contrato_Feb', 'Mes Firma Contrato_Mar', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Mar']
+
+In [158]:
+
+    X_fselec_Pservicios2 = feature_selection(X_fselec_Pservicios, y_prestacion_AT)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito']
+
+Bosque aleatorio¶
+
+Modelo con variables de la primera selección.
+
+In [159]:
+
+    forest, X_test, y_test, y_pred_forest, scaler = random_forest(X_fselec_Pservicios, y_prestacion_AT)
+
+    plot_CM(y_test, y_pred_forest)
+    plot_ROC(forest, X_test, y_test, scaler, 
+             model_name='Bosque aleatorio 1ra selección de variables')
+
+    Accuracy del test: 0.9023
+    La sensitividad(recall) del test es: 0.9039
+    La precisión del test es: 0.8964
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3872   426
+  Sí            392    3686
+
+    Model: ROC AUC = 0.964
+
+[No description has been provided for this image]
+
+Modelo con variables de la segunda selección.
+
+In [160]:
+
+    forest2, X_test2, y_test2, y_pred_forest2, scaler2 = random_forest(X_fselec_Pservicios2, y_prestacion_AT)
+
+    plot_CM(y_test2, y_pred_forest2)
+    plot_ROC(forest2, X_test2, y_test2, scaler2, 
+             model_name='Bosque aleatorio 2da selección de variables')
+
+    Accuracy del test: 0.8678
+    La sensitividad(recall) del test es: 0.8673
+    La precisión del test es: 0.8621
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3732   566
+  Sí            541    3537
+
+    Model: ROC AUC = 0.939
+
+[No description has been provided for this image]
+
+In [161]:
+
+    #Guardar modelo
+    print('Variables del modelo:', X_fselec_Pservicios2.columns)
+    filename = 'created_data/trained_models/model_secopII_AdTiempo_TipoContratoPreServicios_rf.pkl'
+    joblib.dump(forest2, filename)
+
+    filename_scaler = 'created_data/trained_models/scaler_secopII_AdTiempo_TipoContratoPreServicios_rf.pkl'
+    joblib.dump(scaler2, filename_scaler)
+
+    Variables del modelo: Index(['Valor del Contrato', 'Dias Inicio-Firma Contrato',
+           'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+           'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito'],
+          dtype='object')
+
+Out[161]:
+
+    ['CreatedData/trained_models/scaler_secopII_AdTiempo_TipoContratoPreServicios_rf.pkl']
+
+Excluir variables de ejecución¶
+
+In [162]:
+
+    X_prestacion = X_prestacion.drop(columns=vars_ejecucion)
+
+Selección de variables
+
+In [163]:
+
+    X_fselec_Pservicios = feature_selection(X_prestacion, y_prestacion_AT)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible', 'Sector_Cultura', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Sector_defensa', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Mes Firma Contrato_Ago', 'Mes Firma Contrato_Ene', 'Mes Firma Contrato_Feb', 'Mes Firma Contrato_Jul', 'Mes Firma Contrato_Mar', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Mes de Publicacion del Proceso_Ago', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Mar', 'Codigo Segmento Categoria Principal_70000000', 'Codigo Segmento Categoria Principal_85000000']
+
+In [164]:
+
+    X_fselec_Pservicios2 = feature_selection(X_fselec_Pservicios, y_prestacion_AT)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Proveedor Inscrito', 'Mes Firma Contrato_Feb']
+
+Bosque aleatorio
+
+In [165]:
+
+    forest, X_test, y_test, y_pred_forest, scaler = random_forest(X_fselec_Pservicios, y_prestacion_AT)
+
+    plot_CM(y_test, y_pred_forest)
+    plot_ROC(forest, X_test, y_test, scaler, 
+             model_name='Bosque aleatorio 1ra selección de variables')
+
+    Accuracy del test: 0.8138
+    La sensitividad(recall) del test es: 0.8212
+    La precisión del test es: 0.8012
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3467   831
+  Sí            729    3349
+
+    Model: ROC AUC = 0.897
+
+[No description has been provided for this image]
+
+In [166]:
+
+    forest2, X_test2, y_test2, y_pred_forest2, scaler2 = random_forest(X_fselec_Pservicios2, y_prestacion_AT)
+
+    plot_CM(y_test2, y_pred_forest2)
+    plot_ROC(forest2, X_test2, y_test2, scaler2, 
+             model_name='Bosque aleatorio 2da selección de variables')
+
+    Accuracy del test: 0.7185
+    La sensitividad(recall) del test es: 0.7217
+    La precisión del test es: 0.7064
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            3075   1223
+  Sí            1135   2943
+
+    Model: ROC AUC = 0.803
+
+[No description has been provided for this image]
+
+Guardar modelo
+
+In [167]:
+
+    #Guardar modelo
+    print('Variables del modelo:', X_fselec_Pservicios2.columns)
+    filename = 'created_data/trained_models/modelos_preejecucion/model_preejec_secopII_AdTiempo_TipoContratoPreServicios_rf.pkl'
+    joblib.dump(forest2, filename)
+
+    filename_scaler = 'created_data/trained_models/modelos_preejecucion/scaler_preejec_secopII_AdTiempo_TipoContratoPreServicios_rf.pkl'
+    joblib.dump(scaler2, filename_scaler)
+
+    Variables del modelo: Index(['Valor del Contrato', 'Dias Proveedor Inscrito',
+           'Mes Firma Contrato_Feb'],
+          dtype='object')
+
+Out[167]:
+
+    ['CreatedData/trained_models/modelos_preejecucion/scaler_preejec_secopII_AdTiempo_TipoContratoPreServicios_rf.pkl']
+
+Modelos para contratos diferentes a prestación de servicios¶
+
+In [168]:
+
+    X_NOprestacion_AT= df_downsampled_AT[df_downsampled_AT["Tipo de Contrato"] != "Prestación de servicios"]
+    y_NOprestacion_AT = X_NOprestacion_AT["Tuvo_adiciones_tiempo"]
+
+    X_NOprestacion_AT = X_NOprestacion_AT.drop(columns = vars_a_excluir+["Tipo de Contrato"])
+    X_NOprestacion_AT = pd.get_dummies(data = X_NOprestacion_AT, columns = vars_categoricas)
+
+In [169]:
+
+    X_NOprestacion_AT.shape
+
+Out[169]:
+
+    (3368, 189)
+
+Selección de variables¶
+
+In [170]:
+
+    X_fselec_NOprestacion_AT = feature_selection(X_NOprestacion_AT, y_NOprestacion_AT)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación Directa (con ofertas)', 'Modalidad de Contratacion_Contratación régimen especial', 'Modalidad de Contratacion_Mínima cuantía', 'Justificacion Modalidad de Contratacion_Decreto 092 de 2017', 'Justificacion Modalidad de Contratacion_Presupuesto inferior al 10% de la menor cuantía', 'TipoDocProveedor_Cédula de Ciudadanía', 'TipoDocProveedor_NIT', 'Es Pyme_No', 'Es Pyme_Si', 'Liquidación_Si', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Tipo Empresa Proveedor_Persona Natural colombiana', 'Mes Firma Contrato_Mar', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Tipo Empresa Proveedor Resumido_Persona Natural colombiana', 'Mes de Publicacion del Proceso_Ago', 'Mes de Publicacion del Proceso_Feb', 'Codigo Segmento Categoria Principal_80000000', 'Codigo Segmento Categoria Principal_85000000']
+
+In [171]:
+
+    X_fselec_NOprestacion_AT2 = feature_selection(X_fselec_NOprestacion_AT, y_NOprestacion_AT)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Justificacion Modalidad de Contratacion_Decreto 092 de 2017']
+
+In [172]:
+
+    X_fselec_NOprestacion_AT2.shape
+
+Out[172]:
+
+    (3368, 8)
+
+Bosque aleatorio¶
+
+Usando solo la segunda selección de variables.
+
+In [173]:
+
+    forest_noserv, X_test_noserv, y_test_noserv, y_pred_forest_noserv, scaler_noserv = random_forest(X_fselec_NOprestacion_AT2, 
+                                                                                                     y_NOprestacion_AT)
+
+    plot_CM(y_test_noserv, y_pred_forest_noserv)
+    plot_ROC(forest_noserv, X_test_noserv, y_test_noserv, scaler_noserv)
+
+    Accuracy del test: 0.8773
+    La sensitividad(recall) del test es: 0.9073
+    La precisión del test es: 0.8928
+
+  Predicción    No    Sí
+  ------------- ----- -----
+  Observación         
+  No            329   67
+  Sí            57    558
+
+    Model: ROC AUC = 0.944
+
+[No description has been provided for this image]
+
+In [174]:
+
+    #Guardar modelo
+    print('Variables del modelo:', X_fselec_NOprestacion_AT2.columns)
+    filename = 'created_data/trained_models/model_secopII_AdTiempo_TipoContratoNOPreServicios_rf.pkl'
+    joblib.dump(forest_noserv, filename)
+
+    filename_scaler = 'created_data/trained_models/scaler_secopII_AdTiempo_TipoContratoNOPreServicios_rf.pkl'
+    joblib.dump(scaler_noserv, filename_scaler)
+
+    Variables del modelo: Index(['Valor del Contrato', 'Proveedores Invitados',
+           'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato',
+           'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion',
+           'Dias Proveedor Inscrito',
+           'Justificacion Modalidad de Contratacion_Decreto 092 de 2017'],
+          dtype='object')
+
+Out[174]:
+
+    ['CreatedData/trained_models/scaler_secopII_AdTiempo_TipoContratoNOPreServicios_rf.pkl']
+
+Excluir variables de ejecucion¶
+
+In [175]:
+
+    X_NOprestacion_AT = X_NOprestacion_AT.drop(columns=vars_ejecucion)
+
+Selección de variables
+
+In [176]:
+
+    X_fselec_NOprestacion_AT = feature_selection(X_NOprestacion_AT, y_NOprestacion_AT)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto', 'Sector_Cultura', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación Directa (con ofertas)', 'Modalidad de Contratacion_Contratación régimen especial', 'Modalidad de Contratacion_Contratación régimen especial (con ofertas)', 'Modalidad de Contratacion_Mínima cuantía', 'Justificacion Modalidad de Contratacion_Decreto 092 de 2017', 'Justificacion Modalidad de Contratacion_Presupuesto inferior al 10% de la menor cuantía', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'TipoDocProveedor_Cédula de Ciudadanía', 'TipoDocProveedor_NIT', 'Es Pyme_No', 'Es Pyme_Si', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Tipo Empresa Proveedor_Persona Natural colombiana', 'Mes Firma Contrato_Ago', 'Mes Firma Contrato_Dic', 'Mes Firma Contrato_Feb', 'Mes Firma Contrato_Jul', 'Mes Firma Contrato_Mar', 'Mes Firma Contrato_Nov', 'Mes Firma Contrato_Oct', 'Mes Firma Contrato_Sep', 'Grupo categoria principal_Productos manufacturados', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Tipo Empresa Proveedor Resumido_Persona Natural colombiana', 'Tipo Empresa Proveedor Resumido_Sociedad por acciones simplificada', 'Mes de Publicacion del Proceso_Ago', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Nov', 'Mes de Publicacion del Proceso_Oct', 'Mes de Publicacion del Proceso_Sep', 'Codigo Segmento Categoria Principal_43000000', 'Codigo Segmento Categoria Principal_85000000']
+
+In [177]:
+
+    X_fselec_NOprestacion_AT2 = feature_selection(X_fselec_NOprestacion_AT, y_NOprestacion_AT)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto', 'Sector_Salud y Protección Social', 'Justificacion Modalidad de Contratacion_Decreto 092 de 2017']
+
+Bosque aleatorio
+
+In [178]:
+
+    forest_noserv, X_test_noserv, y_test_noserv, y_pred_forest_noserv, scaler_noserv = random_forest(X_fselec_NOprestacion_AT2, 
+                                                                                                     y_NOprestacion_AT)
+
+    plot_CM(y_test_noserv, y_pred_forest_noserv)
+    plot_ROC(forest_noserv, X_test_noserv, y_test_noserv, scaler_noserv)
+
+    Accuracy del test: 0.7310
+    La sensitividad(recall) del test es: 0.7967
+    La precisión del test es: 0.7692
+
+  Predicción    No    Sí
+  ------------- ----- -----
+  Observación         
+  No            249   147
+  Sí            125   490
+
+    Model: ROC AUC = 0.802
+
+[No description has been provided for this image]
+
+Guardar modelo
+
+In [179]:
+
+    #Guardar modelo
+    print('Variables del modelo:', X_fselec_NOprestacion_AT2.columns)
+    filename = 'created_data/trained_models/modelos_preejecucion/model_preejec_secopII_AdTiempo_TipoContratoNOPreServicios_rf.pkl'
+    joblib.dump(forest_noserv, filename)
+
+    filename_scaler = 'created_data/trained_models/modelos_preejecucion/scaler_preejec_secopII_AdTiempo_TipoContratoNOPreServicios_rf.pkl'
+    joblib.dump(scaler_noserv, filename_scaler)
+
+    Variables del modelo: Index(['Valor del Contrato', 'Proveedores Invitados',
+           'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto',
+           'Sector_Salud y Protección Social',
+           'Justificacion Modalidad de Contratacion_Decreto 092 de 2017'],
+          dtype='object')
+
+Out[179]:
+
+    ['CreatedData/trained_models/modelos_preejecucion/scaler_preejec_secopII_AdTiempo_TipoContratoNOPreServicios_rf.pkl']
+
+Tuvo_adiciones como variable respuesta¶
+
+In [180]:
+
+    # El patrón "_A" al final indica que corresponde la presencia de Adiciones, de cualquier tipo.
+    df_downsampled_A = balance(base, "Tuvo_adiciones")
+
+    X_down = pd.get_dummies(data = df_downsampled_A, columns = vars_categoricas+["Tipo de Contrato"])
+    X_down = X_down.drop(columns = vars_a_excluir)
+
+    y3_down_A = df_downsampled_A["Tuvo_adiciones"]
+
+In [181]:
+
+    df_downsampled_A.shape
+
+Out[181]:
+
+    (56546, 41)
+
+Modelos sin diferenciar tipo de contrato¶
+
+Selección de variables¶
+
+In [182]:
+
+    X_fselec = feature_selection(X_down, y3_down_A)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible', 'Sector_Cultura', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Sector_Transporte', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación directa', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'Justificacion Modalidad de Contratacion_ServiciosProfesionales', 'Liquidación_Si', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Mes Firma Contrato_Abr', 'Mes Firma Contrato_Ago', 'Mes Firma Contrato_Ene', 'Mes Firma Contrato_Feb', 'Mes Firma Contrato_Mar', 'Grupo categoria principal_Servicios administrativos', 'Mes de Publicacion del Proceso_Abr', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Mar', 'Codigo Segmento Categoria Principal_80000000']
+
+In [183]:
+
+    X_fselec2 = feature_selection(X_fselec, y3_down_A)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito']
+
+Regresión logística¶
+
+In [184]:
+
+    regLog3, X_test3, y_test3, y_pred3, scaler3 = reg_log(X_fselec2, y3_down_A)
+
+    plot_CM(y_test3, y_pred3)
+    plot_ROC(regLog3, X_test3, y_test3, scaler3, model_name='Logistic regression 2nd feature selection')
+
+    Accuracy para Regresión Logística con validación cruzada: 0.6615 
+    El accuracy del test es: 0.6664
+    La sensitividad(recall) del test es: 0.6622
+    La precisión del test es: 0.6678
+    BIC: 75.33
+    AIC: 15.22
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            5688   2794
+  Sí            2865   5617
+
+    Model: ROC AUC = 0.729
+
+[No description has been provided for this image]
+
+Bosque aleatorio¶
+
+Modelo con variables de la primera selección.
+
+In [185]:
+
+    forest, X_test, y_test, y_pred_forest, scaler = random_forest(X_fselec, y3_down_A)
+
+    plot_CM(y_test, y_pred_forest)
+    plot_ROC(forest, X_test, y_test, scaler)
+
+    Accuracy del test: 0.8952
+    La sensitividad(recall) del test es: 0.8833
+    La precisión del test es: 0.9049
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            7695   787
+  Sí            990    7492
+
+    Model: ROC AUC = 0.958
+
+[No description has been provided for this image]
+
+Modelo con variables de la segunda selección.
+
+In [186]:
+
+    forest2, X_test2, y_test2, y_pred_forest2, scaler2, X_train2, y_train2 = random_forest(X_fselec2, y3_down_A, get_train=True)
+
+    plot_CM(y_test2, y_pred_forest2)
+    plot_ROC(forest2, X_test2, y_test2, scaler2)
+
+    Accuracy del test: 0.8588
+    La sensitividad(recall) del test es: 0.8402
+    La precisión del test es: 0.8726
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            7441   1041
+  Sí            1355   7127
+
+    Model: ROC AUC = 0.933
+
+[No description has been provided for this image]
+
+Importancia de variables¶
+
+In [187]:
+
+    forest_importances = pd.Series(forest2.feature_importances_,
+                                   index=X_fselec2.columns)
+    forest_importances.sort_values(ascending=False)
+
+Out[187]:
+
+    Dias Fin-Inicio Ejecucion      0.232274
+    Dias Fin-Inicio Contrato       0.221590
+    Valor del Contrato             0.170384
+    Dias Proveedor Inscrito        0.169661
+    Dias Inicio-Firma Ejecucion    0.123087
+    Dias Inicio-Firma Contrato     0.083004
+    dtype: float64
+
+In [188]:
+
+    %%time
+    X_train_sc = pd.DataFrame(scaler2.transform(X_train2), columns=X_train2.columns)
+    variables = list(X_train2.columns)
+    eng_vars = ['Contract value', 'Sign-start contract days', 'Start-end contract days',
+               'Sign-start execution days', 'Start-end execution days',
+               'Days provider registered']
+    eng_vars = dict(zip(variables, eng_vars))
+
+    plt.figure(figsize=(16, 9))
+    plt.subplots_adjust(hspace=0.3)
+    plt.suptitle('Random Forest Partial Dependencies', fontsize=18, y=0.92)
+    for n, var in enumerate(variables):
+        ax = plt.subplot(2, 3, n + 1)
+        plot_partial_dependence(forest2, X_train_sc, [var], ax=ax)
+        ax.set_xlabel(eng_vars[var], fontsize=12)
+    plt.savefig('created_data/figures/PDP_RF_Adiciones.svg')
+
+    Wall time: 8min 32s
+
+[No description has been provided for this image]
+
+In [189]:
+
+    #Guardar modelo
+    print('Variables del modelo:', X_fselec2.columns)
+    filename = 'created_data/trained_models/model_secopII_Adiciones_TipoContratoTodos_rf.pkl'
+    joblib.dump(forest2, filename)
+
+    filename_scaler = 'created_data/trained_models/scaler_secopII_Adiciones_TipoContratoTodos_rf.pkl'
+    joblib.dump(scaler2, filename_scaler)
+
+    Variables del modelo: Index(['Valor del Contrato', 'Dias Inicio-Firma Contrato',
+           'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+           'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito'],
+          dtype='object')
+
+Out[189]:
+
+    ['CreatedData/trained_models/scaler_secopII_Adiciones_TipoContratoTodos_rf.pkl']
+
+Comparación de modelos¶
+
+Bosque aleatorio vs regresión logística con segunda selección de
+variables, adiciones.
+
+In [190]:
+
+    # Crear predicciones
+    ns_probs = [0 for _ in range(len(y_test2))]
+    lr_probs = regLog3.predict_proba(scaler3.transform(X_test2))[:, 1]
+    rf_probs = forest2.predict_proba(scaler2.transform(X_test2))[:, 1]
+
+    lr_auc = roc_auc_score(y_test2, lr_probs)
+    rf_auc = roc_auc_score(y_test2, rf_probs)
+
+    ns_fpr, ns_tpr, _ = roc_curve(y_test2, ns_probs)
+    lr_fpr, lr_tpr, _ = roc_curve(y_test2, lr_probs)
+    rf_fpr, rf_tpr, _ = roc_curve(y_test2, rf_probs)
+
+    #plt.figure(figsize=(10,8))
+    plt.plot(ns_fpr, ns_tpr, linestyle = '--') 
+    plt.plot(lr_fpr, lr_tpr, marker = '.', label = 'Logistic Regression (AUC = {:1.3F})'.format(lr_auc))
+    plt.plot(rf_fpr, rf_tpr, marker = '.', label = 'Random Forest (AUC = {:1.3F})'.format(rf_auc))
+    plt.xlim([-0.001,1.001])
+    plt.ylim([-0.001,1.001])
+    plt.xlabel('False positive rate', fontsize=12)
+    plt.ylabel('True positive rate', fontsize=12)
+    plt.legend(loc="lower right")
+    plt.suptitle('ROC curve', fontsize=14)
+    plt.title('Any additions')
+
+    # plt.savefig('created_data/figures/ROC_Adiciones_muestracompleta.png')
+    plt.savefig('created_data/figures/ROC_Adiciones_muestracompleta.svg')
+
+[No description has been provided for this image]
+
+In [191]:
+
+    plt.figure(figsize=(10,4))
+
+    plt.subplot(121)
+    cm = confusion_matrix(y_test3, y_pred3)
+    cm_df = pd.DataFrame(cm, index = ['No','Yes'], columns = ['No','Yes'])
+
+    sns.heatmap( cm_df, 
+                annot=True, fmt='2.1f', cmap='ocean_r',annot_kws={'fontsize':16},
+                cbar=False, square=True, linecolor='black', linewidths=0.2 )
+    plt.title('Logistic Regression')
+    plt.xlabel('Predicted', fontsize=13)
+    plt.ylabel('Observed', fontsize=13)
+
+    plt.subplot(122)
+    cm = confusion_matrix(y_test2, y_pred_forest2)
+    cm_df = pd.DataFrame(cm, index = ['No','Yes'], columns = ['No','Yes'])
+
+    sns.heatmap( cm_df, 
+                annot=True, fmt='2.1f', cmap='ocean_r',annot_kws={'fontsize':16},
+                cbar=False, square=True, linecolor='black', linewidths=0.2 )
+    plt.title('Random Forest')
+    plt.xlabel('Predicted', fontsize=13)
+    plt.ylabel('Observed', fontsize=13)
+
+    # plt.savefig('created_data/figures/MatConf_AValor_muestracompleta.png')
+    plt.savefig('created_data/figures/MatConf_Adiciones_muestracompleta.svg')
+
+[No description has been provided for this image]
+
+Excluir variables de ejecución¶
+
+In [192]:
+
+    X_down = X_down.drop(columns=vars_ejecucion)
+
+Seleccionar variables
+
+In [193]:
+
+    X_fselec = feature_selection(X_down, y3_down_A)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible', 'Sector_Cultura', 'Sector_No aplica/No pertenece', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Sector_defensa', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación directa', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'Justificacion Modalidad de Contratacion_ServiciosProfesionales', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Mes Firma Contrato_Abr', 'Mes Firma Contrato_Ago', 'Mes Firma Contrato_Ene', 'Mes Firma Contrato_Feb', 'Mes Firma Contrato_Mar', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Mes de Publicacion del Proceso_Abr', 'Mes de Publicacion del Proceso_Ago', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Mar', 'Codigo Segmento Categoria Principal_85000000']
+
+In [194]:
+
+    X_fselec2 = feature_selection(X_fselec, y3_down_A)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Proveedor Inscrito']
+
+Bosque aleatorio
+
+In [195]:
+
+    forest, X_test, y_test, y_pred_forest, scaler = random_forest(X_fselec, y3_down_A)
+
+    plot_CM(y_test, y_pred_forest)
+    plot_ROC(forest, X_test, y_test, scaler)
+
+    Accuracy del test: 0.7840
+    La sensitividad(recall) del test es: 0.7855
+    La precisión del test es: 0.7831
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            6636   1846
+  Sí            1819   6663
+
+    Model: ROC AUC = 0.871
+
+[No description has been provided for this image]
+
+In [196]:
+
+    forest2, X_test2, y_test2, y_pred_forest2, scaler2 = random_forest(X_fselec2, y3_down_A)
+
+    plot_CM(y_test2, y_pred_forest2)
+    plot_ROC(forest2, X_test2, y_test2, scaler2)
+
+    Accuracy del test: 0.6634
+    La sensitividad(recall) del test es: 0.6679
+    La precisión del test es: 0.6620
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            5589   2893
+  Sí            2817   5665
+
+    Model: ROC AUC = 0.737
+
+[No description has been provided for this image]
+
+Guardar modelo
+
+In [197]:
+
+    #Guardar modelo
+    print('Variables del modelo:', X_fselec2.columns)
+    filename = 'created_data/trained_models/modelos_preejecucion/model_preejec_secopII_Adiciones_TipoContratoTodos_rf.pkl'
+    joblib.dump(forest2, filename)
+
+    filename_scaler = 'created_data/trained_models/modelos_preejecucion/scaler_preejec_secopII_Adiciones_TipoContratoTodos_rf.pkl'
+    joblib.dump(scaler2, filename_scaler)
+
+    Variables del modelo: Index(['Valor del Contrato', 'Dias Proveedor Inscrito'], dtype='object')
+
+Out[197]:
+
+    ['CreatedData/trained_models/modelos_preejecucion/scaler_preejec_secopII_Adiciones_TipoContratoTodos_rf.pkl']
+
+Modelos para contratos de prestación de servicios¶
+
+Se filtran las observaciones por la variable Tipo de Contrato
+conservando aquellos del tipo "Prestación de servicios".
+
+In [198]:
+
+    X_prestacion = df_downsampled_A[df_downsampled_A["Tipo de Contrato"] == "Prestación de servicios"]
+    y_prestacion_A = X_prestacion["Tuvo_adiciones"]
+
+    X_prestacion = X_prestacion.drop(columns = vars_a_excluir+["Tipo de Contrato"])
+    X_prestacion = pd.get_dummies(data = X_prestacion, columns = vars_categoricas)
+
+Selección de variables¶
+
+In [199]:
+
+    X_fselec_Pservicios = feature_selection(X_prestacion, y_prestacion_A)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible', 'Sector_Cultura', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación directa', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'Justificacion Modalidad de Contratacion_ServiciosProfesionales', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Mes Firma Contrato_Abr', 'Mes Firma Contrato_Ago', 'Mes Firma Contrato_Ene', 'Mes Firma Contrato_Feb', 'Mes Firma Contrato_Mar', 'Mes de Publicacion del Proceso_Abr', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Mar', 'Codigo Segmento Categoria Principal_80000000', 'Codigo Segmento Categoria Principal_85000000']
+
+In [200]:
+
+    X_fselec_Pservicios2 = feature_selection(X_fselec_Pservicios, y_prestacion_A)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito']
+
+Bosque aleatorio¶
+
+Modelo con las variables de la primera selección
+
+In [201]:
+
+    forest, X_test, y_test, y_pred_forest, scaler = random_forest(X_fselec_Pservicios, y_prestacion_A)
+
+    plot_CM(y_test, y_pred_forest)
+    plot_ROC(forest, X_test, y_test, scaler, 
+             model_name='Bosque aleatorio 1ra selección de variables')
+
+    Accuracy del test: 0.8968
+    La sensitividad(recall) del test es: 0.8817
+    La precisión del test es: 0.9085
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            7046   681
+  Sí            907    6760
+
+    Model: ROC AUC = 0.959
+
+[No description has been provided for this image]
+
+Modelo con las variables de la segunda selección
+
+In [202]:
+
+    forest2, X_test2, y_test2, y_pred_forest2, scaler2 = random_forest(X_fselec_Pservicios2, y_prestacion_A)
+
+    plot_CM(y_test2, y_pred_forest2)
+    plot_ROC(forest2, X_test2, y_test2, scaler2, 
+             model_name='Bosque aleatorio 2da selección de variables')
+
+    Accuracy del test: 0.8644
+    La sensitividad(recall) del test es: 0.8503
+    La precisión del test es: 0.8741
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            6788   939
+  Sí            1148   6519
+
+    Model: ROC AUC = 0.938
+
+[No description has been provided for this image]
+
+In [203]:
+
+    #Guardar modelo
+    print('Variables de modelos:', X_fselec_Pservicios2.columns)
+    filename = 'created_data/trained_models/model_secopII_Adiciones_TipoContratoPreServicios_rf.pkl'
+    joblib.dump(forest2, filename)
+
+    filename_scaler = 'created_data/trained_models/scaler_secopII_Adiciones_TipoContratoPreServicios_rf.pkl'
+    joblib.dump(scaler2, filename_scaler)
+
+    Variables de modelos: Index(['Valor del Contrato', 'Dias Inicio-Firma Contrato',
+           'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+           'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito'],
+          dtype='object')
+
+Out[203]:
+
+    ['CreatedData/trained_models/scaler_secopII_Adiciones_TipoContratoPreServicios_rf.pkl']
+
+Excluir variables de ejecución¶
+
+In [204]:
+
+    X_prestacion = X_prestacion.drop(columns=vars_ejecucion)
+
+Selección de variables
+
+In [205]:
+
+    X_fselec_Pservicios = feature_selection(X_prestacion, y_prestacion_A)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Proveedor Inscrito', 'Sector_Ambiente y Desarrollo Sostenible', 'Sector_Cultura', 'Sector_No aplica/No pertenece', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación directa', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'Justificacion Modalidad de Contratacion_ServiciosProfesionales', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Mes Firma Contrato_Abr', 'Mes Firma Contrato_Ago', 'Mes Firma Contrato_Ene', 'Mes Firma Contrato_Feb', 'Mes Firma Contrato_Mar', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Mes de Publicacion del Proceso_Abr', 'Mes de Publicacion del Proceso_Ago', 'Mes de Publicacion del Proceso_Ene', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Mar', 'Codigo Segmento Categoria Principal_85000000']
+
+In [206]:
+
+    X_fselec_Pservicios2 = feature_selection(X_fselec_Pservicios, y_prestacion_A)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Dias Proveedor Inscrito']
+
+Bosque aleatorio
+
+In [207]:
+
+    forest, X_test, y_test, y_pred_forest, scaler = random_forest(X_fselec_Pservicios, y_prestacion_A)
+
+    plot_CM(y_test, y_pred_forest)
+    plot_ROC(forest, X_test, y_test, scaler, 
+             model_name='Bosque aleatorio 1ra selección de variables')
+
+    Accuracy del test: 0.7870
+    La sensitividad(recall) del test es: 0.7899
+    La precisión del test es: 0.7840
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            6059   1668
+  Sí            1611   6056
+
+    Model: ROC AUC = 0.873
+
+[No description has been provided for this image]
+
+In [208]:
+
+    forest2, X_test2, y_test2, y_pred_forest2, scaler2 = random_forest(X_fselec_Pservicios2, y_prestacion_A)
+
+    plot_CM(y_test2, y_pred_forest2)
+    plot_ROC(forest2, X_test2, y_test2, scaler2, 
+             model_name='Bosque aleatorio 2da selección de variables')
+
+    Accuracy del test: 0.6772
+    La sensitividad(recall) del test es: 0.6777
+    La precisión del test es: 0.6753
+
+  Predicción    No     Sí
+  ------------- ------ ------
+  Observación          
+  No            5229   2498
+  Sí            2471   5196
+
+    Model: ROC AUC = 0.750
+
+[No description has been provided for this image]
+
+Guardar modelo
+
+In [209]:
+
+    #Guardar modelo
+    print('Variables de modelos:', X_fselec_Pservicios2.columns)
+    filename = 'created_data/trained_models/modelos_preejecucion/model_preejec_secopII_Adiciones_TipoContratoPreServicios_rf.pkl'
+    joblib.dump(forest2, filename)
+
+    filename_scaler = 'created_data/trained_models/modelos_preejecucion/scaler_preejec_secopII_Adiciones_TipoContratoPreServicios_rf.pkl'
+    joblib.dump(scaler2, filename_scaler)
+
+    Variables de modelos: Index(['Valor del Contrato', 'Dias Proveedor Inscrito'], dtype='object')
+
+Out[209]:
+
+    ['CreatedData/trained_models/modelos_preejecucion/scaler_preejec_secopII_Adiciones_TipoContratoPreServicios_rf.pkl']
+
+Modelos para contratos diferentes a prestación de servicios¶
+
+In [210]:
+
+    X_NOprestacion_A = df_downsampled_A[df_downsampled_A["Tipo de Contrato"] != "Prestación de servicios"]
+    y_NOprestacion_A = X_NOprestacion_A["Tuvo_adiciones"]
+
+    X_NOprestacion_A = X_NOprestacion_A.drop(columns = vars_a_excluir+["Tipo de Contrato"])
+    X_NOprestacion_A = pd.get_dummies(data = X_NOprestacion_A, columns = vars_categoricas)
+
+In [211]:
+
+    X_NOprestacion_A.shape
+
+Out[211]:
+
+    (5235, 194)
+
+Selección de variables¶
+
+In [212]:
+
+    X_fselec_NOprestacion_A = feature_selection(X_NOprestacion_A, y_NOprestacion_A)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto', 'Sector_Cultura', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación régimen especial', 'Justificacion Modalidad de Contratacion_Decreto 092 de 2017', 'Justificacion Modalidad de Contratacion_Presupuesto inferior al 10% de la menor cuantía', 'TipoDocProveedor_Cédula de Ciudadanía', 'TipoDocProveedor_NIT', 'Es Pyme_No', 'Es Pyme_Si', 'Liquidación_No', 'Liquidación_Si', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Tipo Empresa Proveedor_Persona Natural colombiana', 'Mes Firma Contrato_Ago', 'Mes Firma Contrato_Dic', 'Mes Firma Contrato_Mar', 'Grupo categoria principal_Productos manufacturados', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Tipo Empresa Proveedor Resumido_Persona Natural colombiana', 'Mes de Publicacion del Proceso_Ago', 'Codigo Segmento Categoria Principal_80000000']
+
+In [213]:
+
+    X_fselec_NOprestacion_A2 = feature_selection(X_fselec_NOprestacion_A, y_NOprestacion_A)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito']
+
+In [214]:
+
+    X_fselec_NOprestacion_A2.shape
+
+Out[214]:
+
+    (5235, 7)
+
+Bosque aleatorio¶
+
+Usando la segunda selección de variables.
+
+In [215]:
+
+    forest_noserv, X_test_noserv, y_test_noserv, y_pred_forest_noserv, scaler_noserv = random_forest(X_fselec_NOprestacion_A2, 
+                                                                                                     y_NOprestacion_A)
+
+    plot_CM(y_test_noserv, y_pred_forest_noserv)
+    plot_ROC(forest_noserv, X_test_noserv, y_test_noserv, scaler_noserv)
+
+    Accuracy del test: 0.8300
+    La sensitividad(recall) del test es: 0.8260
+    La precisión del test es: 0.8436
+
+  Predicción    No    Sí
+  ------------- ----- -----
+  Observación         
+  No            630   125
+  Sí            142   674
+
+    Model: ROC AUC = 0.917
+
+[No description has been provided for this image]
+
+In [216]:
+
+    #Guardar modelo
+    print('Variables de modelos:', X_fselec_NOprestacion_A2.columns)
+    filename = 'created_data/trained_models/model_secopII_Adiciones_TipoContratoNOPreServicios_rf.pkl'
+    joblib.dump(forest_noserv, filename)
+
+    filename_scaler = 'created_data/trained_models/scaler_secopII_Adiciones_TipoContratoNOPreServicios_rf.pkl'
+    joblib.dump(scaler_noserv, filename_scaler)
+
+    Variables de modelos: Index(['Valor del Contrato', 'Proveedores Invitados',
+           'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato',
+           'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion',
+           'Dias Proveedor Inscrito'],
+          dtype='object')
+
+Out[216]:
+
+    ['CreatedData/trained_models/scaler_secopII_Adiciones_TipoContratoNOPreServicios_rf.pkl']
+
+Excluir variables de ejecución¶
+
+In [217]:
+
+    X_NOprestacion_A = X_NOprestacion_A.drop(columns=vars_ejecucion)
+
+Selección de variables
+
+In [218]:
+
+    X_fselec_NOprestacion_A = feature_selection(X_NOprestacion_A, y_NOprestacion_A)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto', 'Sector_Cultura', 'Sector_Salud y Protección Social', 'Sector_Servicio Público', 'Entidad Centralizada_Centralizada', 'Entidad Centralizada_Descentralizada', 'Modalidad de Contratacion_Contratación régimen especial', 'Modalidad de Contratacion_Mínima cuantía', 'Justificacion Modalidad de Contratacion_Decreto 092 de 2017', 'Justificacion Modalidad de Contratacion_Presupuesto inferior al 10% de la menor cuantía', 'Justificacion Modalidad de Contratacion_Regla aplicable', 'TipoDocProveedor_Cédula de Ciudadanía', 'TipoDocProveedor_NIT', 'Es Pyme_No', 'Es Pyme_Si', 'Destino Gasto_Funcionamiento', 'Destino Gasto_Inversión', 'Tipo Empresa Proveedor_Persona Natural colombiana', 'Mes Firma Contrato_Ago', 'Mes Firma Contrato_Dic', 'Mes Firma Contrato_Jul', 'Mes Firma Contrato_Mar', 'Mes Firma Contrato_Nov', 'Mes Firma Contrato_Oct', 'Mes Firma Contrato_Sep', 'Grupo categoria principal_Productos manufacturados', 'Grupo categoria principal_Servicios administrativos', 'Grupo categoria principal_Servicios(No Admin)', 'Tipo Empresa Proveedor Resumido_Persona Natural colombiana', 'Tipo Empresa Proveedor Resumido_Sociedad por acciones simplificada', 'Mes de Publicacion del Proceso_Ago', 'Mes de Publicacion del Proceso_Feb', 'Mes de Publicacion del Proceso_Mar', 'Mes de Publicacion del Proceso_Nov', 'Mes de Publicacion del Proceso_Oct', 'Mes de Publicacion del Proceso_Sep', 'Codigo Segmento Categoria Principal_43000000']
+
+In [219]:
+
+    X_fselec_NOprestacion_A2 = feature_selection(X_fselec_NOprestacion_A, y_NOprestacion_A)
+
+    Variables estadísticamente significativas: 
+    ['Valor del Contrato', 'Proveedores Invitados', 'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto']
+
+Bosque aleatorio
+
+In [220]:
+
+    forest_noserv, X_test_noserv, y_test_noserv, y_pred_forest_noserv, scaler_noserv = random_forest(X_fselec_NOprestacion_A2, 
+                                                                                                     y_NOprestacion_A)
+
+    plot_CM(y_test_noserv, y_pred_forest_noserv)
+    plot_ROC(forest_noserv, X_test_noserv, y_test_noserv, scaler_noserv)
+
+    Accuracy del test: 0.6703
+    La sensitividad(recall) del test es: 0.6863
+    La precisión del test es: 0.6813
+
+  Predicción    No    Sí
+  ------------- ----- -----
+  Observación         
+  No            493   262
+  Sí            256   560
+
+    Model: ROC AUC = 0.745
+
+[No description has been provided for this image]
+
+Guardar modelo
+
+In [221]:
+
+    #Guardar modelo
+    print('Variables de modelos:', X_fselec_NOprestacion_A2.columns)
+    filename = 'created_data/trained_models/modelos_preejecucion/model_preejec_secopII_Adiciones_TipoContratoNOPreServicios_rf.pkl'
+    joblib.dump(forest_noserv, filename)
+
+    filename_scaler = 'created_data/trained_models/modelos_preejecucion/scaler_preejec_secopII_Adiciones_TipoContratoNOPreServicios_rf.pkl'
+    joblib.dump(scaler_noserv, filename_scaler)
+
+    Variables de modelos: Index(['Valor del Contrato', 'Proveedores Invitados',
+           'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto'],
+          dtype='object')
+
+Out[221]:
+
+    ['CreatedData/trained_models/modelos_preejecucion/scaler_preejec_secopII_Adiciones_TipoContratoNOPreServicios_rf.pkl']

@@ -1,0 +1,41 @@
+model_preejec_secopII_AdValor_TipoContratoTodos_rf.pkl:
+	'Valor del Contrato', 'Dias Proveedor Inscrito', 
+	'Sector_Cultura'
+
+model_preejec_secopII_AdValor_TipoContratoPreSercivios_rf.pkl:
+	'Valor del Contrato', 'Dias Proveedor Inscrito', 
+	'Sector_Cultura'
+
+model_preejec_secopII_AdValor_TipoContratoNOPreServicios_rf.pkl:
+	'Valor del Contrato', 'Proveedores_invitados',
+       'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto',
+       'Grupo categoria principal_Servicios administrativos',
+       'Codigo Segmento Categoria Principal_85000000'
+** En la app esta última se llama 'Segmento_categoria_principal_servicios_salud'
+para hacer explicito su significado.
+
+model_preejec_secopII_AdTiempo_TipoContratoTodos_rf.pkl:
+	'Valor del Contrato', 'Dias Proveedor Inscrito',
+       'Mes Firma Contrato_Feb'
+
+model_preejec_secopII_AdTiempo_TipoContratoPreServicios_rf.pkl:
+	'Valor del Contrato', 'Dias Proveedor Inscrito',
+       'Mes Firma Contrato_Feb'
+
+model_preejec_secopII_AdTiempo_TipoContratoNOPreServicios_rf.pkl:
+	'Valor del Contrato', 'Proveedores_invitados',
+       'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto',
+       'Sector_Salud y Proteccion Social',
+       'Justificacion Modalidad de Contratacion_Decreto 092 de 2017'
+
+model_preejec_secopII_Adiciones_TipoContratoTodos_rf.pkl:
+	'Valor del Contrato', 'Dias Proveedor Inscrito'
+
+model_preejec_secopII_Adiciones_TipoContratoPreServicios_rf.pkl:
+	'Valor del Contrato', 'Dias Proveedor Inscrito'
+
+model_preejec_secopII_Adiciones_TipoContratoNOPreServicios_rf.pkl:
+	'Valor del Contrato', 'Proveedores_invitados',
+       'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto'
+
+

@@ -1,0 +1,10 @@
+\begin{tabular}{lrrrrrrrr}
+\toprule
+Documento proveedor &  Cédula de Ciudadanía &  Cédula de Extranjería &     NIT &  No Definido &  Otro &  Pasaporte &  Tarjeta de Identidad &  Proporción del total \\
+Es Pyme              &                       &                        &         &              &       &            &                       &                       \\
+\midrule
+No                   &              68811.00 &                  80.00 & 6327.00 &       298.00 & 26.00 &       5.00 &                  1.00 &                  0.86 \\
+Si                   &               6121.00 &                  14.00 & 5677.00 &         0.00 & 24.00 &       2.00 &                  1.00 &                  0.14 \\
+Proporción del total &                  0.86 &                   0.00 &    0.14 &         0.00 &  0.00 &       0.00 &                  0.00 &                  1.00 \\
+\bottomrule
+\end{tabular}

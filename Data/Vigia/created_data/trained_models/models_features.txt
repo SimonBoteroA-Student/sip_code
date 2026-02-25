@@ -1,0 +1,60 @@
+model_secopII_AdValor_TipoContratoTodos_rf.pkl: 
+	'Valor del Contrato', 'Dias Inicio-Firma Contrato',
+       'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+       'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito',
+       'Sector_Cultura'
+
+model_secopII_AdValor_TipoContratoPreSercivios_rf.pkl:
+	'Valor del Contrato', 'Dias Inicio-Firma Contrato',
+       'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+       'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito',
+       'Sector_Cultura'
+
+model_secopII_AdValor_TipoContratoNOPreServicios_rf.pkl:
+	'Valor del Contrato', 'Proveedores_invitados',
+       'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato',
+       'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion',
+       'Dias Proveedor Inscrito', 'Dias Proceso Contratacion Abierto',
+       'Grupo categoria principal_Servicios administrativos'
+
+model_secopII_AdTiempo_TipoContratoTodos_rf.pkl:
+	'Valor del Contrato', 'Dias Inicio-Firma Contrato',
+       'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+       'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito'
+
+model_secopII_AdTiempo_TipoContratoPreServicios_rf.pkl:
+	'Valor del Contrato', 'Dias Inicio-Firma Contrato',
+       'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+       'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito'
+
+model_secopII_AdTiempo_TipoContratoNOPreServicios_rf.pkl:
+	'Valor del Contrato', 'Proveedores_invitados',
+       'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato',
+       'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion',
+       'Dias Proveedor Inscrito',
+       'Justificacion Modalidad de Contratacion_Decreto 092 de 2017'
+
+model_secopII_Adiciones_TipoContratoTodos_rf.pkl:
+	'Valor del Contrato', 'Dias Inicio-Firma Contrato',
+       'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+       'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito'
+
+model_secopII_Adiciones_TipoContratoPreServicios_rf.pkl:
+	'Valor del Contrato', 'Dias Inicio-Firma Contrato',
+       'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+       'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito'
+
+model_secopII_Adiciones_TipoContratoNOPreServicios_rf.pkl:
+	'Valor del Contrato', 'Proveedores_invitados',
+       'Dias Inicio-Firma Contrato', 'Dias Fin-Inicio Contrato',
+       'Dias Inicio-Firma Ejecucion', 'Dias Fin-Inicio Ejecucion',
+       'Dias Proveedor Inscrito'
+
+
+'Valor del Contrato', 'Proveedores_invitados', 
+'Dias Inicio-Firma Contrato',
+'Dias Fin-Inicio Contrato', 'Dias Inicio-Firma Ejecucion',
+'Dias Fin-Inicio Ejecucion', 'Dias Proveedor Inscrito',
+'Sector_Cultura', 'Dias Proceso Contratacion Abierto',
+'Grupo categoria principal_Servicios administrativos',
+'Justificacion Modalidad de Contratacion_Decreto 092 de 2017'
