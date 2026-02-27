@@ -28,5 +28,7 @@ Data/**
 # Whitelist "Boletines" data
 !Data/Propia/Boletines/**
 
+#New location of databases
+secopDatabases/**
 # Ensure .DS_Store is still ignored even if folders are whitelisted
 **/.DS_Store
