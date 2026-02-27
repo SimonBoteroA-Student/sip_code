@@ -13,7 +13,7 @@ SIP is built as a strictly sequential offline pipeline: a working Python environ
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Project Foundation** - Python 3.12 environment verified, project scaffold and config system in place
-- [ ] **Phase 2: Data Loaders** - Chunked CSV loading for all large SECOP files, Socrata API client, encoding standards
+- [ ] **Phase 2: Data Loaders** - Chunked CSV loading for all large SECOP files, correct dtypes/encoding, memory-efficient processing
 - [ ] **Phase 3: RCAC Builder** - 6-source sanction registry built, normalized, deduplicated, serialized, and queryable
 - [ ] **Phase 4: Label Construction** - M1/M2 labels from amendments, M3 from Comptroller bulletins, M4 from RCAC fines
 - [ ] **Phase 5: Feature Engineering** - Shared feature pipeline (Categories A/B/C) with temporal leak guard and train-serve parity
@@ -36,14 +36,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: TBD
 
 ### Phase 2: Data Loaders
-**Goal**: All SECOP CSV files can be read without memory crashes, and SECOP II data can be downloaded via the Socrata API with pagination and authentication
+**Goal**: All local SECOP and RCAC CSV files can be read without memory crashes, with correct encoding and dtypes
 **Depends on**: Phase 1
 **Requirements**: DATA-06, DATA-07, DATA-10
 **Success Criteria** (what must be TRUE):
   1. `procesos_SECOP.csv` (5.3 GB) and `ofertas_proceso_SECOP.csv` (3.4 GB) load completely using chunked iteration without exceeding available RAM
-  2. Socrata client downloads all 7 SECOP datasets, verifies downloaded row count against `$count` endpoint, and retries on failure
+  2. All local CSV files load with correct dtypes and column selection (`usecols`, `dtype` arguments) to minimize memory footprint
   3. Each CSV file is read with its correct encoding (UTF-8 for SECOP, Latin-1 for PACO files) — no mojibake or silent data corruption in string fields
-  4. Loader functions accept `usecols` and `dtype` arguments to minimize memory footprint from the first line of code
+  4. Loader functions are reusable across all data processing stages (RCAC building, feature engineering, label construction)
 **Plans**: TBD
 
 ### Phase 3: RCAC Builder

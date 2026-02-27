@@ -15,7 +15,7 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 - [ ] **DATA-04**: System handles SIRI file (`sanciones_SIRI_PACO.csv`) by positional column parsing (no headers — columns 5 and 6 for document type and number)
 - [ ] **DATA-05**: System handles `responsabilidades_fiscales_PACO.csv` combined "Tipo y Num Documento" field parsing
 - [ ] **DATA-06**: System processes CSV files up to 5.3 GB without memory crashes using chunked reading strategies
-- [ ] **DATA-07**: System downloads SECOP II data via Socrata API with pagination and rate limit handling for all 7 dataset endpoints
+- [ ] **DATA-07**: System loads all local SECOP CSV files with correct dtypes and column selection to minimize memory footprint
 - [ ] **DATA-08**: System serializes RCAC as indexed dict via joblib for fast loading
 - [ ] **DATA-09**: System provides O(1) RCAC lookup by (document_type, document_number)
 - [ ] **DATA-10**: System handles encoding differences across sources (UTF-8 for SECOP, Latin-1 for PACO files) without silent data corruption
@@ -107,6 +107,7 @@ Deferred to next milestone. Tracked but not in current roadmap.
 
 - **ENH-01**: Online inference pipeline (SECOP API → features → prediction → JSON in real-time)
 - **ENH-02**: Provider History Index loaded at server startup for O(1) online lookup
+- **ENH-03**: Socrata API client for SECOP II data download with pagination and rate limit handling (for data refresh and online queries)
 
 ## Out of Scope
 
