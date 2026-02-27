@@ -32,3 +32,7 @@ Data/**
 secopDatabases/**
 # Ensure .DS_Store is still ignored even if folders are whitelisted
 **/.DS_Store
+
+#Whitelist .claude and .planning folders, essential for keeping the GRD workflow tracked and working well
+!.planning/**
+!.claude/**
