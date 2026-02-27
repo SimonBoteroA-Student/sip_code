@@ -133,67 +133,67 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | — | Pending |
-| DATA-02 | — | Pending |
-| DATA-03 | — | Pending |
-| DATA-04 | — | Pending |
-| DATA-05 | — | Pending |
-| DATA-06 | — | Pending |
-| DATA-07 | — | Pending |
-| DATA-08 | — | Pending |
-| DATA-09 | — | Pending |
-| DATA-10 | — | Pending |
-| DATA-11 | — | Pending |
-| DATA-12 | — | Pending |
-| DATA-13 | — | Pending |
-| FEAT-01 | — | Pending |
-| FEAT-02 | — | Pending |
-| FEAT-03 | — | Pending |
-| FEAT-04 | — | Pending |
-| FEAT-05 | — | Pending |
-| FEAT-06 | — | Pending |
-| FEAT-07 | — | Pending |
-| FEAT-08 | — | Pending |
-| FEAT-09 | — | Pending |
-| FEAT-10 | — | Pending |
-| IRIC-01 | — | Pending |
-| IRIC-02 | — | Pending |
-| IRIC-03 | — | Pending |
-| IRIC-04 | — | Pending |
-| IRIC-05 | — | Pending |
-| IRIC-06 | — | Pending |
-| IRIC-07 | — | Pending |
-| IRIC-08 | — | Pending |
-| MODL-01 | — | Pending |
-| MODL-02 | — | Pending |
-| MODL-03 | — | Pending |
-| MODL-04 | — | Pending |
-| MODL-05 | — | Pending |
-| MODL-06 | — | Pending |
-| MODL-07 | — | Pending |
-| MODL-08 | — | Pending |
-| MODL-09 | — | Pending |
-| EVAL-01 | — | Pending |
-| EVAL-02 | — | Pending |
-| EVAL-03 | — | Pending |
-| EVAL-04 | — | Pending |
-| EVAL-05 | — | Pending |
-| EVAL-06 | — | Pending |
-| EXPL-01 | — | Pending |
-| EXPL-02 | — | Pending |
-| EXPL-03 | — | Pending |
-| EXPL-04 | — | Pending |
-| EXPL-05 | — | Pending |
-| PROJ-01 | — | Pending |
-| PROJ-02 | — | Pending |
-| PROJ-03 | — | Pending |
-| PROJ-04 | — | Pending |
+| DATA-01 | Phase 3 | Pending |
+| DATA-02 | Phase 3 | Pending |
+| DATA-03 | Phase 3 | Pending |
+| DATA-04 | Phase 3 | Pending |
+| DATA-05 | Phase 3 | Pending |
+| DATA-06 | Phase 2 | Pending |
+| DATA-07 | Phase 2 | Pending |
+| DATA-08 | Phase 3 | Pending |
+| DATA-09 | Phase 3 | Pending |
+| DATA-10 | Phase 2 | Pending |
+| DATA-11 | Phase 4 | Pending |
+| DATA-12 | Phase 4 | Pending |
+| DATA-13 | Phase 4 | Pending |
+| FEAT-01 | Phase 5 | Pending |
+| FEAT-02 | Phase 5 | Pending |
+| FEAT-03 | Phase 5 | Pending |
+| FEAT-04 | Phase 6 | Pending |
+| FEAT-05 | Phase 5 | Pending |
+| FEAT-06 | Phase 5 | Pending |
+| FEAT-07 | Phase 5 | Pending |
+| FEAT-08 | Phase 5 | Pending |
+| FEAT-09 | Phase 5 | Pending |
+| FEAT-10 | Phase 5 | Pending |
+| IRIC-01 | Phase 6 | Pending |
+| IRIC-02 | Phase 6 | Pending |
+| IRIC-03 | Phase 6 | Pending |
+| IRIC-04 | Phase 6 | Pending |
+| IRIC-05 | Phase 6 | Pending |
+| IRIC-06 | Phase 6 | Pending |
+| IRIC-07 | Phase 6 | Pending |
+| IRIC-08 | Phase 6 | Pending |
+| MODL-01 | Phase 7 | Pending |
+| MODL-02 | Phase 7 | Pending |
+| MODL-03 | Phase 7 | Pending |
+| MODL-04 | Phase 7 | Pending |
+| MODL-05 | Phase 7 | Pending |
+| MODL-06 | Phase 7 | Pending |
+| MODL-07 | Phase 7 | Pending |
+| MODL-08 | Phase 7 | Pending |
+| MODL-09 | Phase 7 | Pending |
+| EVAL-01 | Phase 8 | Pending |
+| EVAL-02 | Phase 8 | Pending |
+| EVAL-03 | Phase 8 | Pending |
+| EVAL-04 | Phase 8 | Pending |
+| EVAL-05 | Phase 8 | Pending |
+| EVAL-06 | Phase 8 | Pending |
+| EXPL-01 | Phase 9 | Pending |
+| EXPL-02 | Phase 9 | Pending |
+| EXPL-03 | Phase 9 | Pending |
+| EXPL-04 | Phase 9 | Pending |
+| EXPL-05 | Phase 9 | Pending |
+| PROJ-01 | Phase 1 | Pending |
+| PROJ-02 | Phase 1 | Pending |
+| PROJ-03 | Phase 9 | Pending |
+| PROJ-04 | Phase 9 | Pending |
 
 **Coverage:**
 - v1 requirements: 53 total
-- Mapped to phases: 0
-- Unmapped: 53
+- Mapped to phases: 53
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-27*
-*Last updated: 2026-02-27 after initial definition*
+*Last updated: 2026-02-27 after roadmap creation — all 53 requirements mapped*
