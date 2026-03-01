@@ -16,6 +16,8 @@ from sip_engine.data.loaders import (
     load_proveedores,
     load_suspensiones,
 )
+from sip_engine.data.rcac_builder import build_rcac
+from sip_engine.data.rcac_lookup import rcac_lookup
 
 __all__ = [
     "load_contratos",
@@ -32,4 +34,6 @@ __all__ = [
     "load_paco_resp_fiscales",
     "load_paco_colusiones",
     "load_paco_sanciones_penales",
+    "build_rcac",
+    "rcac_lookup",
 ]

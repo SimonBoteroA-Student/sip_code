@@ -12,7 +12,14 @@ def main() -> None:
     )
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    subparsers.add_parser("build-rcac", help="Build RCAC corruption antecedent corpus")
+    build_rcac_parser = subparsers.add_parser(
+        "build-rcac", help="Build RCAC corruption antecedent corpus"
+    )
+    build_rcac_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force rebuild even if rcac.pkl exists",
+    )
     subparsers.add_parser("train", help="Train XGBoost prediction models")
     subparsers.add_parser("evaluate", help="Evaluate trained models")
     subparsers.add_parser("run-pipeline", help="Run the full SIP pipeline end to end")
@@ -23,8 +30,18 @@ def main() -> None:
         parser.print_help()
         sys.exit(0)
 
-    print(f"{args.command} not yet implemented.")
-    sys.exit(0)
+    if args.command == "build-rcac":
+        from sip_engine.data.rcac_builder import build_rcac
+        try:
+            path = build_rcac(force=args.force)
+            print(f"RCAC built: {path}")
+            sys.exit(0)
+        except Exception as e:
+            print(f"Error building RCAC: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        print(f"{args.command} not yet implemented.")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
