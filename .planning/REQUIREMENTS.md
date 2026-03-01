@@ -20,8 +20,8 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 - [x] **DATA-09**: System provides O(1) RCAC lookup by (document_type, document_number)
 - [x] **DATA-10**: System handles encoding differences across sources (UTF-8 for SECOP, Latin-1 for PACO files) without silent data corruption
 - [x] **DATA-11**: System constructs labels for M1 (cost overruns) and M2 (delays) from amendments dataset (`adiciones.csv`): M1=1 if contract has ≥1 value amendment, M2=1 if contract has ≥1 time amendment
-- [ ] **DATA-12**: System constructs label for M3 from Comptroller bulletins: M3=1 if provider appears as fiscal liability holder
-- [ ] **DATA-13**: System constructs label for M4 from RCAC: M4=1 if provider has SECOP fine/sanction
+- [x] **DATA-12**: System constructs label for M3 from Comptroller bulletins: M3=1 if provider appears as fiscal liability holder
+- [x] **DATA-13**: System constructs label for M4 from RCAC: M4=1 if provider has SECOP fine/sanction
 
 ### Feature Engineering
 
@@ -145,8 +145,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-09 | Phase 3 | Complete |
 | DATA-10 | Phase 2 | Complete |
 | DATA-11 | Phase 4 | Pending |
-| DATA-12 | Phase 4 | Pending |
-| DATA-13 | Phase 4 | Pending |
+| DATA-12 | Phase 4 | Complete |
+| DATA-13 | Phase 4 | Complete |
 | FEAT-01 | Phase 5 | Pending |
 | FEAT-02 | Phase 5 | Pending |
 | FEAT-03 | Phase 5 | Pending |

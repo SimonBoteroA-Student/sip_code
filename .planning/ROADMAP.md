@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Project Foundation** - Python 3.12 environment verified, project scaffold and config system in place (completed 2026-03-01)
 - [x] **Phase 2: Data Loaders** - Chunked CSV loading for all large SECOP files, correct dtypes/encoding, memory-efficient processing (completed 2026-03-01)
 - [x] **Phase 3: RCAC Builder** - 6-source sanction registry built, normalized, deduplicated, serialized, and queryable (completed 2026-03-01)
-- [ ] **Phase 4: Label Construction** - M1/M2 labels from amendments, M3 from Comptroller bulletins, M4 from RCAC fines
+- [x] **Phase 4: Label Construction** - M1/M2 labels from amendments, M3 from Comptroller bulletins, M4 from RCAC fines (completed 2026-03-01)
 - [ ] **Phase 5: Feature Engineering** - Shared feature pipeline (Categories A/B/C) with temporal leak guard and train-serve parity
 - [ ] **Phase 6: IRIC** - 11-component irregularity index calculated, nationally calibrated by contract type, added as model feature
 - [ ] **Phase 7: Model Training** - 4 XGBoost classifiers trained with class imbalance handling and hyperparameter optimization
@@ -76,7 +76,7 @@ Plans:
   2. M2 label equals 1 for any contract in `adiciones.csv` with at least one time amendment, 0 otherwise
   3. M3 label equals 1 for any contract whose provider appears as a fiscal liability holder in Comptroller bulletins
   4. M4 label equals 1 for any contract whose provider has a SECOP fine or sanction in the RCAC — with no label leakage from future records (label uses provider document from RCAC built in Phase 3)
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 04-01-PLAN.md — M1/M2 labels from adiciones.csv (TDD), Settings paths, schema fixes, label_builder skeleton
 - [ ] 04-02-PLAN.md — M3/M4 labels from boletines + RCAC, parquet output, CLI build-labels, package exports
@@ -153,7 +153,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Project Foundation | 2/2 | Complete   | 2026-03-01 |
 | 2. Data Loaders | 2/2 | Complete   | 2026-03-01 |
 | 3. RCAC Builder | 2/2 | Complete | 2026-03-01 |
-| 4. Label Construction | 1/2 | In Progress | - |
+| 4. Label Construction | 2/2 | Complete   | 2026-03-01 |
 | 5. Feature Engineering | 0/TBD | Not started | - |
 | 6. IRIC | 0/TBD | Not started | - |
 | 7. Model Training | 0/TBD | Not started | - |

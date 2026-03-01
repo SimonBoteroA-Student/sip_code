@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 4 — Label Construction
+**Current focus:** Phase 5 — Feature Engineering
 
 ## Current Position
 
-Phase: 4 of 9 (Label Construction) — IN PROGRESS
-Plan: 1 of 2 completed in current phase
-Status: Plan 04-01 complete — label_builder skeleton, M1/M2 sets, contratos dedup, 15 TDD tests. 80 tests passing.
-Last activity: 2026-03-01 — Plan 04-01 complete: label_builder.py, Settings paths, schema fixes
+Phase: 4 of 9 (Label Construction) — COMPLETE
+Plan: 2 of 2 completed in current phase
+Status: Plan 04-02 complete — M3/M4 labels, boletines set, parquet output, CLI wiring, 33 TDD tests. 98 tests passing.
+Last activity: 2026-03-01 — Plan 04-02 complete: label_builder.py complete, build-labels CLI, pyarrow
 
-Progress: [███████░░░] 39%
+Progress: [████████░░] 44%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
+- Total plans completed: 6
 - Average duration: 3.8 min
-- Total execution time: 0.3 hours
+- Total execution time: 0.4 hours
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [███████░░░] 39%
 | 01-project-foundation | 2 | 7 min | 3.5 min |
 | 02-data-loaders | 2 | 8 min | 4 min |
 | 03-rcac-builder | 2 | 6 min | 3 min |
-| 04-label-construction | 1 | 3 min | 3 min |
+| 04-label-construction | 2 | 7 min | 3.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 2 min, 4 min, 4 min, 4 min
+- Last 5 plans: 2 min, 4 min, 4 min, 3 min, 4 min
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -70,6 +70,9 @@ Recent decisions affecting current work:
 - [04-01]: label_builder imports rcac_builder utilities now — establishes M3/M4 dependency for Plan 04-02
 - [04-01]: _build_m1_m2_sets uses set membership isin() for orphan filtering — O(1) lookup per row
 - [04-01]: Parquet write deferred to Plan 04-02 — skeleton returns labels_path but doesn't write until M3/M4 columns added
+- [04-02]: _build_boletines_set uses iterrows() for per-row normalization — clarity over vectorization (boletines is small)
+- [04-02]: M4 passes raw values to rcac_lookup() which normalizes internally — avoids double normalization
+- [04-02]: Null trigger is is_malformed(normalized_num) OR original isna() — covers empty string and NaN provider doc inputs
 
 ### Pending Todos
 
@@ -77,12 +80,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- **adiciones.csv status**: PROJECT.md notes this file is "(downloading)". M1 and M2 labels (Phase 4) are blocked until this file is available. Confirm download before planning Phase 4.
+- **adiciones.csv status**: RESOLVED — file confirmed available (~4GB). M1/M2 labels complete.
 - **SIRI positional columns**: RESOLVED in 02-01 — col[4]=tipo_documento, col[5]=numero_documento verified empirically. usecols=[4,5] is correct.
 - **Python 3.14 wheel risk**: RESOLVED — switched to Python 3.12.12 via pyenv (01-01 complete).
 
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Plan 04-01 complete
-Resume file: .planning/phases/04-label-construction/04-02-PLAN.md
+Stopped at: Plan 04-02 complete — Phase 4 Label Construction DONE
+Resume file: .planning/phases/05-feature-engineering/05-01-PLAN.md
