@@ -103,6 +103,7 @@ class Settings:
     iric_thresholds_path: Path = field(default=None)   # type: ignore[assignment]
     feature_registry_path: Path = field(default=None)  # type: ignore[assignment]
     rcac_path: Path = field(default=None)               # type: ignore[assignment]
+    rcac_bad_rows_path: Path = field(default=None)      # type: ignore[assignment]
 
     # ------------------------------------------------------------------ #
     # Encoding constants                                                  #
@@ -176,6 +177,7 @@ class Settings:
             self.artifacts_features_dir / "feature_registry.json"
         )
         self.rcac_path = self.artifacts_rcac_dir / "rcac.pkl"
+        self.rcac_bad_rows_path = self.artifacts_rcac_dir / "rcac_bad_rows.csv"
 
 
 @functools.lru_cache(maxsize=1)
