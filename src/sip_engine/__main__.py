@@ -20,6 +20,16 @@ def main() -> None:
         action="store_true",
         help="Force rebuild even if rcac.pkl exists",
     )
+
+    build_labels_parser = subparsers.add_parser(
+        "build-labels", help="Build M1/M2/M3/M4 target labels and save to parquet"
+    )
+    build_labels_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force rebuild even if labels.parquet exists",
+    )
+
     subparsers.add_parser("train", help="Train XGBoost prediction models")
     subparsers.add_parser("evaluate", help="Evaluate trained models")
     subparsers.add_parser("run-pipeline", help="Run the full SIP pipeline end to end")
@@ -39,6 +49,17 @@ def main() -> None:
         except Exception as e:
             print(f"Error building RCAC: {e}", file=sys.stderr)
             sys.exit(1)
+
+    elif args.command == "build-labels":
+        from sip_engine.data.label_builder import build_labels
+        try:
+            path = build_labels(force=args.force)
+            print(f"Labels built: {path}")
+            sys.exit(0)
+        except Exception as e:
+            print(f"Error building labels: {e}", file=sys.stderr)
+            sys.exit(1)
+
     else:
         print(f"{args.command} not yet implemented.")
         sys.exit(0)

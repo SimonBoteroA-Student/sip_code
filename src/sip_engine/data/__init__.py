@@ -1,5 +1,6 @@
 """Data loading and processing module for sip_engine."""
 
+from sip_engine.data.label_builder import build_labels
 from sip_engine.data.loaders import (
     load_adiciones,
     load_boletines,
@@ -36,4 +37,5 @@ __all__ = [
     "load_paco_sanciones_penales",
     "build_rcac",
     "rcac_lookup",
+    "build_labels",
 ]
