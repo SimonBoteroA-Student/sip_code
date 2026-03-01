@@ -10,17 +10,17 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 ## Current Position
 
 Phase: 5 of 9 (Feature Engineering) — IN PROGRESS
-Plan: 1 of 3 completed in current phase
-Status: Plan 05-01 complete — Provider History Index with temporal leak guard, schema extensions, 20 tests passing (118 total).
-Last activity: 2026-03-01 — Plan 05-01 complete: provider_history.py, schemas extended, settings extended
+Plan: 2 of 3 completed in current phase
+Status: Plan 05-02 complete — Category A/B/C feature extractors + encoding module, 61 tests passing (159 total).
+Last activity: 2026-03-01 — Plan 05-02 complete: category_a.py, category_b.py, category_c.py, encoding.py
 
-Progress: [█████████░] 50%
+Progress: [█████████░] 56%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 3.9 min
+- Total plans completed: 8
+- Average duration: 4.0 min
 - Total execution time: 0.5 hours
 
 **By Phase:**
@@ -31,7 +31,7 @@ Progress: [█████████░] 50%
 | 02-data-loaders | 2 | 8 min | 4 min |
 | 03-rcac-builder | 2 | 6 min | 3 min |
 | 04-label-construction | 2 | 7 min | 3.5 min |
-| 05-feature-engineering | 1 | 4 min | 4 min |
+| 05-feature-engineering | 2 | 9 min | 4.5 min |
 
 **Recent Trend:**
 - Last 5 plans: 4 min, 4 min, 3 min, 4 min, 4 min
@@ -78,6 +78,8 @@ Recent decisions affecting current work:
 - [05-01]: bisect_left enforces strict < as_of_date — same-day contracts placed at or after cutoff index, no extra comparison needed
 - [05-01]: pd.NA from nullable Int8 labels treated as 0 for M1/M2 counting — pd.isna() check before int() cast prevents TypeError
 - [05-01]: Null Fecha de Firma rows logged and skipped (not raised as error) — 7.2% null rate in contratos is expected
+- [Phase 05-02]: compute_category_c receives pre-fetched provider_history dict — caller controls lookup, enabling test injection without mocking module-level index cache
+- [Phase 05-02]: RARE_THRESHOLD uses strictly-greater-than (freq > threshold) — values at exactly 0.1% treated as rare and grouped into Other
 
 ### Pending Todos
 
@@ -92,5 +94,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 05-01-PLAN.md — Provider History Index infrastructure
-Resume file: .planning/phases/05-feature-engineering/05-02-PLAN.md
+Stopped at: Completed 05-02-PLAN.md — Category A/B/C feature extractors + encoding module
+Resume file: .planning/phases/05-feature-engineering/05-03-PLAN.md

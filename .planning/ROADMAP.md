@@ -92,7 +92,7 @@ Plans:
   4. All post-execution variables (execution start/end dates, payment data) are absent from the feature vector
   5. RCAC-derived features (`proveedor_en_rcac`, `proveedor_responsable_fiscal`, etc.) are explicitly excluded from the XGBoost feature vector
   6. Categorical values representing less than 0.1% of observations are grouped into "Other" before encoding
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 Plans:
 - [ ] 05-01-PLAN.md — Infrastructure: schema additions, Settings paths, Provider History Index (TDD)
 - [ ] 05-02-PLAN.md — Category A/B/C feature extractors and categorical encoding (TDD)
@@ -158,7 +158,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. Data Loaders | 2/2 | Complete   | 2026-03-01 |
 | 3. RCAC Builder | 2/2 | Complete | 2026-03-01 |
 | 4. Label Construction | 2/2 | Complete   | 2026-03-01 |
-| 5. Feature Engineering | 1/3 | In progress | - |
+| 5. Feature Engineering | 2/3 | In Progress|  |
 | 6. IRIC | 0/TBD | Not started | - |
 | 7. Model Training | 0/TBD | Not started | - |
 | 8. Evaluation | 0/TBD | Not started | - |
