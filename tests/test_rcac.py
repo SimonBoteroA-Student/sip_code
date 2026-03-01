@@ -360,3 +360,114 @@ def test_build_sanciones_penales_always_false(rcac_source_dirs):
         assert record["en_sanciones_penales"] is False, (
             f"Record {key} has en_sanciones_penales=True — expected always False"
         )
+
+
+# ============================================================
+# rcac_lookup tests (DATA-09)
+# ============================================================
+
+@pytest.fixture(autouse=True)
+def _reset_rcac():
+    """Clear module-level RCAC cache after each test to isolate state."""
+    yield
+    from sip_engine.data.rcac_lookup import reset_rcac_cache
+    reset_rcac_cache()
+
+
+def test_lookup_hit_returns_record(rcac_source_dirs):
+    """rcac_lookup('CC', '12345678') returns a dict with expected keys."""
+    from sip_engine.data.rcac_builder import build_rcac
+    from sip_engine.data.rcac_lookup import rcac_lookup, reset_rcac_cache
+
+    build_rcac(force=True)
+    reset_rcac_cache()
+
+    record = rcac_lookup("CC", "12345678")
+    assert record is not None, "Expected record for ('CC', '12345678'), got None"
+    assert isinstance(record, dict)
+
+    expected_keys = {
+        "tipo_documento",
+        "numero_documento",
+        "en_boletines",
+        "en_siri",
+        "en_resp_fiscales",
+        "en_multas_secop",
+        "en_colusiones",
+        "en_sanciones_penales",
+        "num_fuentes_distintas",
+        "malformed",
+    }
+    assert expected_keys.issubset(set(record.keys())), (
+        f"Missing keys: {expected_keys - set(record.keys())}"
+    )
+    assert record["tipo_documento"] == "CC"
+    assert record["numero_documento"] == "12345678"
+
+
+def test_lookup_miss_returns_none(rcac_source_dirs):
+    """rcac_lookup('CC', '99999999') returns None for unknown identity."""
+    from sip_engine.data.rcac_builder import build_rcac
+    from sip_engine.data.rcac_lookup import rcac_lookup, reset_rcac_cache
+
+    build_rcac(force=True)
+    reset_rcac_cache()
+
+    assert rcac_lookup("CC", "99999999") is None
+
+
+def test_lookup_normalizes_input(rcac_source_dirs):
+    """rcac_lookup('CC', '43.922.546') matches record stored as '43922546'."""
+    from sip_engine.data.rcac_builder import build_rcac
+    from sip_engine.data.rcac_lookup import rcac_lookup, reset_rcac_cache
+
+    build_rcac(force=True)
+    reset_rcac_cache()
+
+    # resp_fiscales fixture has "43922546" stored (MARIA GARCIA, inferred CC)
+    # Lookup with dotted form should normalize and hit
+    record = rcac_lookup("CC", "43.922.546")
+    assert record is not None, (
+        "Expected record for ('CC', '43922546') via dotted-form lookup, got None"
+    )
+    assert record["numero_documento"] == "43922546"
+
+
+def test_lookup_malformed_returns_none(rcac_source_dirs):
+    """rcac_lookup('CC', '12') returns None for short (malformed) number."""
+    from sip_engine.data.rcac_builder import build_rcac
+    from sip_engine.data.rcac_lookup import rcac_lookup, reset_rcac_cache
+
+    build_rcac(force=True)
+    reset_rcac_cache()
+
+    # '12' -> 2 digits -> malformed -> return None immediately
+    assert rcac_lookup("CC", "12") is None
+
+
+def test_lookup_en_multas_secop_flag(rcac_source_dirs):
+    """Build with multas source data; verify en_multas_secop=True on returned record."""
+    from sip_engine.data.rcac_builder import build_rcac
+    from sip_engine.data.rcac_lookup import rcac_lookup, reset_rcac_cache
+
+    build_rcac(force=True)
+    reset_rcac_cache()
+
+    # multas fixture row 1: col_5=87654321, col_6=PEDRO RAMIREZ -> CC (8 digits)
+    record = rcac_lookup("CC", "87654321")
+    assert record is not None, "Expected record for multas identity ('CC', '87654321'), got None"
+    assert record["en_multas_secop"] is True
+
+
+def test_lookup_without_pkl_raises(tmp_path, monkeypatch):
+    """get_rcac_index() raises FileNotFoundError when no pkl file exists."""
+    from sip_engine.data.rcac_lookup import get_rcac_index, reset_rcac_cache
+
+    # Point artifacts dir to an empty temp directory (no rcac.pkl)
+    artifacts_dir = tmp_path / "artifacts"
+    artifacts_dir.mkdir()
+    monkeypatch.setenv("SIP_ARTIFACTS_DIR", str(artifacts_dir))
+    reset_rcac_cache()
+
+    with pytest.raises(FileNotFoundError, match="rcac.pkl"):
+        get_rcac_index()
