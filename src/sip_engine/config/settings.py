@@ -62,6 +62,7 @@ class Settings:
     artifacts_rcac_dir: Path = field(default=None)        # type: ignore[assignment]
     artifacts_features_dir: Path = field(default=None)    # type: ignore[assignment]
     artifacts_iric_dir: Path = field(default=None)        # type: ignore[assignment]
+    artifacts_labels_dir: Path = field(default=None)      # type: ignore[assignment]
 
     # ------------------------------------------------------------------ #
     # SECOP CSV paths (9 files, derived in __post_init__)                 #
@@ -104,6 +105,7 @@ class Settings:
     feature_registry_path: Path = field(default=None)  # type: ignore[assignment]
     rcac_path: Path = field(default=None)               # type: ignore[assignment]
     rcac_bad_rows_path: Path = field(default=None)      # type: ignore[assignment]
+    labels_path: Path = field(default=None)             # type: ignore[assignment]
 
     # ------------------------------------------------------------------ #
     # Encoding constants                                                  #
@@ -145,6 +147,7 @@ class Settings:
         self.artifacts_rcac_dir = self.artifacts_dir / "rcac"
         self.artifacts_features_dir = self.artifacts_dir / "features"
         self.artifacts_iric_dir = self.artifacts_dir / "iric"
+        self.artifacts_labels_dir = self.artifacts_dir / "labels"
 
         # ---- Derive SECOP CSV paths ----
         self.contratos_path = self.secop_dir / "contratos_SECOP.csv"
@@ -178,6 +181,7 @@ class Settings:
         )
         self.rcac_path = self.artifacts_rcac_dir / "rcac.pkl"
         self.rcac_bad_rows_path = self.artifacts_rcac_dir / "rcac_bad_rows.csv"
+        self.labels_path = self.artifacts_labels_dir / "labels.parquet"
 
 
 @functools.lru_cache(maxsize=1)

@@ -237,7 +237,7 @@ SUSPENSIONES_DTYPE: dict[str, str] = {
 }
 
 
-# ---- adiciones.csv (5 cols, ~1.3k rows, tiny) ----
+# ---- adiciones.csv (5 cols, ~14.4M rows, ~4 GB) ----
 # Used for M1/M2 label construction (Phase 4). All columns needed.
 ADICIONES_USECOLS: list[str] = [
     "identificador",
@@ -250,6 +250,7 @@ ADICIONES_USECOLS: list[str] = [
 ADICIONES_DTYPE: dict[str, str] = {
     "identificador": str,
     "id_contrato": str,
+    "tipo": str,
 }
 
 
