@@ -145,7 +145,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Project Foundation | 2/2 | Complete   | 2026-03-01 |
-| 2. Data Loaders | 0/TBD | Not started | - |
+| 2. Data Loaders | 1/2 | In progress | - |
 | 3. RCAC Builder | 0/TBD | Not started | - |
 | 4. Label Construction | 0/TBD | Not started | - |
 | 5. Feature Engineering | 0/TBD | Not started | - |

@@ -5,32 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 1 — Project Foundation
+**Current focus:** Phase 2 — Data Loaders
 
 ## Current Position
 
-Phase: 1 of 9 (Project Foundation)
-Plan: 2 of 2 completed in current phase
-Status: Phase 1 complete — ready for Phase 2
-Last activity: 2026-03-01 — Plan 01-02 complete: Settings dataclass + model_weights.json + requirements.lock
+Phase: 2 of 9 (Data Loaders)
+Plan: 1 of 2 completed in current phase
+Status: Phase 2 in progress — Plan 02-01 complete, Plan 02-02 ready
+Last activity: 2026-03-01 — Plan 02-01 complete: schemas.py, Settings.paco_encoding fix, test fixtures + scaffold
 
-Progress: [██░░░░░░░░] 11%
+Progress: [███░░░░░░░] 17%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 3.5 min
-- Total execution time: 0.1 hours
+- Total plans completed: 3
+- Average duration: 3.7 min
+- Total execution time: 0.2 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-project-foundation | 2 | 7 min | 3.5 min |
+| 02-data-loaders | 1 | 4 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 2 min
+- Last 5 plans: 5 min, 2 min, 4 min
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -52,6 +53,9 @@ Recent decisions affecting current work:
 - 01-02: Path(__file__).resolve() used (not os.getcwd()) — ensures Settings works from any working directory.
 - 01-02: SIP_* env var overrides applied in __post_init__ after defaults — partial override supported.
 - 01-02: model_weights.json is a committed, user-editable file — CRI weight tuning requires no code change.
+- 02-01: Column names verified against actual file headers before writing schema constants (plan had approximate names).
+- 02-01: Settings.paco_encoding corrected to 'utf-8' — all 5 PACO files are UTF-8, not Latin-1 (empirically confirmed).
+- 02-01: PROCESOS schema includes Respuestas/Proveedores count cols (N_BIDS signal) proactively added for Phase 5.
 
 ### Pending Todos
 
@@ -60,11 +64,11 @@ None yet.
 ### Blockers/Concerns
 
 - **adiciones.csv status**: PROJECT.md notes this file is "(downloading)". M1 and M2 labels (Phase 4) are blocked until this file is available. Confirm download before planning Phase 4.
-- **SIRI positional columns**: Column positions 5 and 6 for doc type/number in `sanciones_SIRI_PACO.csv` require ground-truth verification before Phase 3 parser is built.
+- **SIRI positional columns**: RESOLVED in 02-01 — col[4]=tipo_documento, col[5]=numero_documento verified empirically. usecols=[4,5] is correct.
 - **Python 3.14 wheel risk**: RESOLVED — switched to Python 3.12.12 via pyenv (01-01 complete).
 
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 01-02-PLAN.md — Settings dataclass + model_weights.json + requirements.lock done. Phase 1 complete. Ready for Phase 2.
-Resume file: .planning/phases/01-project-foundation/01-02-SUMMARY.md
+Stopped at: Completed 02-01-PLAN.md — schemas.py + Settings.paco_encoding fix + test fixtures/scaffold done. Plan 02-02 (loaders.py) ready.
+Resume file: .planning/phases/02-data-loaders/02-01-SUMMARY.md
