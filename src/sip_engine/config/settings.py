@@ -108,7 +108,7 @@ class Settings:
     # Encoding constants                                                  #
     # ------------------------------------------------------------------ #
     secop_encoding: str = "utf-8"
-    paco_encoding: str = "latin-1"
+    paco_encoding: str = "utf-8"  # All PACO files are UTF-8 (verified empirically, DATA-10)
 
     # ------------------------------------------------------------------ #
     # Processing constants                                                #
