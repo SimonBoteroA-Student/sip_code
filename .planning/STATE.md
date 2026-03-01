@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 2 of 9 (Data Loaders) — COMPLETE
-Plan: 2 of 2 completed in current phase
-Status: Phase 2 complete — all data loaders implemented. Phase 3 ready.
-Last activity: 2026-03-01 — Plan 02-02 complete: 14 CSV loaders, 25 tests passing
+Phase: 3 of 9 (RCAC Builder) — IN PROGRESS
+Plan: 1 of 2 completed in current phase
+Status: Phase 3 Plan 01 complete — RCAC normalization engine + builder implemented, 34 tests passing.
+Last activity: 2026-03-01 — Plan 03-01 complete: rcac_builder.py, normalize_numero/tipo/_infer_tipo, build_rcac()
 
-Progress: [████░░░░░░] 22%
+Progress: [█████░░░░░] 27%
 
 ## Performance Metrics
 
@@ -29,9 +29,10 @@ Progress: [████░░░░░░] 22%
 |-------|-------|-------|----------|
 | 01-project-foundation | 2 | 7 min | 3.5 min |
 | 02-data-loaders | 2 | 8 min | 4 min |
+| 03-rcac-builder | 1 | 4 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 2 min, 4 min, 4 min
+- Last 5 plans: 5 min, 2 min, 4 min, 4 min, 4 min
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -58,6 +59,10 @@ Recent decisions affecting current work:
 - 02-01: PROCESOS schema includes Respuestas/Proveedores count cols (N_BIDS signal) proactively added for Phase 5.
 - [Phase 02-data-loaders]: _load_csv() private helper eliminates code duplication across 14 loaders — each public function is a 3-line wrapper
 - [Phase 02-data-loaders]: autouse clear_settings_cache fixture in conftest.py isolates lru_cache singleton per test — enables monkeypatch.setenv(SIP_*) overrides
+- [03-01]: normalize_numero uses re.sub(r'[^\d]', '') — strips ALL non-digits including letters (handles "TIA820427KP7" -> "8204277")
+- [03-01]: resp_fiscales "Tipo y Num Docuemento" is purely numeric — no type+number splitting needed, just normalize_numero()
+- [03-01]: en_sanciones_penales always False in v1 — FGN source has no person-level document IDs
+- [03-01]: build_rcac() uses defaultdict(set) keyed on (tipo, num) — set membership ensures duplicate-source rows count as 1 distinct source
 
 ### Pending Todos
 
@@ -72,5 +77,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 02-02-PLAN.md — all 14 CSV loaders implemented, 25 tests passing. Phase 2 complete, Phase 3 ready.
-Resume file: .planning/phases/02-data-loaders/02-02-SUMMARY.md
+Stopped at: Completed 03-01-PLAN.md — RCAC normalization engine + build_rcac() implemented, 34 new tests, 59 total passing.
+Resume file: .planning/phases/03-rcac-builder/03-01-SUMMARY.md

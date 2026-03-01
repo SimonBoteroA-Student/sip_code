@@ -9,14 +9,14 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 
 ### Data Infrastructure
 
-- [ ] **DATA-01**: System can build RCAC from 6 core sources: Comptroller bulletins (`boletines.csv`), SIRI sanctions (`sanciones_SIRI_PACO.csv`), fiscal responsibilities (`responsabilidades_fiscales_PACO.csv`), SECOP fines (`multas_SECOP_PACO.csv`), SIC collusion (`colusiones_en_contratacion_SIC.csv`), criminal sanctions FGN (`sanciones_penales_FGN.csv`)
-- [ ] **DATA-02**: System normalizes document identifiers across all sources — tipo_documento to controlled catalog (CC, NIT, CE, PASAPORTE, OTRO), numero_documento to pure numeric string (strip dots, dashes, spaces, NIT check digits)
-- [ ] **DATA-03**: System deduplicates RCAC records by (tipo_documento, numero_documento), aggregating counts across sources and tracking `num_fuentes_distintas`
-- [ ] **DATA-04**: System handles SIRI file (`sanciones_SIRI_PACO.csv`) by positional column parsing (no headers — columns 5 and 6 for document type and number)
-- [ ] **DATA-05**: System handles `responsabilidades_fiscales_PACO.csv` combined "Tipo y Num Documento" field parsing
+- [x] **DATA-01**: System can build RCAC from 6 core sources: Comptroller bulletins (`boletines.csv`), SIRI sanctions (`sanciones_SIRI_PACO.csv`), fiscal responsibilities (`responsabilidades_fiscales_PACO.csv`), SECOP fines (`multas_SECOP_PACO.csv`), SIC collusion (`colusiones_en_contratacion_SIC.csv`), criminal sanctions FGN (`sanciones_penales_FGN.csv`)
+- [x] **DATA-02**: System normalizes document identifiers across all sources — tipo_documento to controlled catalog (CC, NIT, CE, PASAPORTE, OTRO), numero_documento to pure numeric string (strip dots, dashes, spaces, NIT check digits)
+- [x] **DATA-03**: System deduplicates RCAC records by (tipo_documento, numero_documento), aggregating counts across sources and tracking `num_fuentes_distintas`
+- [x] **DATA-04**: System handles SIRI file (`sanciones_SIRI_PACO.csv`) by positional column parsing (no headers — columns 5 and 6 for document type and number)
+- [x] **DATA-05**: System handles `responsabilidades_fiscales_PACO.csv` combined "Tipo y Num Documento" field parsing
 - [x] **DATA-06**: System processes CSV files up to 5.3 GB without memory crashes using chunked reading strategies
 - [x] **DATA-07**: System loads all local SECOP CSV files with correct dtypes and column selection to minimize memory footprint
-- [ ] **DATA-08**: System serializes RCAC as indexed dict via joblib for fast loading
+- [x] **DATA-08**: System serializes RCAC as indexed dict via joblib for fast loading
 - [ ] **DATA-09**: System provides O(1) RCAC lookup by (document_type, document_number)
 - [x] **DATA-10**: System handles encoding differences across sources (UTF-8 for SECOP, Latin-1 for PACO files) without silent data corruption
 - [ ] **DATA-11**: System constructs labels for M1 (cost overruns) and M2 (delays) from amendments dataset (`adiciones.csv`): M1=1 if contract has ≥1 value amendment, M2=1 if contract has ≥1 time amendment
@@ -134,14 +134,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | Phase 3 | Pending |
-| DATA-02 | Phase 3 | Pending |
-| DATA-03 | Phase 3 | Pending |
-| DATA-04 | Phase 3 | Pending |
-| DATA-05 | Phase 3 | Pending |
+| DATA-01 | Phase 3 | Complete |
+| DATA-02 | Phase 3 | Complete |
+| DATA-03 | Phase 3 | Complete |
+| DATA-04 | Phase 3 | Complete |
+| DATA-05 | Phase 3 | Complete |
 | DATA-06 | Phase 2 | Complete |
 | DATA-07 | Phase 2 | Complete |
-| DATA-08 | Phase 3 | Pending |
+| DATA-08 | Phase 3 | Complete |
 | DATA-09 | Phase 3 | Pending |
 | DATA-10 | Phase 2 | Complete |
 | DATA-11 | Phase 4 | Pending |

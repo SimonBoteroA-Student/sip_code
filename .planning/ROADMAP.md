@@ -62,9 +62,9 @@ Plans:
   3. SIRI file is parsed by positional columns 5 and 6 (no headers); `responsabilidades_fiscales_PACO.csv` combined "Tipo y Num Documento" field is correctly split
   4. Records from multiple sources for the same person are deduplicated into a single entry with `num_fuentes_distintas` correctly counted
   5. `rcac_lookup.py` returns a record in O(1) time for any (document_type, document_number) key, returning `None` for unknown identifiers
-**Plans:** 2 plans
+**Plans:** 2 plans (1 complete)
 Plans:
-- [ ] 03-01-PLAN.md — RCAC normalization engine and builder (TDD: normalization, dedup, serialization)
+- [x] 03-01-PLAN.md — RCAC normalization engine and builder (TDD: normalization, dedup, serialization)
 - [ ] 03-02-PLAN.md — RCAC lookup interface, CLI wiring, and package exports
 
 ### Phase 4: Label Construction
@@ -149,7 +149,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Project Foundation | 2/2 | Complete   | 2026-03-01 |
 | 2. Data Loaders | 2/2 | Complete   | 2026-03-01 |
-| 3. RCAC Builder | 0/TBD | Not started | - |
+| 3. RCAC Builder | 1/2 | In progress | - |
 | 4. Label Construction | 0/TBD | Not started | - |
 | 5. Feature Engineering | 0/TBD | Not started | - |
 | 6. IRIC | 0/TBD | Not started | - |
