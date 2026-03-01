@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 4 of 9 (Label Construction) — COMPLETE
-Plan: 2 of 2 completed in current phase
-Status: Plan 04-02 complete — M3/M4 labels, boletines set, parquet output, CLI wiring, 33 TDD tests. 98 tests passing.
-Last activity: 2026-03-01 — Plan 04-02 complete: label_builder.py complete, build-labels CLI, pyarrow
+Phase: 5 of 9 (Feature Engineering) — IN PROGRESS
+Plan: 1 of 3 completed in current phase
+Status: Plan 05-01 complete — Provider History Index with temporal leak guard, schema extensions, 20 tests passing (118 total).
+Last activity: 2026-03-01 — Plan 05-01 complete: provider_history.py, schemas extended, settings extended
 
-Progress: [████████░░] 44%
+Progress: [█████████░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 3.8 min
-- Total execution time: 0.4 hours
+- Total plans completed: 7
+- Average duration: 3.9 min
+- Total execution time: 0.5 hours
 
 **By Phase:**
 
@@ -31,9 +31,10 @@ Progress: [████████░░] 44%
 | 02-data-loaders | 2 | 8 min | 4 min |
 | 03-rcac-builder | 2 | 6 min | 3 min |
 | 04-label-construction | 2 | 7 min | 3.5 min |
+| 05-feature-engineering | 1 | 4 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 4 min, 4 min, 3 min, 4 min
+- Last 5 plans: 4 min, 4 min, 3 min, 4 min, 4 min
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -73,6 +74,10 @@ Recent decisions affecting current work:
 - [04-02]: _build_boletines_set uses iterrows() for per-row normalization — clarity over vectorization (boletines is small)
 - [04-02]: M4 passes raw values to rcac_lookup() which normalizes internally — avoids double normalization
 - [04-02]: Null trigger is is_malformed(normalized_num) OR original isna() — covers empty string and NaN provider doc inputs
+- [05-01]: Parallel sorted arrays per provider (dates/valores/deptos/m1/m2) chosen over list-of-dicts — enables bisect_left on plain list
+- [05-01]: bisect_left enforces strict < as_of_date — same-day contracts placed at or after cutoff index, no extra comparison needed
+- [05-01]: pd.NA from nullable Int8 labels treated as 0 for M1/M2 counting — pd.isna() check before int() cast prevents TypeError
+- [05-01]: Null Fecha de Firma rows logged and skipped (not raised as error) — 7.2% null rate in contratos is expected
 
 ### Pending Todos
 
@@ -87,5 +92,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-feature-engineering/05-CONTEXT.md
+Stopped at: Completed 05-01-PLAN.md — Provider History Index infrastructure
+Resume file: .planning/phases/05-feature-engineering/05-02-PLAN.md

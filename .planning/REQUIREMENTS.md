@@ -29,8 +29,8 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 - [ ] **FEAT-02**: System generates temporal features (Category B): `dias_firma_a_inicio`, `duracion_contrato_dias`, `dias_publicidad`, `dias_decision`, `dias_proveedor_registrado`, `firma_posterior_a_inicio`, `mes_firma`, `trimestre_firma`, `dias_a_proxima_eleccion`
 - [ ] **FEAT-03**: System generates provider/competition features (Category C, excluding RCAC-derived): `tipo_persona_proveedor`, `num_contratos_previos`, `num_ofertas_recibidas`, `num_proponentes`, `proponente_unico`, `num_actividades_economicas`, `valor_total_contratos_previos`, `num_sobrecostos_previos`, `num_retrasos_previos`
 - [ ] **FEAT-04**: System generates IRIC scores as model input features (Category D): `iric_score`, `iric_competencia`, `iric_transparencia`, `iric_anomalias`
-- [ ] **FEAT-05**: System enforces temporal leak guard — all provider history features and RCAC lookups use `as_of_date` = contract signing date to prevent future information leakage during training
-- [ ] **FEAT-06**: System precomputes Provider History Index offline (num_contratos_previos, valor_total_contratos_previos, num_sobrecostos_previos, num_retrasos_previos per provider at each point in time) serialized to `.pkl`
+- [x] **FEAT-05**: System enforces temporal leak guard — all provider history features and RCAC lookups use `as_of_date` = contract signing date to prevent future information leakage during training
+- [x] **FEAT-06**: System precomputes Provider History Index offline (num_contratos_previos, valor_total_contratos_previos, num_sobrecostos_previos, num_retrasos_previos per provider at each point in time) serialized to `.pkl`
 - [ ] **FEAT-07**: Feature engineering pipeline (`pipeline.py`) uses identical code for both offline batch processing and future online per-contract inference — same transformations, same column ordering
 - [ ] **FEAT-08**: System excludes all post-execution variables from feature vectors: no execution start/end dates, no payment data, no actual quantities delivered
 - [ ] **FEAT-09**: RCAC-derived features (proveedor_en_rcac, proveedor_responsable_fiscal, etc.) are explicitly EXCLUDED from XGBoost model inputs — RCAC is for labels, background checks, and the API response only
@@ -151,8 +151,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FEAT-02 | Phase 5 | Pending |
 | FEAT-03 | Phase 5 | Pending |
 | FEAT-04 | Phase 6 | Pending |
-| FEAT-05 | Phase 5 | Pending |
-| FEAT-06 | Phase 5 | Pending |
+| FEAT-05 | Phase 5 | Complete |
+| FEAT-06 | Phase 5 | Complete |
 | FEAT-07 | Phase 5 | Pending |
 | FEAT-08 | Phase 5 | Pending |
 | FEAT-09 | Phase 5 | Pending |

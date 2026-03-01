@@ -158,7 +158,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. Data Loaders | 2/2 | Complete   | 2026-03-01 |
 | 3. RCAC Builder | 2/2 | Complete | 2026-03-01 |
 | 4. Label Construction | 2/2 | Complete   | 2026-03-01 |
-| 5. Feature Engineering | 0/TBD | Not started | - |
+| 5. Feature Engineering | 1/3 | In progress | - |
 | 6. IRIC | 0/TBD | Not started | - |
 | 7. Model Training | 0/TBD | Not started | - |
 | 8. Evaluation | 0/TBD | Not started | - |
