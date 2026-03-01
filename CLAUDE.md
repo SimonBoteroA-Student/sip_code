@@ -15,4 +15,4 @@ If `/gsd:` commands, `@` references, or `.planning/` files don't work, read `.ag
 
 
 ## Rules 
-1. Update .claude/projects/-Users-simonb-SIP-Code/memory/MEMORY.md often, after an important step is commited, with concise and condensed context. Do not include more than what is strictly necessary to pick off from. 
+1. Update .claude/projects/-Users-simonb-SIP-Code/memory/MEMORY.md often, after an important step is done, with concise and condensed context. Also update the gsd files like ROADMAP.md. Do not include more than what is strictly necessary to pick off from. This should be done so claude can pick off if a rate limit is hit mid-session. 
