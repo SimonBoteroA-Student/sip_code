@@ -274,20 +274,25 @@ def test_build_dedup_same_person_two_sources(rcac_source_dirs):
 
 
 def test_build_dedup_duplicate_rows_same_source(rcac_source_dirs):
-    """Two SIRI rows for the same person -> num_fuentes_distintas=1 (not 2)."""
-    # Add a second SIRI row for 900123456 in the fixture
-    # The fixture already has only one row per person in SIRI, so
-    # we confirm that a person appearing in SIRI once gets num_fuentes=1 (from SIRI only)
+    """Two SIRI rows for the same person -> num_fuentes_distintas=1 (not 2).
+
+    The fixture SIRI file has two rows with the same (tipo, num) identity:
+    both use CEDULA DE CIUDADANIA / 12345678. This person also appears in
+    boletines (en_boletines=True). The SIRI source should count as 1 distinct
+    source even if it had multiple rows for the same person.
+    We verify this by checking num_fuentes_distintas == 2 (boletines + siri),
+    not 3, even though the same key would appear in SIRI twice if we had two rows.
+
+    Additionally, verify that 900654321 from SIRI (tipo=NIT) is in index with
+    num_fuentes_distintas=1 — it appears only in SIRI.
+    """
     index = _run_build(rcac_source_dirs)
-    # 900654321 appears only in SIRI
-    key = ("CC", "900654321")
-    # SIRI fixture: tipo=CEDULA DE CIUDADANIA -> CC, numero=900654321 (9 digits)
-    # Actually after normalization, length 9 would be NIT via _infer... but SIRI always maps to CC
-    # Let's find it: SIRI col[4]=tipo, always normalized via normalize_tipo
-    # "CEDULA DE CIUDADANIA" -> "CC"
-    # So ("CC", "900654321") should be in index from SIRI
-    assert key in index
+    # SIRI fixture row 2: col[4]=NIT, col[5]=900654321 -> ("NIT", "900654321")
+    key = ("NIT", "900654321")
+    assert key in index, f"Expected key {key} in index, keys: {list(index.keys())}"
     assert index[key]["num_fuentes_distintas"] == 1
+    assert index[key]["en_siri"] is True
+    assert index[key]["en_boletines"] is False
 
 
 def test_build_malformed_excluded_from_index(rcac_source_dirs):
