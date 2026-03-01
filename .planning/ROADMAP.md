@@ -45,9 +45,12 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. `procesos_SECOP.csv` (5.3 GB) and `ofertas_proceso_SECOP.csv` (3.4 GB) load completely using chunked iteration without exceeding available RAM
   2. All local CSV files load with correct dtypes and column selection (`usecols`, `dtype` arguments) to minimize memory footprint
-  3. Each CSV file is read with its correct encoding (UTF-8 for SECOP, Latin-1 for PACO files) — no mojibake or silent data corruption in string fields
+  3. Each CSV file is read with its correct encoding (UTF-8 for all files — PACO files verified UTF-8 per research) — no mojibake or silent data corruption in string fields
   4. Loader functions are reusable across all data processing stages (RCAC building, feature engineering, label construction)
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 02-01-PLAN.md — Column schemas, Settings encoding fix, test scaffold
+- [ ] 02-02-PLAN.md — All 14 loader generator functions with tqdm, logging, and encoding handling
 
 ### Phase 3: RCAC Builder
 **Goal**: A validated Consolidated Corruption Background Registry (RCAC) built from 6 sanction sources, serialized to `artifacts/rcac.pkl`, providing O(1) lookup by (document_type, document_number)
