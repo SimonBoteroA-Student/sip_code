@@ -92,7 +92,11 @@ Plans:
   4. All post-execution variables (execution start/end dates, payment data) are absent from the feature vector
   5. RCAC-derived features (`proveedor_en_rcac`, `proveedor_responsable_fiscal`, etc.) are explicitly excluded from the XGBoost feature vector
   6. Categorical values representing less than 0.1% of observations are grouped into "Other" before encoding
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 05-01-PLAN.md — Infrastructure: schema additions, Settings paths, Provider History Index (TDD)
+- [ ] 05-02-PLAN.md — Category A/B/C feature extractors and categorical encoding (TDD)
+- [ ] 05-03-PLAN.md — Pipeline integration (build_features/compute_features), exclusion enforcement, CLI
 
 ### Phase 6: IRIC
 **Goal**: The Contractual Irregularity Risk Index (IRIC) calculates all 11 binary components plus kurtosis and normalized relative difference anomaly measures, calibrated at national level by contract type using training data only, and outputs `iric_thresholds.json`
