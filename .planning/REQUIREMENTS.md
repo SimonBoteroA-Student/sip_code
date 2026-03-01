@@ -25,16 +25,16 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 
 ### Feature Engineering
 
-- [ ] **FEAT-01**: System generates contract features (Category A): `valor_contrato`, `tipo_contrato_cat`, `modalidad_contratacion_cat`, `es_contratacion_directa`, `es_regimen_especial`, `es_servicios_profesionales`, `unspsc_categoria`, `departamento_cat`, `origen_recursos_cat`, `tiene_justificacion_modalidad`
-- [ ] **FEAT-02**: System generates temporal features (Category B): `dias_firma_a_inicio`, `duracion_contrato_dias`, `dias_publicidad`, `dias_decision`, `dias_proveedor_registrado`, `firma_posterior_a_inicio`, `mes_firma`, `trimestre_firma`, `dias_a_proxima_eleccion`
-- [ ] **FEAT-03**: System generates provider/competition features (Category C, excluding RCAC-derived): `tipo_persona_proveedor`, `num_contratos_previos`, `num_ofertas_recibidas`, `num_proponentes`, `proponente_unico`, `num_actividades_economicas`, `valor_total_contratos_previos`, `num_sobrecostos_previos`, `num_retrasos_previos`
+- [x] **FEAT-01**: System generates contract features (Category A): `valor_contrato`, `tipo_contrato_cat`, `modalidad_contratacion_cat`, `es_contratacion_directa`, `es_regimen_especial`, `es_servicios_profesionales`, `unspsc_categoria`, `departamento_cat`, `origen_recursos_cat`, `tiene_justificacion_modalidad`
+- [x] **FEAT-02**: System generates temporal features (Category B): `dias_firma_a_inicio`, `duracion_contrato_dias`, `dias_publicidad`, `dias_decision`, `dias_proveedor_registrado`, `firma_posterior_a_inicio`, `mes_firma`, `trimestre_firma`, `dias_a_proxima_eleccion`
+- [x] **FEAT-03**: System generates provider/competition features (Category C, excluding RCAC-derived): `tipo_persona_proveedor`, `num_contratos_previos`, `num_ofertas_recibidas`, `num_proponentes`, `proponente_unico`, `num_actividades_economicas`, `valor_total_contratos_previos`, `num_sobrecostos_previos`, `num_retrasos_previos`
 - [ ] **FEAT-04**: System generates IRIC scores as model input features (Category D): `iric_score`, `iric_competencia`, `iric_transparencia`, `iric_anomalias`
 - [x] **FEAT-05**: System enforces temporal leak guard — all provider history features and RCAC lookups use `as_of_date` = contract signing date to prevent future information leakage during training
 - [x] **FEAT-06**: System precomputes Provider History Index offline (num_contratos_previos, valor_total_contratos_previos, num_sobrecostos_previos, num_retrasos_previos per provider at each point in time) serialized to `.pkl`
-- [ ] **FEAT-07**: Feature engineering pipeline (`pipeline.py`) uses identical code for both offline batch processing and future online per-contract inference — same transformations, same column ordering
-- [ ] **FEAT-08**: System excludes all post-execution variables from feature vectors: no execution start/end dates, no payment data, no actual quantities delivered
-- [ ] **FEAT-09**: RCAC-derived features (proveedor_en_rcac, proveedor_responsable_fiscal, etc.) are explicitly EXCLUDED from XGBoost model inputs — RCAC is for labels, background checks, and the API response only
-- [ ] **FEAT-10**: System groups low-frequency categorical values (< 0.1% of observations) into "Other" category to prevent sparse feature issues
+- [x] **FEAT-07**: Feature engineering pipeline (`pipeline.py`) uses identical code for both offline batch processing and future online per-contract inference — same transformations, same column ordering
+- [x] **FEAT-08**: System excludes all post-execution variables from feature vectors: no execution start/end dates, no payment data, no actual quantities delivered
+- [x] **FEAT-09**: RCAC-derived features (proveedor_en_rcac, proveedor_responsable_fiscal, etc.) are explicitly EXCLUDED from XGBoost model inputs — RCAC is for labels, background checks, and the API response only
+- [x] **FEAT-10**: System groups low-frequency categorical values (< 0.1% of observations) into "Other" category to prevent sparse feature issues
 
 ### IRIC
 
@@ -147,16 +147,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-11 | Phase 4 | Pending |
 | DATA-12 | Phase 4 | Complete |
 | DATA-13 | Phase 4 | Complete |
-| FEAT-01 | Phase 5 | Pending |
-| FEAT-02 | Phase 5 | Pending |
-| FEAT-03 | Phase 5 | Pending |
+| FEAT-01 | Phase 5 | Complete |
+| FEAT-02 | Phase 5 | Complete |
+| FEAT-03 | Phase 5 | Complete |
 | FEAT-04 | Phase 6 | Pending |
 | FEAT-05 | Phase 5 | Complete |
 | FEAT-06 | Phase 5 | Complete |
-| FEAT-07 | Phase 5 | Pending |
-| FEAT-08 | Phase 5 | Pending |
-| FEAT-09 | Phase 5 | Pending |
-| FEAT-10 | Phase 5 | Pending |
+| FEAT-07 | Phase 5 | Complete |
+| FEAT-08 | Phase 5 | Complete |
+| FEAT-09 | Phase 5 | Complete |
+| FEAT-10 | Phase 5 | Complete |
 | IRIC-01 | Phase 6 | Pending |
 | IRIC-02 | Phase 6 | Pending |
 | IRIC-03 | Phase 6 | Pending |

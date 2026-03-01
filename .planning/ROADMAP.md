@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Data Loaders** - Chunked CSV loading for all large SECOP files, correct dtypes/encoding, memory-efficient processing (completed 2026-03-01)
 - [x] **Phase 3: RCAC Builder** - 6-source sanction registry built, normalized, deduplicated, serialized, and queryable (completed 2026-03-01)
 - [x] **Phase 4: Label Construction** - M1/M2 labels from amendments, M3 from Comptroller bulletins, M4 from RCAC fines (completed 2026-03-01)
-- [ ] **Phase 5: Feature Engineering** - Shared feature pipeline (Categories A/B/C) with temporal leak guard and train-serve parity
+- [x] **Phase 5: Feature Engineering** - Shared feature pipeline (Categories A/B/C) with temporal leak guard and train-serve parity (completed 2026-03-01)
 - [ ] **Phase 6: IRIC** - 11-component irregularity index calculated, nationally calibrated by contract type, added as model feature
 - [ ] **Phase 7: Model Training** - 4 XGBoost classifiers trained with class imbalance handling and hyperparameter optimization
 - [ ] **Phase 8: Evaluation** - Full metrics suite (AUC-ROC, MAP@k, NDCG@k, Brier, Precision/Recall) with structured evaluation reports
@@ -92,7 +92,7 @@ Plans:
   4. All post-execution variables (execution start/end dates, payment data) are absent from the feature vector
   5. RCAC-derived features (`proveedor_en_rcac`, `proveedor_responsable_fiscal`, etc.) are explicitly excluded from the XGBoost feature vector
   6. Categorical values representing less than 0.1% of observations are grouped into "Other" before encoding
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 05-01-PLAN.md — Infrastructure: schema additions, Settings paths, Provider History Index (TDD)
 - [ ] 05-02-PLAN.md — Category A/B/C feature extractors and categorical encoding (TDD)
@@ -158,7 +158,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. Data Loaders | 2/2 | Complete   | 2026-03-01 |
 | 3. RCAC Builder | 2/2 | Complete | 2026-03-01 |
 | 4. Label Construction | 2/2 | Complete   | 2026-03-01 |
-| 5. Feature Engineering | 2/3 | In Progress|  |
+| 5. Feature Engineering | 3/3 | Complete   | 2026-03-01 |
 | 6. IRIC | 0/TBD | Not started | - |
 | 7. Model Training | 0/TBD | Not started | - |
 | 8. Evaluation | 0/TBD | Not started | - |

@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 5 — Feature Engineering
+**Current focus:** Phase 6 — IRIC (next phase)
 
 ## Current Position
 
-Phase: 5 of 9 (Feature Engineering) — IN PROGRESS
-Plan: 2 of 3 completed in current phase
-Status: Plan 05-02 complete — Category A/B/C feature extractors + encoding module, 61 tests passing (159 total).
-Last activity: 2026-03-01 — Plan 05-02 complete: category_a.py, category_b.py, category_c.py, encoding.py
+Phase: 5 of 9 (Feature Engineering) — COMPLETE
+Plan: 3 of 3 completed in current phase
+Status: Plan 05-03 complete — pipeline.py (batch + online paths), build-features CLI, 76 feature tests passing (174 total). Phase 5 COMPLETE.
+Last activity: 2026-03-01 — Plan 05-03 complete: pipeline.py, __main__.py build-features, features/__init__.py re-exports
 
-Progress: [█████████░] 56%
+Progress: [██████████] 62%
 
 ## Performance Metrics
 
@@ -31,10 +31,10 @@ Progress: [█████████░] 56%
 | 02-data-loaders | 2 | 8 min | 4 min |
 | 03-rcac-builder | 2 | 6 min | 3 min |
 | 04-label-construction | 2 | 7 min | 3.5 min |
-| 05-feature-engineering | 2 | 9 min | 4.5 min |
+| 05-feature-engineering | 3 | 14 min | 4.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 4 min, 4 min, 3 min, 4 min, 4 min
+- Last 5 plans: 4 min, 3 min, 4 min, 5 min, 5 min
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -80,6 +80,9 @@ Recent decisions affecting current work:
 - [05-01]: Null Fecha de Firma rows logged and skipped (not raised as error) — 7.2% null rate in contratos is expected
 - [Phase 05-02]: compute_category_c receives pre-fetched provider_history dict — caller controls lookup, enabling test injection without mocking module-level index cache
 - [Phase 05-02]: RARE_THRESHOLD uses strictly-greater-than (freq > threshold) — values at exactly 0.1% treated as rare and grouped into Other
+- [05-03]: Procesos lookup built as complete in-memory dict — O(1) per-contract join replaces expensive per-row streaming of 6.4M-row file
+- [05-03]: Fecha de Firma injected into procesos_data dict — category_b.compute_category_b uses procesos_data.get("Fecha de Firma") for dias_decision; contract signing date is correct proxy
+- [05-03]: category_a NaN-safe coercion — pandas loader returns float NaN for empty CSV fields; (val or '') pattern fails since NaN is truthy
 
 ### Pending Todos
 
@@ -94,5 +97,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 05-02-PLAN.md — Category A/B/C feature extractors + encoding module
-Resume file: .planning/phases/05-feature-engineering/05-03-PLAN.md
+Stopped at: Completed 05-03-PLAN.md — pipeline.py (batch + online paths), build-features CLI, Phase 5 COMPLETE
+Resume file: .planning/phases/06-iric/ (next phase)
