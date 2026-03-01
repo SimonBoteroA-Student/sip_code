@@ -37,6 +37,7 @@ CONTRATOS_USECOLS: list[str] = [
     "Nombre Entidad",              # contracting entity name
     "Nit Entidad",                 # entity NIT — str (mixed format)
     "Departamento",                # geographic dept
+    "Codigo de Categoria Principal",  # procurement category code (Phase 5, Cat-A feature)
     "Ciudad",                      # city
     "Objeto del Contrato",         # contract description
     "Fecha de Firma",              # signature date
@@ -52,6 +53,7 @@ CONTRATOS_DTYPE: dict[str, str] = {
     "Documento Proveedor": str,     # NIT/CC — never cast to int
     "Nit Entidad": str,             # mixed format (with/without hyphens)
     "Valor del Contrato": str,      # "$10,979,236,356" format — clean post-load
+    "Codigo de Categoria Principal": str,  # category code — keep as str
 }
 
 CONTRATOS_CURRENCY_COLS: list[str] = ["Valor del Contrato"]
@@ -80,6 +82,9 @@ PROCESOS_USECOLS: list[str] = [
     "Adjudicado",
     "Respuestas al Procedimiento", # bidder count (N_BIDS signal)
     "Proveedores Unicos con Respuestas",
+    "ID del Portafolio",           # join key: links to contratos "Proceso de Compra" (~60.9% match)
+    "Fecha de Recepcion de Respuestas",  # bid window end date (Phase 5, Cat-B feature)
+    "Fecha Adjudicacion",          # award date (Phase 5, Cat-B feature)
 ]
 
 PROCESOS_DTYPE: dict[str, str] = {
@@ -90,6 +95,7 @@ PROCESOS_DTYPE: dict[str, str] = {
     "NIT del Proveedor Adjudicado": str,
     "Precio Base": str,             # "$X,XXX" format — clean post-load
     "Valor Total Adjudicacion": str,  # "$X,XXX" format — clean post-load
+    "ID del Portafolio": str,       # join key — keep as str (mixed format)
 }
 
 PROCESOS_CURRENCY_COLS: list[str] = ["Precio Base", "Valor Total Adjudicacion"]

@@ -106,6 +106,9 @@ class Settings:
     rcac_path: Path = field(default=None)               # type: ignore[assignment]
     rcac_bad_rows_path: Path = field(default=None)      # type: ignore[assignment]
     labels_path: Path = field(default=None)             # type: ignore[assignment]
+    provider_history_index_path: Path = field(default=None)  # type: ignore[assignment]
+    encoding_mappings_path: Path = field(default=None)       # type: ignore[assignment]
+    features_path: Path = field(default=None)                # type: ignore[assignment]
 
     # ------------------------------------------------------------------ #
     # Encoding constants                                                  #
@@ -182,6 +185,11 @@ class Settings:
         self.rcac_path = self.artifacts_rcac_dir / "rcac.pkl"
         self.rcac_bad_rows_path = self.artifacts_rcac_dir / "rcac_bad_rows.csv"
         self.labels_path = self.artifacts_labels_dir / "labels.parquet"
+        self.provider_history_index_path = (
+            self.artifacts_features_dir / "provider_history_index.pkl"
+        )
+        self.encoding_mappings_path = self.artifacts_features_dir / "encoding_mappings.json"
+        self.features_path = self.artifacts_features_dir / "features.parquet"
 
 
 @functools.lru_cache(maxsize=1)

@@ -42,8 +42,8 @@ _CONTRATOS_HEADER = (
     "Proceso de Compra,ID Contrato,Referencia del Contrato,Estado Contrato,"
     "Tipo de Contrato,Modalidad de Contratacion,Justificacion Modalidad de Contratacion,"
     "TipoDocProveedor,Documento Proveedor,Proveedor Adjudicado,Origen de los Recursos,"
-    "Valor del Contrato,Nombre Entidad,Nit Entidad,Departamento,Ciudad,"
-    "Objeto del Contrato,Fecha de Firma,Fecha de Inicio del Contrato,Fecha de Fin del Contrato"
+    "Valor del Contrato,Nombre Entidad,Nit Entidad,Departamento,Codigo de Categoria Principal,"
+    "Ciudad,Objeto del Contrato,Fecha de Firma,Fecha de Inicio del Contrato,Fecha de Fin del Contrato"
 )
 
 # Header for adiciones.csv (must match ADICIONES_USECOLS exactly)
@@ -62,8 +62,8 @@ def _make_contrato_row(proceso, id_contrato, tipo_doc, doc_num):
         f"{proceso},{id_contrato},REF-{id_contrato},Liquidado,"
         f"Prestacion de Servicios,Contratacion Directa,N/A,"
         f"{tipo_doc},{doc_num},EMPRESA TEST,Recursos Propios,"
-        f"$1000000,ENTIDAD TEST,899999999,Cundinamarca,Bogota,"
-        f"Servicios,2023-01-01,2023-01-10,2023-12-31"
+        f"$1000000,ENTIDAD TEST,899999999,Cundinamarca,A1,"
+        f"Bogota,Servicios,2023-01-01,2023-01-10,2023-12-31"
     )
 
 
