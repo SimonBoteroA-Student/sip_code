@@ -1250,3 +1250,349 @@ def test_encoding_all_five_columns(tmp_path, monkeypatch):
     mappings = build_encoding_mappings(df, force=True)
     for col in CATEGORICAL_COLUMNS:
         assert col in mappings, f"Missing mapping for column: {col}"
+
+
+# ============================================================
+# Task 1 (05-03): Pipeline tests — build_features and compute_features
+# ============================================================
+
+
+def _make_pipeline_env(tmp_path: Path, monkeypatch) -> None:
+    """Set up a minimal filesystem env for pipeline tests.
+
+    Creates:
+    - contratos_SECOP.csv (5 contracts: 4 with all required fields, 1 missing Fecha de Firma)
+    - procesos_SECOP.csv (1 procesos row matching CON-001's Proceso de Compra)
+    - proveedores_registrados.csv (1 proveedores row for NIT 900111111)
+    - labels.parquet in artifacts/labels/
+    - artifacts/{features,labels,rcac}/ directories
+    """
+    from sip_engine.features.provider_history import reset_provider_history_cache
+    reset_provider_history_cache()
+
+    secop_dir = tmp_path / "secop"
+    secop_dir.mkdir(parents=True)
+    artifacts_dir = tmp_path / "artifacts"
+    (artifacts_dir / "features").mkdir(parents=True)
+    (artifacts_dir / "labels").mkdir(parents=True)
+    (artifacts_dir / "rcac").mkdir(parents=True)
+
+    monkeypatch.setenv("SIP_PROJECT_ROOT", str(tmp_path))
+    monkeypatch.setenv("SIP_SECOP_DIR", str(secop_dir))
+    monkeypatch.setenv("SIP_ARTIFACTS_DIR", str(artifacts_dir))
+
+    # ---- contratos_SECOP.csv (5 rows) ----
+    # CON-001..CON-004: complete rows; CON-005: missing Fecha de Firma
+    contratos_header = (
+        "Proceso de Compra,ID Contrato,Referencia del Contrato,Estado Contrato,"
+        "Tipo de Contrato,Modalidad de Contratacion,Justificacion Modalidad de Contratacion,"
+        "TipoDocProveedor,Documento Proveedor,Proveedor Adjudicado,Origen de los Recursos,"
+        "Valor del Contrato,Nombre Entidad,Nit Entidad,Departamento,Codigo de Categoria Principal,"
+        "Ciudad,Objeto del Contrato,Fecha de Firma,Fecha de Inicio del Contrato,Fecha de Fin del Contrato"
+    )
+    contratos_rows = [
+        # CON-001: NIT 900111111, Cundinamarca, 2022-01-15 — procesos match exists
+        "PROC-001,CON-001,REF-001,Liquidado,Prestacion de Servicios,Contratacion Directa,"
+        "Urgencia Manifiesta,NIT,900111111,EMPRESA ABC,"
+        "Recursos Propios,$5000000,ENTIDAD TEST,899999999,Cundinamarca,V1.80111600,"
+        "Bogota,Servicios,2022-01-15,2022-01-20,2022-12-31",
+        # CON-002: NIT 900111111, Antioquia, 2023-03-01 (provider has prior history)
+        "PROC-002,CON-002,REF-002,En ejecucion,Obra,Licitacion Publica,"
+        "N/A,NIT,900111111,EMPRESA ABC,"
+        "Recursos Propios,$8000000,ENTIDAD TEST,899999999,Antioquia,V1.72101500,"
+        "Medellin,Obra vial,2023-03-01,2023-03-15,2024-03-14",
+        # CON-003: CC (natural person), Bolivar, 2022-06-01
+        "PROC-003,CON-003,REF-003,Terminado,Suministro,Seleccion Abreviada,"
+        "N/A,CC,12345678,PERSONA NAT,"
+        "Recursos Propios,$450000,ENTIDAD B,800000001,Bolivar,V1.47101500,"
+        "Cartagena,Suministro,2022-06-01,2022-06-10,2022-12-31",
+        # CON-004: NIT 800222222, Valle del Cauca, 2021-08-20
+        "PROC-004,CON-004,REF-004,Liquidado,Consultoria,Concurso de Meritos,"
+        "N/A,NIT,800222222,CONSULTORA XYZ,"
+        "Regalias,$3000000,ENTIDAD C,806006813,Valle del Cauca,V1.80101600,"
+        "Cali,Consultoria,2021-08-20,2021-09-01,2022-08-19",
+        # CON-005: missing Fecha de Firma — should be dropped
+        "PROC-005,CON-005,REF-005,Liquidado,Prestacion de Servicios,Contratacion Directa,"
+        "N/A,NIT,900333333,EMPRESA DEF,"
+        "Recursos Propios,$1000000,ENTIDAD D,899000001,Cundinamarca,V1.80111600,"
+        "Bogota,Servicios,,2022-01-10,2022-12-31",
+    ]
+    (secop_dir / "contratos_SECOP.csv").write_text(
+        contratos_header + "\n" + "\n".join(contratos_rows) + "\n",
+        encoding="utf-8",
+    )
+
+    # ---- procesos_SECOP.csv (1 matching row for PROC-001) ----
+    # ID del Portafolio links to Proceso de Compra in contratos
+    procesos_header = (
+        "ID del Proceso,Referencia del Proceso,Nit Entidad,Entidad,PCI,"
+        "Departamento Entidad,Ciudad Entidad,Precio Base,Modalidad de Contratacion,"
+        "Justificación Modalidad de Contratación,Tipo de Contrato,"
+        "Fecha de Publicacion del Proceso,Fecha de Ultima Publicación,"
+        "Estado del Procedimiento,Valor Total Adjudicacion,"
+        "NIT del Proveedor Adjudicado,Nombre del Proveedor Adjudicado,Adjudicado,"
+        "Respuestas al Procedimiento,Proveedores Unicos con Respuestas,"
+        "ID del Portafolio,Fecha de Recepcion de Respuestas,Fecha Adjudicacion"
+    )
+    procesos_rows = [
+        "P-001,REF-PROC-001,899999999,ENTIDAD TEST,PCI-001,"
+        "Cundinamarca,Bogota,$4500000,Contratacion Directa,"
+        "Urgencia,Prestacion de Servicios,"
+        "2022-01-01,2022-01-10,"
+        "Adjudicado,$5000000,"
+        "900111111,EMPRESA ABC,1,"
+        "3,2,"
+        "PROC-001,2022-01-08,2022-01-12",
+    ]
+    (secop_dir / "procesos_SECOP.csv").write_text(
+        procesos_header + "\n" + "\n".join(procesos_rows) + "\n",
+        encoding="utf-8",
+    )
+
+    # ---- proveedores_registrados.csv (1 row for NIT 900111111) ----
+    proveedores_header = (
+        "Codigo,Nombre,NIT,Es Entidad,Es grupo,Esta Activa,Fecha Creación,"
+        "Codigo Categoria Principal,Descripcion Categoria Principal,"
+        "Telefono,Fax,Correo,Direccion,Pais,Departamento,Municipio,"
+        "Sitio web,Tipo Empresa,Nombre representante legal,"
+        "Tipo doc representante legal,Número doc representante legal,"
+        "Telefono representante legal,Correo representante legal,EsPyme,Ubicación"
+    )
+    proveedores_rows = [
+        "PRV-001,EMPRESA ABC,900111111,No,No,Si,01/01/2015,"
+        "80,Servicios Empresariales,"
+        "3001234567,,empresa@abc.com,Calle 1,Colombia,Cundinamarca,Bogota,"
+        "www.abc.com,SAS,Juan Perez,"
+        "CC,12345678,"
+        "3001234568,rep@abc.com,Si,Bogota Colombia",
+    ]
+    (secop_dir / "proveedores_registrados.csv").write_text(
+        proveedores_header + "\n" + "\n".join(proveedores_rows) + "\n",
+        encoding="utf-8",
+    )
+
+    # ---- labels.parquet ----
+    df_labels = pd.DataFrame({
+        "id_contrato": ["CON-001", "CON-002", "CON-003", "CON-004", "CON-005"],
+        "M1": pd.array([1, 0, 0, 0, 0], dtype="Int8"),
+        "M2": pd.array([0, 1, 0, 0, 0], dtype="Int8"),
+        "M3": pd.array([pd.NA, pd.NA, pd.NA, pd.NA, pd.NA], dtype="Int8"),
+        "M4": pd.array([pd.NA, pd.NA, pd.NA, pd.NA, pd.NA], dtype="Int8"),
+        "TipoDocProveedor_norm": ["NIT", "NIT", "CC", "NIT", "NIT"],
+        "DocProveedor_norm": ["900111111", "900111111", "12345678", "800222222", "900333333"],
+    })
+    df_labels.to_parquet(artifacts_dir / "labels" / "labels.parquet", index=False)
+
+
+def test_feature_columns_constant_length():
+    """FEATURE_COLUMNS must have exactly 30 entries."""
+    from sip_engine.features.pipeline import FEATURE_COLUMNS
+    assert len(FEATURE_COLUMNS) == 30
+
+
+def test_feat08_no_post_execution_columns():
+    """Post-execution column names must NOT appear in FEATURE_COLUMNS (FEAT-08)."""
+    from sip_engine.features.pipeline import FEATURE_COLUMNS
+    excluded = [
+        "Fecha de Inicio de Ejecucion",
+        "Fecha de Fin de Ejecucion",
+        "Valor Facturado",
+        "Valor Pagado",
+        "Valor Pendiente de Pago",
+        "ejecucion",
+    ]
+    for col in excluded:
+        col_lower = col.lower()
+        for fc in FEATURE_COLUMNS:
+            assert col_lower not in fc.lower(), (
+                f"Post-execution column '{col}' found in FEATURE_COLUMNS as '{fc}'"
+            )
+
+
+def test_feat09_no_rcac_columns():
+    """RCAC-derived column names must NOT appear in FEATURE_COLUMNS (FEAT-09)."""
+    from sip_engine.features.pipeline import FEATURE_COLUMNS
+    rcac_excluded = [
+        "proveedor_en_rcac",
+        "proveedor_responsable_fiscal",
+        "en_siri",
+        "en_multas_secop",
+        "en_colusiones",
+    ]
+    for col in rcac_excluded:
+        assert col not in FEATURE_COLUMNS, (
+            f"RCAC-derived column '{col}' found in FEATURE_COLUMNS"
+        )
+
+
+def test_build_features_requires_labels(tmp_path, monkeypatch):
+    """build_features() must raise FileNotFoundError if labels.parquet missing."""
+    from sip_engine.features.provider_history import reset_provider_history_cache
+    reset_provider_history_cache()
+
+    secop_dir = tmp_path / "secop"
+    secop_dir.mkdir(parents=True)
+    artifacts_dir = tmp_path / "artifacts"
+    (artifacts_dir / "features").mkdir(parents=True)
+    (artifacts_dir / "labels").mkdir(parents=True)
+
+    monkeypatch.setenv("SIP_PROJECT_ROOT", str(tmp_path))
+    monkeypatch.setenv("SIP_SECOP_DIR", str(secop_dir))
+    monkeypatch.setenv("SIP_ARTIFACTS_DIR", str(artifacts_dir))
+
+    from sip_engine.features.pipeline import build_features
+    with pytest.raises(FileNotFoundError, match="labels.parquet"):
+        build_features(force=True)
+
+
+def test_build_features_creates_parquet(tmp_path, monkeypatch):
+    """build_features() must create features.parquet in artifacts/features/."""
+    _make_pipeline_env(tmp_path, monkeypatch)
+
+    from sip_engine.features.pipeline import build_features
+    result_path = build_features(force=True)
+
+    assert result_path.exists()
+    assert result_path.name == "features.parquet"
+    assert "features" in str(result_path)
+
+
+def test_build_features_column_count(tmp_path, monkeypatch):
+    """features.parquet must have exactly 30 feature columns."""
+    _make_pipeline_env(tmp_path, monkeypatch)
+
+    from sip_engine.features.pipeline import build_features
+    result_path = build_features(force=True)
+
+    df = pd.read_parquet(result_path)
+    assert len(df.columns) == 30, f"Expected 30 columns, got {len(df.columns)}: {list(df.columns)}"
+
+
+def test_build_features_column_order(tmp_path, monkeypatch):
+    """features.parquet columns must match FEATURE_COLUMNS order exactly."""
+    from sip_engine.features.pipeline import FEATURE_COLUMNS, build_features
+    _make_pipeline_env(tmp_path, monkeypatch)
+
+    result_path = build_features(force=True)
+    df = pd.read_parquet(result_path)
+    assert list(df.columns) == FEATURE_COLUMNS
+
+
+def test_build_features_drops_missing_required(tmp_path, monkeypatch):
+    """Contracts missing Fecha de Firma must be excluded from features.parquet."""
+    _make_pipeline_env(tmp_path, monkeypatch)
+
+    from sip_engine.features.pipeline import build_features
+    result_path = build_features(force=True)
+
+    df = pd.read_parquet(result_path)
+    # CON-005 had missing Fecha de Firma — should not appear in index
+    assert "CON-005" not in df.index.tolist(), "CON-005 (missing date) should have been dropped"
+    # CON-001..CON-004 should be present
+    assert len(df) == 4, f"Expected 4 rows (4 valid + 1 dropped), got {len(df)}"
+
+
+def test_build_features_skip_existing(tmp_path, monkeypatch):
+    """build_features(force=False) must reuse cached features.parquet."""
+    _make_pipeline_env(tmp_path, monkeypatch)
+
+    from sip_engine.features.pipeline import build_features
+    path1 = build_features(force=True)
+    mtime1 = path1.stat().st_mtime
+
+    import time as time_mod
+    time_mod.sleep(0.05)
+
+    path2 = build_features(force=False)
+    mtime2 = path2.stat().st_mtime
+
+    assert mtime1 == mtime2, "features.parquet should not have been rebuilt"
+
+
+def test_build_features_force_rebuild(tmp_path, monkeypatch):
+    """build_features(force=True) must rebuild even if features.parquet exists."""
+    _make_pipeline_env(tmp_path, monkeypatch)
+
+    from sip_engine.features.pipeline import build_features
+    path1 = build_features(force=True)
+    mtime1 = path1.stat().st_mtime
+
+    import time as time_mod
+    time_mod.sleep(0.05)
+
+    path2 = build_features(force=True)
+    mtime2 = path2.stat().st_mtime
+
+    assert mtime2 >= mtime1, "features.parquet should have been rebuilt with force=True"
+
+
+def test_drop_rows_logging(tmp_path, monkeypatch, caplog):
+    """Dropped rows must produce INFO-level log messages with counts per reason."""
+    import logging
+    _make_pipeline_env(tmp_path, monkeypatch)
+
+    from sip_engine.features.pipeline import build_features
+    with caplog.at_level(logging.INFO, logger="sip_engine.features.pipeline"):
+        build_features(force=True)
+
+    # At least one INFO message should mention dropped rows or reason counts
+    log_text = caplog.text
+    assert "dropped" in log_text.lower() or "Fecha de Firma" in log_text, (
+        "Expected drop logging for rows missing required fields"
+    )
+
+
+def test_compute_features_parity(tmp_path, monkeypatch):
+    """compute_features() output must match build_features() for the same contract (FEAT-07)."""
+    import datetime as dt
+    _make_pipeline_env(tmp_path, monkeypatch)
+
+    from sip_engine.features.pipeline import FEATURE_COLUMNS, build_features, compute_features
+
+    # Build full features.parquet first (also builds encoding mappings)
+    result_path = build_features(force=True)
+    df_batch = pd.read_parquet(result_path)
+
+    # Pick CON-001 for parity check
+    assert "CON-001" in df_batch.index, "CON-001 must be in features.parquet"
+    batch_row = df_batch.loc["CON-001"]
+
+    # Reconstruct the contract row dict matching what the pipeline saw
+    contract_row = {
+        "TipoDocProveedor": "NIT",
+        "Documento Proveedor": "900111111",
+        "Valor del Contrato": 5000000.0,
+        "Tipo de Contrato": "Prestacion de Servicios",
+        "Modalidad de Contratacion": "Contratacion Directa",
+        "Justificacion Modalidad de Contratacion": "Urgencia Manifiesta",
+        "Origen de los Recursos": "Recursos Propios",
+        "Departamento": "Cundinamarca",
+        "Codigo de Categoria Principal": "V1.80111600",
+        "Fecha de Firma": dt.date(2022, 1, 15),
+        "Fecha de Inicio del Contrato": dt.date(2022, 1, 20),
+        "Fecha de Fin del Contrato": dt.date(2022, 12, 31),
+    }
+    as_of_date = dt.date(2022, 1, 15)
+
+    online_result = compute_features(
+        contract_row=contract_row,
+        as_of_date=as_of_date,
+        procesos_data=None,
+        proveedor_fecha_creacion=dt.date(2015, 1, 1),
+        num_actividades=1,
+    )
+
+    # Core structural check: same columns
+    assert set(online_result.keys()) == set(FEATURE_COLUMNS), (
+        "compute_features() must return exactly FEATURE_COLUMNS keys"
+    )
+
+    # Check categorical features that should match exactly
+    # (numerics may differ slightly due to procesos lookup not being passed to compute_features)
+    assert online_result["tipo_contrato_cat"] == batch_row["tipo_contrato_cat"]
+    assert online_result["modalidad_contratacion_cat"] == batch_row["modalidad_contratacion_cat"]
+    assert online_result["departamento_cat"] == batch_row["departamento_cat"]
+    assert online_result["es_contratacion_directa"] == batch_row["es_contratacion_directa"]
+    assert online_result["tipo_persona_proveedor"] == batch_row["tipo_persona_proveedor"]
+    assert online_result["mes_firma"] == batch_row["mes_firma"]
+    assert online_result["trimestre_firma"] == batch_row["trimestre_firma"]

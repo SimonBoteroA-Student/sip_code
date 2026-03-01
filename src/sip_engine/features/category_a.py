@@ -24,6 +24,15 @@ import math
 from typing import Any
 
 
+def _to_str_or_none(val: Any) -> str | None:
+    """Return None if val is None or NaN float, else str(val)."""
+    if val is None:
+        return None
+    if isinstance(val, float) and math.isnan(val):
+        return None
+    return str(val)
+
+
 def compute_category_a(row: dict[str, Any]) -> dict[str, Any]:
     """Compute all 10 Category A features from a single contract row dict.
 
@@ -43,11 +52,11 @@ def compute_category_a(row: dict[str, Any]) -> dict[str, Any]:
     """
     # ---- Raw values ----
     valor_raw = row.get("Valor del Contrato")
-    tipo_contrato_raw = row.get("Tipo de Contrato")
-    modalidad_raw = row.get("Modalidad de Contratacion")
-    justificacion_raw = row.get("Justificacion Modalidad de Contratacion")
-    origen_raw = row.get("Origen de los Recursos")
-    departamento_raw = row.get("Departamento")
+    tipo_contrato_raw = _to_str_or_none(row.get("Tipo de Contrato"))
+    modalidad_raw = _to_str_or_none(row.get("Modalidad de Contratacion"))
+    justificacion_raw = _to_str_or_none(row.get("Justificacion Modalidad de Contratacion"))
+    origen_raw = _to_str_or_none(row.get("Origen de los Recursos"))
+    departamento_raw = _to_str_or_none(row.get("Departamento"))
     categoria_raw = row.get("Codigo de Categoria Principal")
 
     # ---- 1. valor_contrato — float passthrough ----
@@ -134,10 +143,12 @@ def _extract_unspsc_segment(code: str | None) -> float | None:
 def _has_justificacion(justificacion: str | None) -> int:
     """Return 1 if justificacion is a meaningful value, 0 otherwise.
 
-    Null, "N/A", "No definido", or empty string → 0.
+    Null, NaN, "N/A", "No definido", or empty string → 0.
     Any other non-empty string → 1.
     """
     if justificacion is None:
+        return 0
+    if isinstance(justificacion, float) and math.isnan(justificacion):
         return 0
     val = str(justificacion).strip()
     if val == "" or val.upper() == "N/A" or val.lower() == "no definido":
