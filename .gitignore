@@ -36,3 +36,16 @@ secopDatabases/**
 #Whitelist .claude and .planning folders, essential for keeping the GRD workflow tracked and working well
 !.planning/**
 !.claude/**
+
+# Generated artifacts
+artifacts/
+!artifacts/**/.gitkeep
+
+# Python build artifacts
+*.egg-info/
+dist/
+build/
+
+# Environment files
+.env
+.env.*
