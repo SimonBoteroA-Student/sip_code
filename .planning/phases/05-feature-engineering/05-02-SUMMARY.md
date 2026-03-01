@@ -125,6 +125,19 @@ None — no external service configuration required.
 - Encoding module complete — pipeline.py can call build_encoding_mappings() at training time and apply_encoding() at inference
 - __init__.py exports all public symbols — pipeline.py only needs `from sip_engine.features import compute_category_a, compute_category_b, compute_category_c, build_encoding_mappings, apply_encoding`
 
+## Self-Check: PASSED
+
+- [x] `src/sip_engine/features/category_a.py` — FOUND
+- [x] `src/sip_engine/features/category_b.py` — FOUND
+- [x] `src/sip_engine/features/category_c.py` — FOUND
+- [x] `src/sip_engine/features/encoding.py` — FOUND
+- [x] `src/sip_engine/features/__init__.py` — FOUND (updated)
+- [x] `.planning/phases/05-feature-engineering/05-02-SUMMARY.md` — FOUND
+- [x] Commit `96f3c66` (Task 1) — FOUND
+- [x] Commit `b1e1e46` (Task 2) — FOUND
+- [x] 61 tests in test_features.py — ALL PASSING
+- [x] 159 total tests — ALL PASSING
+
 ---
 *Phase: 05-feature-engineering*
 *Completed: 2026-03-01*
