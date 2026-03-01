@@ -76,7 +76,10 @@ Plans:
   2. M2 label equals 1 for any contract in `adiciones.csv` with at least one time amendment, 0 otherwise
   3. M3 label equals 1 for any contract whose provider appears as a fiscal liability holder in Comptroller bulletins
   4. M4 label equals 1 for any contract whose provider has a SECOP fine or sanction in the RCAC — with no label leakage from future records (label uses provider document from RCAC built in Phase 3)
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 04-01-PLAN.md — M1/M2 labels from adiciones.csv (TDD), Settings paths, schema fixes, label_builder skeleton
+- [ ] 04-02-PLAN.md — M3/M4 labels from boletines + RCAC, parquet output, CLI build-labels, package exports
 
 ### Phase 5: Feature Engineering
 **Goal**: A shared feature pipeline (`features/pipeline.py`) produces a complete, correctly ordered feature vector for any contract, enforcing temporal leak prevention and excluding all post-execution variables and RCAC-derived inputs
@@ -150,7 +153,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Project Foundation | 2/2 | Complete   | 2026-03-01 |
 | 2. Data Loaders | 2/2 | Complete   | 2026-03-01 |
 | 3. RCAC Builder | 2/2 | Complete | 2026-03-01 |
-| 4. Label Construction | 0/TBD | Not started | - |
+| 4. Label Construction | 0/2 | Planned | - |
 | 5. Feature Engineering | 0/TBD | Not started | - |
 | 6. IRIC | 0/TBD | Not started | - |
 | 7. Model Training | 0/TBD | Not started | - |
