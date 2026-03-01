@@ -33,7 +33,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. `config/settings.py` exists with all file paths, API URLs, and encoding constants — no hardcoded paths anywhere in business logic
   3. `config/model_weights.json` exists with equal CRI weights (0.20 each) ready to be loaded at runtime
   4. Running the project from any working directory produces the same paths (environment-variable-based resolution)
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-01-PLAN.md — Python 3.12 environment setup, project scaffold, dependency verification
+- [ ] 01-02-PLAN.md — Centralized configuration system (settings.py, model_weights.json, requirements.lock)
 
 ### Phase 2: Data Loaders
 **Goal**: All local SECOP and RCAC CSV files can be read without memory crashes, with correct encoding and dtypes
