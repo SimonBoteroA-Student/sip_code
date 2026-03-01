@@ -14,11 +14,11 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 - [ ] **DATA-03**: System deduplicates RCAC records by (tipo_documento, numero_documento), aggregating counts across sources and tracking `num_fuentes_distintas`
 - [ ] **DATA-04**: System handles SIRI file (`sanciones_SIRI_PACO.csv`) by positional column parsing (no headers — columns 5 and 6 for document type and number)
 - [ ] **DATA-05**: System handles `responsabilidades_fiscales_PACO.csv` combined "Tipo y Num Documento" field parsing
-- [ ] **DATA-06**: System processes CSV files up to 5.3 GB without memory crashes using chunked reading strategies
-- [ ] **DATA-07**: System loads all local SECOP CSV files with correct dtypes and column selection to minimize memory footprint
+- [x] **DATA-06**: System processes CSV files up to 5.3 GB without memory crashes using chunked reading strategies
+- [x] **DATA-07**: System loads all local SECOP CSV files with correct dtypes and column selection to minimize memory footprint
 - [ ] **DATA-08**: System serializes RCAC as indexed dict via joblib for fast loading
 - [ ] **DATA-09**: System provides O(1) RCAC lookup by (document_type, document_number)
-- [ ] **DATA-10**: System handles encoding differences across sources (UTF-8 for SECOP, Latin-1 for PACO files) without silent data corruption
+- [x] **DATA-10**: System handles encoding differences across sources (UTF-8 for SECOP, Latin-1 for PACO files) without silent data corruption
 - [ ] **DATA-11**: System constructs labels for M1 (cost overruns) and M2 (delays) from amendments dataset (`adiciones.csv`): M1=1 if contract has ≥1 value amendment, M2=1 if contract has ≥1 time amendment
 - [ ] **DATA-12**: System constructs label for M3 from Comptroller bulletins: M3=1 if provider appears as fiscal liability holder
 - [ ] **DATA-13**: System constructs label for M4 from RCAC: M4=1 if provider has SECOP fine/sanction
@@ -139,11 +139,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-03 | Phase 3 | Pending |
 | DATA-04 | Phase 3 | Pending |
 | DATA-05 | Phase 3 | Pending |
-| DATA-06 | Phase 2 | Pending |
-| DATA-07 | Phase 2 | Pending |
+| DATA-06 | Phase 2 | Complete |
+| DATA-07 | Phase 2 | Complete |
 | DATA-08 | Phase 3 | Pending |
 | DATA-09 | Phase 3 | Pending |
-| DATA-10 | Phase 2 | Pending |
+| DATA-10 | Phase 2 | Complete |
 | DATA-11 | Phase 4 | Pending |
 | DATA-12 | Phase 4 | Pending |
 | DATA-13 | Phase 4 | Pending |

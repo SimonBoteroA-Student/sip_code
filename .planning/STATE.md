@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 2 — Data Loaders
+**Current focus:** Phase 3 — RCAC Builder
 
 ## Current Position
 
-Phase: 2 of 9 (Data Loaders)
-Plan: 1 of 2 completed in current phase
-Status: Phase 2 in progress — Plan 02-01 complete, Plan 02-02 ready
-Last activity: 2026-03-01 — Plan 02-01 complete: schemas.py, Settings.paco_encoding fix, test fixtures + scaffold
+Phase: 2 of 9 (Data Loaders) — COMPLETE
+Plan: 2 of 2 completed in current phase
+Status: Phase 2 complete — all data loaders implemented. Phase 3 ready.
+Last activity: 2026-03-01 — Plan 02-02 complete: 14 CSV loaders, 25 tests passing
 
-Progress: [███░░░░░░░] 17%
+Progress: [████░░░░░░] 22%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 3.7 min
-- Total execution time: 0.2 hours
+- Total plans completed: 4
+- Average duration: 4.3 min
+- Total execution time: 0.3 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-project-foundation | 2 | 7 min | 3.5 min |
-| 02-data-loaders | 1 | 4 min | 4 min |
+| 02-data-loaders | 2 | 8 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 2 min, 4 min
+- Last 5 plans: 5 min, 2 min, 4 min, 4 min
 - Trend: Fast
 
 *Updated after each plan completion*
@@ -56,6 +56,8 @@ Recent decisions affecting current work:
 - 02-01: Column names verified against actual file headers before writing schema constants (plan had approximate names).
 - 02-01: Settings.paco_encoding corrected to 'utf-8' — all 5 PACO files are UTF-8, not Latin-1 (empirically confirmed).
 - 02-01: PROCESOS schema includes Respuestas/Proveedores count cols (N_BIDS signal) proactively added for Phase 5.
+- [Phase 02-data-loaders]: _load_csv() private helper eliminates code duplication across 14 loaders — each public function is a 3-line wrapper
+- [Phase 02-data-loaders]: autouse clear_settings_cache fixture in conftest.py isolates lru_cache singleton per test — enables monkeypatch.setenv(SIP_*) overrides
 
 ### Pending Todos
 
@@ -70,5 +72,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 02-01-PLAN.md — schemas.py + Settings.paco_encoding fix + test fixtures/scaffold done. Plan 02-02 (loaders.py) ready.
-Resume file: .planning/phases/02-data-loaders/02-01-SUMMARY.md
+Stopped at: Completed 02-02-PLAN.md — all 14 CSV loaders implemented, 25 tests passing. Phase 2 complete, Phase 3 ready.
+Resume file: .planning/phases/02-data-loaders/02-02-SUMMARY.md

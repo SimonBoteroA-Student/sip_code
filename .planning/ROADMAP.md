@@ -13,7 +13,7 @@ SIP is built as a strictly sequential offline pipeline: a working Python environ
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Project Foundation** - Python 3.12 environment verified, project scaffold and config system in place (completed 2026-03-01)
-- [ ] **Phase 2: Data Loaders** - Chunked CSV loading for all large SECOP files, correct dtypes/encoding, memory-efficient processing
+- [x] **Phase 2: Data Loaders** - Chunked CSV loading for all large SECOP files, correct dtypes/encoding, memory-efficient processing (completed 2026-03-01)
 - [ ] **Phase 3: RCAC Builder** - 6-source sanction registry built, normalized, deduplicated, serialized, and queryable
 - [ ] **Phase 4: Label Construction** - M1/M2 labels from amendments, M3 from Comptroller bulletins, M4 from RCAC fines
 - [ ] **Phase 5: Feature Engineering** - Shared feature pipeline (Categories A/B/C) with temporal leak guard and train-serve parity
@@ -47,7 +47,7 @@ Plans:
   2. All local CSV files load with correct dtypes and column selection (`usecols`, `dtype` arguments) to minimize memory footprint
   3. Each CSV file is read with its correct encoding (UTF-8 for all files — PACO files verified UTF-8 per research) — no mojibake or silent data corruption in string fields
   4. Loader functions are reusable across all data processing stages (RCAC building, feature engineering, label construction)
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 02-01-PLAN.md — Column schemas, Settings encoding fix, test scaffold
 - [ ] 02-02-PLAN.md — All 14 loader generator functions with tqdm, logging, and encoding handling
@@ -145,7 +145,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Project Foundation | 2/2 | Complete   | 2026-03-01 |
-| 2. Data Loaders | 1/2 | In progress | - |
+| 2. Data Loaders | 2/2 | Complete   | 2026-03-01 |
 | 3. RCAC Builder | 0/TBD | Not started | - |
 | 4. Label Construction | 0/TBD | Not started | - |
 | 5. Feature Engineering | 0/TBD | Not started | - |
