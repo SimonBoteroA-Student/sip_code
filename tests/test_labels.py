@@ -1,25 +1,36 @@
-"""Tests for M1/M2 label construction in label_builder.py.
+"""Tests for M1/M2/M3/M4 label construction in label_builder.py.
 
 Tests cover:
 - M1_TIPOS and M2_TIPOS constants
 - _load_contratos_base() column selection and deduplication
 - _build_m1_m2_sets() tipo matching (case-insensitive), orphan handling
-- build_labels() RCAC existence check and M2 sparsity warning
+- _build_boletines_set() normalization and set membership
+- _compute_m3_m4() M3/M4 with null handling for malformed/missing providers
+- build_labels() RCAC existence check, M2 sparsity warning, parquet output
+- Parquet schema: id_contrato, M1-M4 columns, nullable Int8 dtypes
+- Cache/force rebuild behavior
 """
 
 from __future__ import annotations
+
+import time
 
 import joblib
 import pandas as pd
 import pytest
 
+pyarrow = pytest.importorskip("pyarrow")  # skip entire module if pyarrow missing
+
 from sip_engine.data.label_builder import (
     M1_TIPOS,
     M2_TIPOS,
+    _build_boletines_set,
     _build_m1_m2_sets,
+    _compute_m3_m4,
     _load_contratos_base,
     build_labels,
 )
+from sip_engine.data.rcac_lookup import reset_rcac_cache
 
 
 # ============================================================
@@ -62,18 +73,25 @@ def label_test_env(tmp_path, monkeypatch):
 
     Creates:
     - tmp_path/secop/contratos_SECOP.csv with 5 rows (3 unique contracts + 1 duplicate)
+      * CO1.PCCNTR.1111 — NIT 900111111 (duplicate, dedup test)
+      * CO1.PCCNTR.2222 — CC 12345678 (matches boletines + RCAC)
+      * CO1.PCCNTR.3333 — NIT 800333333 (no match anywhere)
     - tmp_path/secop/adiciones.csv with rows covering M1, M2, discarded types, orphan
-    - tmp_path/secop/boletines.csv with 1 row (prevents FileNotFoundError)
-    - tmp_path/artifacts/rcac/rcac.pkl (minimal dict, prevents RCAC check failure)
+    - tmp_path/secop/boletines.csv with 3 rows (CC/12345678 matches .2222 provider)
+    - tmp_path/artifacts/rcac/rcac.pkl with CC/12345678 entry (matches .2222 provider)
+    - tmp_path/artifacts/labels/ directory
 
-    Returns:
+    Yields:
         tmp_path (pathlib.Path)
+
+    Teardown resets RCAC module cache to isolate tests.
     """
     secop_dir = tmp_path / "secop"
     secop_dir.mkdir()
     artifacts_dir = tmp_path / "artifacts"
     rcac_dir = artifacts_dir / "rcac"
     rcac_dir.mkdir(parents=True)
+    (artifacts_dir / "labels").mkdir(parents=True)
 
     monkeypatch.setenv("SIP_SECOP_DIR", str(secop_dir))
     monkeypatch.setenv("SIP_ARTIFACTS_DIR", str(artifacts_dir))
@@ -84,7 +102,7 @@ def label_test_env(tmp_path, monkeypatch):
         _CONTRATOS_HEADER,
         _make_contrato_row("PROC-001", "CO1.PCCNTR.1111", "NIT", "900111111"),
         _make_contrato_row("PROC-001", "CO1.PCCNTR.1111", "NIT", "900111111"),  # duplicate
-        _make_contrato_row("PROC-002", "CO1.PCCNTR.2222", "Cedula de Ciudadania", "12345678"),
+        _make_contrato_row("PROC-002", "CO1.PCCNTR.2222", "CC", "12345678"),
         _make_contrato_row("PROC-003", "CO1.PCCNTR.3333", "NIT", "800333333"),
         "",
     ])
@@ -106,19 +124,27 @@ def label_test_env(tmp_path, monkeypatch):
     ])
     (secop_dir / "adiciones.csv").write_text(adiciones_rows, encoding="utf-8")
 
-    # --- boletines.csv (minimal, prevents FileNotFoundError) ---
+    # --- boletines.csv (3 rows: CC/12345678 matches provider in .2222, two non-matching) ---
     boletines_rows = "\n".join([
         _BOLETINES_HEADER,
-        "PERSONA DUMMY,CC,12345678,ENTIDAD X,TR1,R1,CGR,Bogota,Bogota",
+        "PERSONA A,CC,12345678,ENTIDAD X,TR1,R1,CGR,Bogota,Bogota",    # matches .2222
+        "PERSONA B,NIT,111222333,ENTIDAD Y,TR2,R2,CGR,Medellin,Medellin",  # non-matching
+        "PERSONA C,CC,99887766,ENTIDAD Z,TR3,R3,CGR,Cali,Cali",         # non-matching
         "",
     ])
     (secop_dir / "boletines.csv").write_text(boletines_rows, encoding="utf-8")
 
-    # --- rcac.pkl (minimal index — satisfies RCAC existence check) ---
-    minimal_rcac = {("CC", "12345678"): {"en_boletines": True, "num_fuentes_distintas": 1}}
-    joblib.dump(minimal_rcac, rcac_dir / "rcac.pkl")
+    # --- rcac.pkl: CC/12345678 matches provider in .2222, NIT/999999999 does not match ---
+    rcac_index = {
+        ("CC", "12345678"): {"en_boletines": True, "num_fuentes_distintas": 2},
+        ("NIT", "999999999"): {"en_boletines": False, "num_fuentes_distintas": 1},
+    }
+    joblib.dump(rcac_index, rcac_dir / "rcac.pkl")
 
-    return tmp_path
+    yield tmp_path
+
+    # Teardown: reset RCAC cache to prevent state leakage between tests
+    reset_rcac_cache()
 
 
 # ============================================================
@@ -339,14 +365,255 @@ def test_m2_sparsity_warning(tmp_path, monkeypatch, caplog):
     ])
     (secop_dir / "adiciones.csv").write_text(adiciones_rows, encoding="utf-8")
 
+    # Minimal boletines.csv
+    boletines_rows = "\n".join([_BOLETINES_HEADER, ""])
+    (secop_dir / "boletines.csv").write_text(boletines_rows, encoding="utf-8")
+
     # rcac.pkl present
     minimal_rcac = {("NIT", "900000001"): {"en_boletines": True, "num_fuentes_distintas": 1}}
     joblib.dump(minimal_rcac, rcac_dir / "rcac.pkl")
 
-    with caplog.at_level(logging.WARNING, logger="sip_engine.data.label_builder"):
-        build_labels()
+    try:
+        with caplog.at_level(logging.WARNING, logger="sip_engine.data.label_builder"):
+            build_labels()
+    finally:
+        reset_rcac_cache()
 
     warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
     assert any("M2 has only" in msg for msg in warning_messages), (
         f"Expected M2 sparsity warning. Got warnings: {warning_messages}"
+    )
+
+
+# ============================================================
+# _build_boletines_set() tests
+# ============================================================
+
+def test_build_boletines_set_returns_set(label_test_env):
+    """_build_boletines_set() must return a set of (tipo, num) tuples."""
+    result = _build_boletines_set()
+    assert isinstance(result, set), "Expected a set"
+    assert all(isinstance(t, tuple) and len(t) == 2 for t in result)
+
+
+def test_build_boletines_set_contains_matching_entry(label_test_env):
+    """Boletines CC/12345678 entry must be in the set after normalization."""
+    result = _build_boletines_set()
+    assert ("CC", "12345678") in result, f"Expected ('CC', '12345678') in set, got {result}"
+
+
+def test_build_boletines_set_count(label_test_env):
+    """Fixture boletines has 3 rows — all valid — so set should have 3 entries."""
+    result = _build_boletines_set()
+    assert len(result) == 3, f"Expected 3 entries, got {len(result)}"
+
+
+# ============================================================
+# _compute_m3_m4() tests
+# ============================================================
+
+def _make_test_df(rows: list[dict]) -> pd.DataFrame:
+    """Create a minimal contratos DataFrame for _compute_m3_m4 testing."""
+    return pd.DataFrame(rows)
+
+
+def test_m3_provider_in_boletines(label_test_env):
+    """Provider (tipo=CC, num=12345678) matching a boletines entry gets M3=1."""
+    boletines_set = {("CC", "12345678")}
+    df = _make_test_df([{
+        "ID Contrato": "CO1.TEST.0001",
+        "TipoDocProveedor": "CC",
+        "Documento Proveedor": "12345678",
+    }])
+    result = _compute_m3_m4(df, boletines_set)
+    assert result["M3"].iloc[0] == 1, f"Expected M3=1, got {result['M3'].iloc[0]}"
+
+
+def test_m3_provider_not_in_boletines(label_test_env):
+    """Provider with valid ID but no boletines match gets M3=0."""
+    boletines_set = {("CC", "12345678")}
+    df = _make_test_df([{
+        "ID Contrato": "CO1.TEST.0002",
+        "TipoDocProveedor": "NIT",
+        "Documento Proveedor": "800333333",
+    }])
+    result = _compute_m3_m4(df, boletines_set)
+    assert result["M3"].iloc[0] == 0, f"Expected M3=0, got {result['M3'].iloc[0]}"
+
+
+def test_m3_null_for_malformed_provider(label_test_env):
+    """Provider with empty/zero document number gets M3=pd.NA."""
+    boletines_set = {("CC", "12345678")}
+    df = _make_test_df([{
+        "ID Contrato": "CO1.TEST.0003",
+        "TipoDocProveedor": "CC",
+        "Documento Proveedor": "000",  # all-zeros — malformed
+    }])
+    result = _compute_m3_m4(df, boletines_set)
+    assert pd.isna(result["M3"].iloc[0]), f"Expected M3=NA, got {result['M3'].iloc[0]}"
+
+
+def test_m3_null_for_missing_provider(label_test_env):
+    """Provider with NaN Documento Proveedor gets M3=pd.NA."""
+    boletines_set = {("CC", "12345678")}
+    df = _make_test_df([{
+        "ID Contrato": "CO1.TEST.0004",
+        "TipoDocProveedor": "CC",
+        "Documento Proveedor": float("nan"),
+    }])
+    result = _compute_m3_m4(df, boletines_set)
+    assert pd.isna(result["M3"].iloc[0]), f"Expected M3=NA, got {result['M3'].iloc[0]}"
+
+
+def test_m4_provider_in_rcac(label_test_env):
+    """Provider found in RCAC pkl gets M4=1."""
+    # The fixture RCAC has CC/12345678 entry
+    boletines_set: set = set()
+    df = _make_test_df([{
+        "ID Contrato": "CO1.TEST.0005",
+        "TipoDocProveedor": "CC",
+        "Documento Proveedor": "12345678",
+    }])
+    result = _compute_m3_m4(df, boletines_set)
+    assert result["M4"].iloc[0] == 1, f"Expected M4=1, got {result['M4'].iloc[0]}"
+
+
+def test_m4_provider_not_in_rcac(label_test_env):
+    """Valid provider not in RCAC gets M4=0."""
+    boletines_set: set = set()
+    df = _make_test_df([{
+        "ID Contrato": "CO1.TEST.0006",
+        "TipoDocProveedor": "NIT",
+        "Documento Proveedor": "800333333",  # not in fixture RCAC
+    }])
+    result = _compute_m3_m4(df, boletines_set)
+    assert result["M4"].iloc[0] == 0, f"Expected M4=0, got {result['M4'].iloc[0]}"
+
+
+def test_m4_null_for_malformed_provider(label_test_env):
+    """Malformed provider gets M4=pd.NA."""
+    boletines_set: set = set()
+    df = _make_test_df([{
+        "ID Contrato": "CO1.TEST.0007",
+        "TipoDocProveedor": "CC",
+        "Documento Proveedor": "",  # empty — malformed
+    }])
+    result = _compute_m3_m4(df, boletines_set)
+    assert pd.isna(result["M4"].iloc[0]), f"Expected M4=NA, got {result['M4'].iloc[0]}"
+
+
+def test_m3_input_normalization(label_test_env):
+    """Raw 'Cedula de Ciudadania' + '43.922.546' normalizes before M3 lookup."""
+    # Normalized form: ('CC', '43922546')
+    boletines_set = {("CC", "43922546")}
+    df = _make_test_df([{
+        "ID Contrato": "CO1.TEST.0008",
+        "TipoDocProveedor": "Cedula de Ciudadania",
+        "Documento Proveedor": "43.922.546",
+    }])
+    result = _compute_m3_m4(df, boletines_set)
+    assert result["M3"].iloc[0] == 1, (
+        f"Expected M3=1 after normalization, got {result['M3'].iloc[0]}"
+    )
+
+
+def test_m4_uses_rcac_lookup(label_test_env):
+    """M4 computation calls rcac_lookup — verify via result correctness."""
+    boletines_set: set = set()
+    # CC/12345678 is in fixture RCAC; NIT/800333333 is not
+    df = _make_test_df([
+        {"ID Contrato": "CO1.TEST.0009", "TipoDocProveedor": "CC", "Documento Proveedor": "12345678"},
+        {"ID Contrato": "CO1.TEST.0010", "TipoDocProveedor": "NIT", "Documento Proveedor": "800333333"},
+    ])
+    result = _compute_m3_m4(df, boletines_set)
+    assert result["M4"].iloc[0] == 1, "Expected M4=1 for CC/12345678 (in RCAC)"
+    assert result["M4"].iloc[1] == 0, "Expected M4=0 for NIT/800333333 (not in RCAC)"
+
+
+# ============================================================
+# build_labels() parquet output and cache behavior tests
+# ============================================================
+
+def test_build_labels_creates_parquet(label_test_env):
+    """After build_labels(force=True), labels_path exists and is a valid parquet file."""
+    from sip_engine.config import get_settings
+    settings = get_settings()
+
+    build_labels(force=True)
+
+    assert settings.labels_path.exists(), "labels.parquet was not created"
+    # Read it back — should not raise
+    df = pd.read_parquet(settings.labels_path, engine="pyarrow")
+    assert len(df) > 0, "Parquet file is empty"
+
+
+def test_labels_parquet_schema(label_test_env):
+    """Output parquet must have columns: id_contrato, M1, M2, M3, M4."""
+    build_labels(force=True)
+
+    from sip_engine.config import get_settings
+    df = pd.read_parquet(get_settings().labels_path, engine="pyarrow")
+
+    for col in ["id_contrato", "M1", "M2", "M3", "M4"]:
+        assert col in df.columns, f"Column '{col}' missing from parquet output"
+
+
+def test_labels_parquet_nullable_int8(label_test_env):
+    """M1-M4 columns must be nullable Int8 dtype in the parquet output."""
+    build_labels(force=True)
+
+    from sip_engine.config import get_settings
+    df = pd.read_parquet(get_settings().labels_path, engine="pyarrow")
+
+    for col in ["M1", "M2", "M3", "M4"]:
+        assert df[col].dtype == pd.Int8Dtype(), (
+            f"Column '{col}' dtype is {df[col].dtype}, expected Int8"
+        )
+
+
+def test_build_labels_cache(label_test_env):
+    """With existing parquet and force=False, build_labels returns path without rebuilding."""
+    from sip_engine.config import get_settings
+    settings = get_settings()
+
+    # First build
+    build_labels(force=True)
+    assert settings.labels_path.exists()
+
+    mtime_before = settings.labels_path.stat().st_mtime
+
+    # Second call without force — should use cache (no file write)
+    time.sleep(0.05)  # ensure mtime would differ if file is rewritten
+    build_labels(force=False)
+
+    mtime_after = settings.labels_path.stat().st_mtime
+    assert mtime_before == mtime_after, "labels.parquet was rewritten despite force=False"
+
+
+def test_build_labels_force_rebuilds(label_test_env):
+    """With existing parquet and force=True, build_labels rebuilds (mtime changes)."""
+    from sip_engine.config import get_settings
+    settings = get_settings()
+
+    # First build
+    build_labels(force=True)
+    mtime_before = settings.labels_path.stat().st_mtime
+
+    time.sleep(0.05)  # ensure mtime differs on rebuild
+    build_labels(force=True)
+
+    mtime_after = settings.labels_path.stat().st_mtime
+    assert mtime_after > mtime_before, "labels.parquet mtime did not change after force=True rebuild"
+
+
+def test_m3_boletines_warning(label_test_env, caplog):
+    """build_labels logs warning about incomplete boletines.csv."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="sip_engine.data.label_builder"):
+        build_labels(force=True)
+
+    warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("boletines.csv is incomplete" in msg for msg in warning_messages), (
+        f"Expected boletines incompleteness warning. Got: {warning_messages}"
     )
