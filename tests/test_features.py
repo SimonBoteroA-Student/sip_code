@@ -416,3 +416,837 @@ def test_load_provider_history_index_lazy(provider_history_env, monkeypatch):
     index1 = load_provider_history_index()
     index2 = load_provider_history_index()
     assert index1 is index2  # same object — cached
+
+
+# ============================================================
+# Task 1: Category A feature extractor tests
+# ============================================================
+
+
+def test_valor_contrato_passthrough():
+    """compute_category_a returns valor_contrato as a float value."""
+    from sip_engine.features.category_a import compute_category_a
+
+    row = {
+        "Valor del Contrato": 10_000_000.0,
+        "Tipo de Contrato": "Prestación de Servicios",
+        "Modalidad de Contratacion": "Licitación Pública",
+        "Justificacion Modalidad de Contratacion": "N/A",
+        "Origen de los Recursos": "Recursos Propios",
+        "TipoDocProveedor": "NIT",
+        "Departamento": "Cundinamarca",
+        "Codigo de Categoria Principal": "V1.80111600",
+    }
+    result = compute_category_a(row)
+    assert result["valor_contrato"] == 10_000_000.0
+
+
+def test_es_contratacion_directa_true():
+    """es_contratacion_directa returns 1 for 'Contratación directa' (case-insensitive)."""
+    from sip_engine.features.category_a import compute_category_a
+
+    row = {
+        "Valor del Contrato": 1000.0,
+        "Tipo de Contrato": "Servicios",
+        "Modalidad de Contratacion": "Contratación Directa",
+        "Justificacion Modalidad de Contratacion": "Urgencia Manifiesta",
+        "Origen de los Recursos": "Recursos Propios",
+        "TipoDocProveedor": "NIT",
+        "Departamento": "Cundinamarca",
+        "Codigo de Categoria Principal": None,
+    }
+    result = compute_category_a(row)
+    assert result["es_contratacion_directa"] == 1
+
+
+def test_es_contratacion_directa_false():
+    """es_contratacion_directa returns 0 for other modalities."""
+    from sip_engine.features.category_a import compute_category_a
+
+    row = {
+        "Valor del Contrato": 1000.0,
+        "Tipo de Contrato": "Obra",
+        "Modalidad de Contratacion": "Licitación Pública",
+        "Justificacion Modalidad de Contratacion": "N/A",
+        "Origen de los Recursos": "Recursos Propios",
+        "TipoDocProveedor": "NIT",
+        "Departamento": "Cundinamarca",
+        "Codigo de Categoria Principal": None,
+    }
+    result = compute_category_a(row)
+    assert result["es_contratacion_directa"] == 0
+
+
+def test_es_regimen_especial_true():
+    """es_regimen_especial returns 1 when modality contains 'régimen especial'."""
+    from sip_engine.features.category_a import compute_category_a
+
+    row = {
+        "Valor del Contrato": 500.0,
+        "Tipo de Contrato": "Suministro",
+        "Modalidad de Contratacion": "Contratación Régimen Especial",
+        "Justificacion Modalidad de Contratacion": "N/A",
+        "Origen de los Recursos": "Recursos Propios",
+        "TipoDocProveedor": "NIT",
+        "Departamento": "Antioquia",
+        "Codigo de Categoria Principal": None,
+    }
+    result = compute_category_a(row)
+    assert result["es_regimen_especial"] == 1
+
+
+def test_es_servicios_profesionales_true():
+    """es_servicios_profesionales returns 1 when justification contains 'servicios profesionales'."""
+    from sip_engine.features.category_a import compute_category_a
+
+    row = {
+        "Valor del Contrato": 500.0,
+        "Tipo de Contrato": "Consultoría",
+        "Modalidad de Contratacion": "Contratación Directa",
+        "Justificacion Modalidad de Contratacion": "Servicios Profesionales y de Apoyo a la Gestión",
+        "Origen de los Recursos": "Recursos Propios",
+        "TipoDocProveedor": "NIT",
+        "Departamento": "Bogotá D.C.",
+        "Codigo de Categoria Principal": None,
+    }
+    result = compute_category_a(row)
+    assert result["es_servicios_profesionales"] == 1
+
+
+def test_unspsc_categoria_extraction():
+    """unspsc_categoria extracts segment (positions 3:5) as integer from 'V1.80111600'."""
+    from sip_engine.features.category_a import compute_category_a
+
+    row = {
+        "Valor del Contrato": 100.0,
+        "Tipo de Contrato": "Servicios",
+        "Modalidad de Contratacion": "Licitación Pública",
+        "Justificacion Modalidad de Contratacion": "N/A",
+        "Origen de los Recursos": "Recursos Propios",
+        "TipoDocProveedor": "NIT",
+        "Departamento": "Cundinamarca",
+        "Codigo de Categoria Principal": "V1.80111600",
+    }
+    result = compute_category_a(row)
+    assert result["unspsc_categoria"] == 80
+
+
+def test_unspsc_categoria_malformed():
+    """unspsc_categoria returns NaN for null or malformed codes."""
+    import math
+    from sip_engine.features.category_a import compute_category_a
+
+    for bad_code in [None, "", "BAD", "V1.AB"]:
+        row = {
+            "Valor del Contrato": 100.0,
+            "Tipo de Contrato": "Servicios",
+            "Modalidad de Contratacion": "Licitación Pública",
+            "Justificacion Modalidad de Contratacion": "N/A",
+            "Origen de los Recursos": "Recursos Propios",
+            "TipoDocProveedor": "NIT",
+            "Departamento": "Cundinamarca",
+            "Codigo de Categoria Principal": bad_code,
+        }
+        result = compute_category_a(row)
+        assert result["unspsc_categoria"] is None or (
+            isinstance(result["unspsc_categoria"], float) and math.isnan(result["unspsc_categoria"])
+        ), f"Expected NaN for code={bad_code!r}, got {result['unspsc_categoria']!r}"
+
+
+def test_tiene_justificacion_modalidad_true():
+    """tiene_justificacion_modalidad returns 1 for non-null, non-N/A, non-'No definido' values."""
+    from sip_engine.features.category_a import compute_category_a
+
+    row = {
+        "Valor del Contrato": 100.0,
+        "Tipo de Contrato": "Consultoría",
+        "Modalidad de Contratacion": "Contratación Directa",
+        "Justificacion Modalidad de Contratacion": "Urgencia Manifiesta",
+        "Origen de los Recursos": "Recursos Propios",
+        "TipoDocProveedor": "NIT",
+        "Departamento": "Cundinamarca",
+        "Codigo de Categoria Principal": None,
+    }
+    result = compute_category_a(row)
+    assert result["tiene_justificacion_modalidad"] == 1
+
+
+def test_tiene_justificacion_modalidad_false():
+    """tiene_justificacion_modalidad returns 0 for null, 'N/A', or 'No definido'."""
+    from sip_engine.features.category_a import compute_category_a
+
+    for justificacion in [None, "N/A", "No definido", ""]:
+        row = {
+            "Valor del Contrato": 100.0,
+            "Tipo de Contrato": "Servicios",
+            "Modalidad de Contratacion": "Contratación Directa",
+            "Justificacion Modalidad de Contratacion": justificacion,
+            "Origen de los Recursos": "Recursos Propios",
+            "TipoDocProveedor": "NIT",
+            "Departamento": "Cundinamarca",
+            "Codigo de Categoria Principal": None,
+        }
+        result = compute_category_a(row)
+        assert result["tiene_justificacion_modalidad"] == 0, (
+            f"Expected 0 for justificacion={justificacion!r}"
+        )
+
+
+def test_category_a_returns_ten_features():
+    """compute_category_a must return exactly 10 feature keys."""
+    from sip_engine.features.category_a import compute_category_a
+
+    row = {
+        "Valor del Contrato": 5_000_000.0,
+        "Tipo de Contrato": "Consultoría",
+        "Modalidad de Contratacion": "Contratación Directa",
+        "Justificacion Modalidad de Contratacion": "Servicios Profesionales",
+        "Origen de los Recursos": "Sistema General de Regalías",
+        "TipoDocProveedor": "NIT",
+        "Departamento": "Antioquia",
+        "Codigo de Categoria Principal": "V1.80101600",
+    }
+    result = compute_category_a(row)
+    assert len(result) == 10
+
+
+# ============================================================
+# Task 1: Category B feature extractor tests
+# ============================================================
+
+
+def test_dias_firma_a_inicio_positive():
+    """dias_firma_a_inicio is positive when firma is before inicio."""
+    from sip_engine.features.category_b import compute_category_b
+
+    row = {
+        "Fecha de Firma": datetime.date(2023, 1, 10),
+        "Fecha de Inicio del Contrato": datetime.date(2023, 1, 20),
+        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+    }
+    result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
+    assert result["dias_firma_a_inicio"] == 10
+
+
+def test_dias_firma_a_inicio_negative():
+    """dias_firma_a_inicio is negative when firma is after inicio."""
+    from sip_engine.features.category_b import compute_category_b
+
+    row = {
+        "Fecha de Firma": datetime.date(2023, 1, 25),
+        "Fecha de Inicio del Contrato": datetime.date(2023, 1, 20),
+        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+    }
+    result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
+    assert result["dias_firma_a_inicio"] == -5
+
+
+def test_firma_posterior_a_inicio_flag():
+    """firma_posterior_a_inicio is 1 when dias_firma_a_inicio < 0, else 0."""
+    from sip_engine.features.category_b import compute_category_b
+
+    row_before = {
+        "Fecha de Firma": datetime.date(2023, 1, 10),
+        "Fecha de Inicio del Contrato": datetime.date(2023, 1, 20),
+        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+    }
+    result_before = compute_category_b(row_before, procesos_data=None, proveedor_fecha_creacion=None)
+    assert result_before["firma_posterior_a_inicio"] == 0
+
+    row_after = {
+        "Fecha de Firma": datetime.date(2023, 1, 25),
+        "Fecha de Inicio del Contrato": datetime.date(2023, 1, 20),
+        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+    }
+    result_after = compute_category_b(row_after, procesos_data=None, proveedor_fecha_creacion=None)
+    assert result_after["firma_posterior_a_inicio"] == 1
+
+
+def test_duracion_contrato_dias():
+    """duracion_contrato_dias is (Fecha de Fin - Fecha de Inicio).days."""
+    from sip_engine.features.category_b import compute_category_b
+
+    row = {
+        "Fecha de Firma": datetime.date(2023, 1, 1),
+        "Fecha de Inicio del Contrato": datetime.date(2023, 1, 5),
+        "Fecha de Fin del Contrato": datetime.date(2023, 7, 5),
+    }
+    result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
+    expected_days = (datetime.date(2023, 7, 5) - datetime.date(2023, 1, 5)).days
+    assert result["duracion_contrato_dias"] == expected_days
+
+
+def test_mes_firma_extraction():
+    """mes_firma extracts the month number from Fecha de Firma (March=3)."""
+    from sip_engine.features.category_b import compute_category_b
+
+    row = {
+        "Fecha de Firma": datetime.date(2023, 3, 15),
+        "Fecha de Inicio del Contrato": datetime.date(2023, 3, 20),
+        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+    }
+    result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
+    assert result["mes_firma"] == 3
+
+
+def test_trimestre_firma_extraction():
+    """trimestre_firma is Q1 (1) for March."""
+    from sip_engine.features.category_b import compute_category_b
+
+    row = {
+        "Fecha de Firma": datetime.date(2023, 3, 15),
+        "Fecha de Inicio del Contrato": datetime.date(2023, 3, 20),
+        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+    }
+    result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
+    assert result["trimestre_firma"] == 1
+
+
+def test_dias_a_proxima_eleccion_before_election():
+    """dias_a_proxima_eleccion returns 30 when signing date is 30 days before a known election."""
+    from sip_engine.features.category_b import compute_category_b, COLOMBIAN_ELECTION_DATES
+
+    # Use the first election in the calendar
+    election_date = COLOMBIAN_ELECTION_DATES[0]
+    signing_date = election_date - datetime.timedelta(days=30)
+
+    row = {
+        "Fecha de Firma": signing_date,
+        "Fecha de Inicio del Contrato": signing_date + datetime.timedelta(days=5),
+        "Fecha de Fin del Contrato": signing_date + datetime.timedelta(days=365),
+    }
+    result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
+    assert result["dias_a_proxima_eleccion"] == 30
+
+
+def test_dias_a_proxima_eleccion_between_elections():
+    """dias_a_proxima_eleccion returns distance to the NEXT (not prior) election."""
+    from sip_engine.features.category_b import compute_category_b, COLOMBIAN_ELECTION_DATES
+
+    # Pick a date between first and second elections
+    first = COLOMBIAN_ELECTION_DATES[0]
+    second = COLOMBIAN_ELECTION_DATES[1]
+    mid_date = first + (second - first) // 2  # halfway between
+
+    row = {
+        "Fecha de Firma": mid_date,
+        "Fecha de Inicio del Contrato": mid_date + datetime.timedelta(days=5),
+        "Fecha de Fin del Contrato": mid_date + datetime.timedelta(days=365),
+    }
+    result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
+    expected = (second - mid_date).days
+    assert result["dias_a_proxima_eleccion"] == expected
+
+
+def test_dias_a_proxima_eleccion_beyond_calendar():
+    """dias_a_proxima_eleccion returns NaN when signing date is after last election."""
+    import math
+    from sip_engine.features.category_b import compute_category_b, COLOMBIAN_ELECTION_DATES
+
+    # Use a date after the last election in the calendar
+    last_election = COLOMBIAN_ELECTION_DATES[-1]
+    after_last = last_election + datetime.timedelta(days=1)
+
+    row = {
+        "Fecha de Firma": after_last,
+        "Fecha de Inicio del Contrato": after_last + datetime.timedelta(days=5),
+        "Fecha de Fin del Contrato": after_last + datetime.timedelta(days=365),
+    }
+    result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
+    val = result["dias_a_proxima_eleccion"]
+    assert val is None or (isinstance(val, float) and math.isnan(val))
+
+
+def test_dias_publicidad_from_procesos():
+    """dias_publicidad = Fecha de Recepcion de Respuestas - Fecha de Publicacion del Proceso."""
+    from sip_engine.features.category_b import compute_category_b
+
+    procesos_data = {
+        "Fecha de Publicacion del Proceso": datetime.date(2023, 1, 1),
+        "Fecha de Recepcion de Respuestas": datetime.date(2023, 1, 15),
+        "Fecha de Ultima Publicación": datetime.date(2023, 1, 20),
+        "Fecha de Firma": datetime.date(2023, 1, 25),
+        "Respuestas al Procedimiento": 3,
+        "Proveedores Unicos con Respuestas": 3,
+    }
+    row = {
+        "Fecha de Firma": datetime.date(2023, 2, 1),
+        "Fecha de Inicio del Contrato": datetime.date(2023, 2, 5),
+        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+    }
+    result = compute_category_b(row, procesos_data=procesos_data, proveedor_fecha_creacion=None)
+    assert result["dias_publicidad"] == 14  # Jan 15 - Jan 1 = 14 days
+
+
+def test_dias_decision_from_procesos():
+    """dias_decision = Fecha de Firma (procesos) - Fecha de Ultima Publicacion."""
+    from sip_engine.features.category_b import compute_category_b
+
+    procesos_data = {
+        "Fecha de Publicacion del Proceso": datetime.date(2023, 1, 1),
+        "Fecha de Recepcion de Respuestas": datetime.date(2023, 1, 15),
+        "Fecha de Ultima Publicación": datetime.date(2023, 1, 20),
+        "Fecha de Firma": datetime.date(2023, 1, 25),
+        "Respuestas al Procedimiento": 3,
+        "Proveedores Unicos con Respuestas": 3,
+    }
+    row = {
+        "Fecha de Firma": datetime.date(2023, 2, 1),
+        "Fecha de Inicio del Contrato": datetime.date(2023, 2, 5),
+        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+    }
+    result = compute_category_b(row, procesos_data=procesos_data, proveedor_fecha_creacion=None)
+    assert result["dias_decision"] == 5  # Jan 25 - Jan 20 = 5 days
+
+
+def test_dias_proveedor_registrado():
+    """dias_proveedor_registrado = Fecha de Firma - proveedor Fecha Creacion."""
+    from sip_engine.features.category_b import compute_category_b
+
+    row = {
+        "Fecha de Firma": datetime.date(2023, 6, 1),
+        "Fecha de Inicio del Contrato": datetime.date(2023, 6, 10),
+        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+    }
+    proveedor_fecha_creacion = datetime.date(2020, 1, 1)
+    result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=proveedor_fecha_creacion)
+    expected = (datetime.date(2023, 6, 1) - datetime.date(2020, 1, 1)).days
+    assert result["dias_proveedor_registrado"] == expected
+
+
+def test_dias_proveedor_registrado_nan_when_no_match():
+    """dias_proveedor_registrado is NaN when proveedor_fecha_creacion is None."""
+    import math
+    from sip_engine.features.category_b import compute_category_b
+
+    row = {
+        "Fecha de Firma": datetime.date(2023, 6, 1),
+        "Fecha de Inicio del Contrato": datetime.date(2023, 6, 10),
+        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+    }
+    result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
+    val = result["dias_proveedor_registrado"]
+    assert val is None or (isinstance(val, float) and math.isnan(val))
+
+
+def test_negative_duration_clipped_to_zero():
+    """dias_publicidad and dias_decision are clipped to 0 when negative."""
+    from sip_engine.features.category_b import compute_category_b
+
+    # Reversed dates to create negative durations
+    procesos_data = {
+        "Fecha de Publicacion del Proceso": datetime.date(2023, 1, 15),
+        "Fecha de Recepcion de Respuestas": datetime.date(2023, 1, 1),  # before publication
+        "Fecha de Ultima Publicación": datetime.date(2023, 1, 25),
+        "Fecha de Firma": datetime.date(2023, 1, 20),  # before ultima publicacion
+        "Respuestas al Procedimiento": 1,
+        "Proveedores Unicos con Respuestas": 1,
+    }
+    row = {
+        "Fecha de Firma": datetime.date(2023, 2, 1),
+        "Fecha de Inicio del Contrato": datetime.date(2023, 2, 5),
+        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+    }
+    result = compute_category_b(row, procesos_data=procesos_data, proveedor_fecha_creacion=None)
+    assert result["dias_publicidad"] == 0
+    assert result["dias_decision"] == 0
+
+
+# ============================================================
+# Task 1: Category C feature extractor tests
+# ============================================================
+
+
+def test_tipo_persona_proveedor_nit():
+    """tipo_persona_proveedor returns 1 (juridica) for NIT document type."""
+    from sip_engine.features.category_c import compute_category_c
+
+    row = {"TipoDocProveedor": "NIT", "Departamento": "Cundinamarca"}
+    provider_history = {
+        "num_contratos_previos_nacional": 5,
+        "num_contratos_previos_depto": 2,
+        "valor_total_contratos_previos_nacional": 10_000_000.0,
+        "valor_total_contratos_previos_depto": 3_000_000.0,
+        "num_sobrecostos_previos": 1,
+        "num_retrasos_previos": 0,
+    }
+    result = compute_category_c(row, procesos_data=None, provider_history=provider_history, num_actividades=3)
+    assert result["tipo_persona_proveedor"] == 1
+
+
+def test_tipo_persona_proveedor_cc():
+    """tipo_persona_proveedor returns 0 (natural person) for CC document type."""
+    from sip_engine.features.category_c import compute_category_c
+
+    row = {"TipoDocProveedor": "CC", "Departamento": "Cundinamarca"}
+    provider_history = {
+        "num_contratos_previos_nacional": 0,
+        "num_contratos_previos_depto": 0,
+        "valor_total_contratos_previos_nacional": 0.0,
+        "valor_total_contratos_previos_depto": 0.0,
+        "num_sobrecostos_previos": 0,
+        "num_retrasos_previos": 0,
+    }
+    result = compute_category_c(row, procesos_data=None, provider_history=provider_history, num_actividades=1)
+    assert result["tipo_persona_proveedor"] == 0
+
+
+def test_proponente_unico_true():
+    """proponente_unico returns 1 when num_proponentes=1."""
+    from sip_engine.features.category_c import compute_category_c
+
+    row = {"TipoDocProveedor": "NIT", "Departamento": "Antioquia"}
+    procesos_data = {
+        "Respuestas al Procedimiento": 1,
+        "Proveedores Unicos con Respuestas": 1,
+    }
+    provider_history = {
+        "num_contratos_previos_nacional": 0,
+        "num_contratos_previos_depto": 0,
+        "valor_total_contratos_previos_nacional": 0.0,
+        "valor_total_contratos_previos_depto": 0.0,
+        "num_sobrecostos_previos": 0,
+        "num_retrasos_previos": 0,
+    }
+    result = compute_category_c(row, procesos_data=procesos_data, provider_history=provider_history, num_actividades=2)
+    assert result["proponente_unico"] == 1
+
+
+def test_proponente_unico_false():
+    """proponente_unico returns 0 when num_proponentes > 1."""
+    from sip_engine.features.category_c import compute_category_c
+
+    row = {"TipoDocProveedor": "NIT", "Departamento": "Antioquia"}
+    procesos_data = {
+        "Respuestas al Procedimiento": 5,
+        "Proveedores Unicos con Respuestas": 5,
+    }
+    provider_history = {
+        "num_contratos_previos_nacional": 0,
+        "num_contratos_previos_depto": 0,
+        "valor_total_contratos_previos_nacional": 0.0,
+        "valor_total_contratos_previos_depto": 0.0,
+        "num_sobrecostos_previos": 0,
+        "num_retrasos_previos": 0,
+    }
+    result = compute_category_c(row, procesos_data=procesos_data, provider_history=provider_history, num_actividades=1)
+    assert result["proponente_unico"] == 0
+
+
+def test_proponente_unico_nan_when_no_procesos():
+    """proponente_unico is NaN when procesos_data is None."""
+    import math
+    from sip_engine.features.category_c import compute_category_c
+
+    row = {"TipoDocProveedor": "NIT", "Departamento": "Cundinamarca"}
+    provider_history = {
+        "num_contratos_previos_nacional": 0,
+        "num_contratos_previos_depto": 0,
+        "valor_total_contratos_previos_nacional": 0.0,
+        "valor_total_contratos_previos_depto": 0.0,
+        "num_sobrecostos_previos": 0,
+        "num_retrasos_previos": 0,
+    }
+    result = compute_category_c(row, procesos_data=None, provider_history=provider_history, num_actividades=1)
+    val = result["proponente_unico"]
+    assert val is None or (isinstance(val, float) and math.isnan(val))
+
+
+def test_provider_history_integrated():
+    """compute_category_c correctly passes through all 6 provider history fields."""
+    from sip_engine.features.category_c import compute_category_c
+
+    row = {"TipoDocProveedor": "NIT", "Departamento": "Valle del Cauca"}
+    provider_history = {
+        "num_contratos_previos_nacional": 10,
+        "num_contratos_previos_depto": 3,
+        "valor_total_contratos_previos_nacional": 50_000_000.0,
+        "valor_total_contratos_previos_depto": 12_000_000.0,
+        "num_sobrecostos_previos": 2,
+        "num_retrasos_previos": 1,
+    }
+    result = compute_category_c(row, procesos_data=None, provider_history=provider_history, num_actividades=5)
+    assert result["num_contratos_previos_nacional"] == 10
+    assert result["num_contratos_previos_depto"] == 3
+    assert result["valor_total_contratos_previos_nacional"] == 50_000_000.0
+    assert result["valor_total_contratos_previos_depto"] == 12_000_000.0
+    assert result["num_sobrecostos_previos"] == 2
+    assert result["num_retrasos_previos"] == 1
+
+
+def test_num_actividades_economicas_passed_through():
+    """num_actividades_economicas is the precomputed value passed in."""
+    from sip_engine.features.category_c import compute_category_c
+
+    row = {"TipoDocProveedor": "CC", "Departamento": "Bogotá D.C."}
+    provider_history = {
+        "num_contratos_previos_nacional": 0,
+        "num_contratos_previos_depto": 0,
+        "valor_total_contratos_previos_nacional": 0.0,
+        "valor_total_contratos_previos_depto": 0.0,
+        "num_sobrecostos_previos": 0,
+        "num_retrasos_previos": 0,
+    }
+    result = compute_category_c(row, procesos_data=None, provider_history=provider_history, num_actividades=7)
+    assert result["num_actividades_economicas"] == 7
+
+
+def test_category_c_returns_eleven_features():
+    """compute_category_c must return exactly 11 feature keys."""
+    from sip_engine.features.category_c import compute_category_c
+
+    row = {"TipoDocProveedor": "NIT", "Departamento": "Antioquia"}
+    procesos_data = {
+        "Respuestas al Procedimiento": 3,
+        "Proveedores Unicos con Respuestas": 3,
+    }
+    provider_history = {
+        "num_contratos_previos_nacional": 5,
+        "num_contratos_previos_depto": 1,
+        "valor_total_contratos_previos_nacional": 5_000_000.0,
+        "valor_total_contratos_previos_depto": 1_000_000.0,
+        "num_sobrecostos_previos": 0,
+        "num_retrasos_previos": 0,
+    }
+    result = compute_category_c(row, procesos_data=procesos_data, provider_history=provider_history, num_actividades=2)
+    assert len(result) == 11
+
+
+# ============================================================
+# Task 2: Encoding module tests
+# ============================================================
+
+
+def test_build_encoding_mappings_groups_rare(tmp_path, monkeypatch):
+    """Categories appearing in < 0.1% of rows are grouped into 'Other'."""
+    import pandas as pd
+    from sip_engine.features.encoding import build_encoding_mappings
+
+    monkeypatch.setenv("SIP_PROJECT_ROOT", str(tmp_path))
+    (tmp_path / "artifacts" / "features").mkdir(parents=True)
+
+    # 1000 rows total; "Rare" appears once (0.1% exactly — boundary) → should still be rare
+    # "Common" appears 999 times → should be kept
+    n = 1000
+    values = ["Common"] * (n - 1) + ["Rare"]
+    df = pd.DataFrame({
+        "tipo_contrato_cat": values,
+        "modalidad_contratacion_cat": ["Licitación Pública"] * n,
+        "departamento_cat": ["Cundinamarca"] * n,
+        "origen_recursos_cat": ["Recursos Propios"] * n,
+        "unspsc_categoria": [80] * n,
+    })
+    mappings = build_encoding_mappings(df, force=True)
+    # "Rare" appears at exactly 0.1% (1/1000) which equals threshold → grouped into Other
+    tipo_map = mappings["tipo_contrato_cat"]
+    assert "Common" in tipo_map
+    assert "Rare" not in tipo_map or tipo_map.get("Rare") == tipo_map.get("Other")
+
+
+def test_build_encoding_mappings_keeps_frequent(tmp_path, monkeypatch):
+    """Categories appearing >= 0.1% are kept with their own code."""
+    import pandas as pd
+    from sip_engine.features.encoding import build_encoding_mappings
+
+    monkeypatch.setenv("SIP_PROJECT_ROOT", str(tmp_path))
+    (tmp_path / "artifacts" / "features").mkdir(parents=True)
+
+    n = 1000
+    # "TypeA" appears 5 times (0.5% > 0.1%) → kept
+    # "TypeB" appears 995 times → kept
+    values = ["TypeA"] * 5 + ["TypeB"] * (n - 5)
+    df = pd.DataFrame({
+        "tipo_contrato_cat": values,
+        "modalidad_contratacion_cat": ["Licitación Pública"] * n,
+        "departamento_cat": ["Cundinamarca"] * n,
+        "origen_recursos_cat": ["Recursos Propios"] * n,
+        "unspsc_categoria": [80] * n,
+    })
+    mappings = build_encoding_mappings(df, force=True)
+    tipo_map = mappings["tipo_contrato_cat"]
+    assert "TypeA" in tipo_map
+    assert "TypeB" in tipo_map
+
+
+def test_encoding_alphabetical_order(tmp_path, monkeypatch):
+    """Encoding codes are assigned in alphabetical order (after Other=0)."""
+    import pandas as pd
+    from sip_engine.features.encoding import build_encoding_mappings
+
+    monkeypatch.setenv("SIP_PROJECT_ROOT", str(tmp_path))
+    (tmp_path / "artifacts" / "features").mkdir(parents=True)
+
+    n = 1000
+    # 3 frequent categories: Apple, Banana, Cherry
+    values = ["Apple"] * 400 + ["Banana"] * 350 + ["Cherry"] * 250
+    df = pd.DataFrame({
+        "tipo_contrato_cat": values,
+        "modalidad_contratacion_cat": ["Licitación Pública"] * n,
+        "departamento_cat": ["Cundinamarca"] * n,
+        "origen_recursos_cat": ["Recursos Propios"] * n,
+        "unspsc_categoria": [80] * n,
+    })
+    mappings = build_encoding_mappings(df, force=True)
+    tipo_map = mappings["tipo_contrato_cat"]
+    # Alphabetical: Apple=1, Banana=2, Cherry=3
+    assert tipo_map["Apple"] == 1
+    assert tipo_map["Banana"] == 2
+    assert tipo_map["Cherry"] == 3
+
+
+def test_encoding_other_gets_code_zero(tmp_path, monkeypatch):
+    """'Other' always maps to integer code 0."""
+    import pandas as pd
+    from sip_engine.features.encoding import build_encoding_mappings
+
+    monkeypatch.setenv("SIP_PROJECT_ROOT", str(tmp_path))
+    (tmp_path / "artifacts" / "features").mkdir(parents=True)
+
+    n = 1000
+    values = ["Common"] * n
+    df = pd.DataFrame({
+        "tipo_contrato_cat": values,
+        "modalidad_contratacion_cat": ["Licitación Pública"] * n,
+        "departamento_cat": ["Cundinamarca"] * n,
+        "origen_recursos_cat": ["Recursos Propios"] * n,
+        "unspsc_categoria": [80] * n,
+    })
+    mappings = build_encoding_mappings(df, force=True)
+    tipo_map = mappings["tipo_contrato_cat"]
+    assert tipo_map["Other"] == 0
+
+
+def test_apply_encoding_known_category(tmp_path, monkeypatch):
+    """apply_encoding correctly applies pre-computed mappings to known categories."""
+    import pandas as pd
+    from sip_engine.features.encoding import build_encoding_mappings, apply_encoding
+
+    monkeypatch.setenv("SIP_PROJECT_ROOT", str(tmp_path))
+    (tmp_path / "artifacts" / "features").mkdir(parents=True)
+
+    n = 1000
+    values = ["Apple"] * 600 + ["Banana"] * 400
+    df_train = pd.DataFrame({
+        "tipo_contrato_cat": values,
+        "modalidad_contratacion_cat": ["Licitación Pública"] * n,
+        "departamento_cat": ["Cundinamarca"] * n,
+        "origen_recursos_cat": ["Recursos Propios"] * n,
+        "unspsc_categoria": [80] * n,
+    })
+    mappings = build_encoding_mappings(df_train, force=True)
+
+    df_infer = pd.DataFrame({
+        "tipo_contrato_cat": ["Apple", "Banana"],
+        "modalidad_contratacion_cat": ["Licitación Pública", "Licitación Pública"],
+        "departamento_cat": ["Cundinamarca", "Cundinamarca"],
+        "origen_recursos_cat": ["Recursos Propios", "Recursos Propios"],
+        "unspsc_categoria": [80, 80],
+    })
+    result = apply_encoding(df_infer, mappings)
+    # Apple should map to 1 (alphabetical: Apple < Banana)
+    assert result["tipo_contrato_cat"].iloc[0] == 1
+    assert result["tipo_contrato_cat"].iloc[1] == 2
+
+
+def test_apply_encoding_unseen_category(tmp_path, monkeypatch):
+    """Unseen categories at inference time map to 'Other' (code 0)."""
+    import pandas as pd
+    from sip_engine.features.encoding import build_encoding_mappings, apply_encoding
+
+    monkeypatch.setenv("SIP_PROJECT_ROOT", str(tmp_path))
+    (tmp_path / "artifacts" / "features").mkdir(parents=True)
+
+    n = 1000
+    df_train = pd.DataFrame({
+        "tipo_contrato_cat": ["Known"] * n,
+        "modalidad_contratacion_cat": ["Licitación Pública"] * n,
+        "departamento_cat": ["Cundinamarca"] * n,
+        "origen_recursos_cat": ["Recursos Propios"] * n,
+        "unspsc_categoria": [80] * n,
+    })
+    mappings = build_encoding_mappings(df_train, force=True)
+
+    df_infer = pd.DataFrame({
+        "tipo_contrato_cat": ["UnseenType"],
+        "modalidad_contratacion_cat": ["Licitación Pública"],
+        "departamento_cat": ["Cundinamarca"],
+        "origen_recursos_cat": ["Recursos Propios"],
+        "unspsc_categoria": [80],
+    })
+    result = apply_encoding(df_infer, mappings)
+    # "UnseenType" not in training set → maps to Other=0
+    assert result["tipo_contrato_cat"].iloc[0] == 0
+
+
+def test_apply_encoding_nan_preserved(tmp_path, monkeypatch):
+    """NaN values in categorical columns remain NaN after encoding."""
+    import math
+    import pandas as pd
+    from sip_engine.features.encoding import build_encoding_mappings, apply_encoding
+
+    monkeypatch.setenv("SIP_PROJECT_ROOT", str(tmp_path))
+    (tmp_path / "artifacts" / "features").mkdir(parents=True)
+
+    n = 1000
+    df_train = pd.DataFrame({
+        "tipo_contrato_cat": ["Common"] * n,
+        "modalidad_contratacion_cat": ["Licitación Pública"] * n,
+        "departamento_cat": ["Cundinamarca"] * n,
+        "origen_recursos_cat": ["Recursos Propios"] * n,
+        "unspsc_categoria": [80] * n,
+    })
+    mappings = build_encoding_mappings(df_train, force=True)
+
+    df_infer = pd.DataFrame({
+        "tipo_contrato_cat": [None],
+        "modalidad_contratacion_cat": [None],
+        "departamento_cat": [None],
+        "origen_recursos_cat": [None],
+        "unspsc_categoria": [None],
+    })
+    result = apply_encoding(df_infer, mappings)
+    # NaN inputs should remain NaN
+    val = result["tipo_contrato_cat"].iloc[0]
+    assert val is None or pd.isna(val)
+
+
+def test_encoding_mappings_serialization(tmp_path, monkeypatch):
+    """build_encoding_mappings writes JSON; load_encoding_mappings reads it back identically."""
+    import pandas as pd
+    from sip_engine.features.encoding import build_encoding_mappings, load_encoding_mappings
+
+    monkeypatch.setenv("SIP_PROJECT_ROOT", str(tmp_path))
+    (tmp_path / "artifacts" / "features").mkdir(parents=True)
+
+    n = 1000
+    df = pd.DataFrame({
+        "tipo_contrato_cat": ["Alpha"] * 600 + ["Beta"] * 400,
+        "modalidad_contratacion_cat": ["Licitación Pública"] * n,
+        "departamento_cat": ["Cundinamarca"] * n,
+        "origen_recursos_cat": ["Recursos Propios"] * n,
+        "unspsc_categoria": [80] * n,
+    })
+    mappings_built = build_encoding_mappings(df, force=True)
+    mappings_loaded = load_encoding_mappings()
+    assert mappings_built == mappings_loaded
+
+
+def test_encoding_all_five_columns(tmp_path, monkeypatch):
+    """build_encoding_mappings produces mappings for all 5 categorical columns."""
+    import pandas as pd
+    from sip_engine.features.encoding import build_encoding_mappings, CATEGORICAL_COLUMNS
+
+    monkeypatch.setenv("SIP_PROJECT_ROOT", str(tmp_path))
+    (tmp_path / "artifacts" / "features").mkdir(parents=True)
+
+    n = 1000
+    df = pd.DataFrame({
+        "tipo_contrato_cat": ["TypeA"] * n,
+        "modalidad_contratacion_cat": ["Licitación Pública"] * n,
+        "departamento_cat": ["Cundinamarca"] * n,
+        "origen_recursos_cat": ["Recursos Propios"] * n,
+        "unspsc_categoria": [80] * n,
+    })
+    mappings = build_encoding_mappings(df, force=True)
+    for col in CATEGORICAL_COLUMNS:
+        assert col in mappings, f"Missing mapping for column: {col}"
