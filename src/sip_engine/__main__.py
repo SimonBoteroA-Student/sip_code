@@ -30,6 +30,15 @@ def main() -> None:
         help="Force rebuild even if labels.parquet exists",
     )
 
+    build_features_parser = subparsers.add_parser(
+        "build-features", help="Build feature matrix from contratos/procesos/proveedores"
+    )
+    build_features_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force rebuild even if features.parquet exists",
+    )
+
     subparsers.add_parser("train", help="Train XGBoost prediction models")
     subparsers.add_parser("evaluate", help="Evaluate trained models")
     subparsers.add_parser("run-pipeline", help="Run the full SIP pipeline end to end")
@@ -58,6 +67,16 @@ def main() -> None:
             sys.exit(0)
         except Exception as e:
             print(f"Error building labels: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "build-features":
+        from sip_engine.features.pipeline import build_features
+        try:
+            path = build_features(force=args.force)
+            print(f"Features built: {path}")
+            sys.exit(0)
+        except Exception as e:
+            print(f"Error building features: {e}", file=sys.stderr)
             sys.exit(1)
 
     else:

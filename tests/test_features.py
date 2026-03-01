@@ -1596,3 +1596,51 @@ def test_compute_features_parity(tmp_path, monkeypatch):
     assert online_result["tipo_persona_proveedor"] == batch_row["tipo_persona_proveedor"]
     assert online_result["mes_firma"] == batch_row["mes_firma"]
     assert online_result["trimestre_firma"] == batch_row["trimestre_firma"]
+
+
+# ============================================================
+# Task 2 (05-03): CLI and __init__.py re-export tests
+# ============================================================
+
+
+def test_cli_build_features_help():
+    """python -m sip_engine build-features --help must exit 0."""
+    import subprocess, sys
+    result = subprocess.run(
+        [sys.executable, "-m", "sip_engine", "build-features", "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "build-features" in result.stdout or "feature" in result.stdout.lower()
+
+
+def test_cli_build_features_runs(tmp_path, monkeypatch):
+    """python -m sip_engine build-features with mock data must complete successfully."""
+    import subprocess, sys, os
+    _make_pipeline_env(tmp_path, monkeypatch)
+
+    env = os.environ.copy()
+    env["SIP_PROJECT_ROOT"] = str(tmp_path)
+    env["SIP_SECOP_DIR"] = str(tmp_path / "secop")
+    env["SIP_ARTIFACTS_DIR"] = str(tmp_path / "artifacts")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "sip_engine", "build-features", "--force"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, (
+        f"build-features CLI failed.\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "features built" in result.stdout.lower()
+
+
+def test_features_init_exports_build_features():
+    """sip_engine.features must export build_features and compute_features."""
+    from sip_engine.features import build_features, compute_features, FEATURE_COLUMNS
+    assert callable(build_features)
+    assert callable(compute_features)
+    assert isinstance(FEATURE_COLUMNS, list)
+    assert len(FEATURE_COLUMNS) == 30

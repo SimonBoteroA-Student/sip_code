@@ -13,6 +13,11 @@ from sip_engine.features.encoding import (
     apply_encoding,
     load_encoding_mappings,
 )
+from sip_engine.features.pipeline import (
+    build_features,
+    compute_features,
+    FEATURE_COLUMNS,
+)
 
 __all__ = [
     "build_provider_history_index",
@@ -25,4 +30,7 @@ __all__ = [
     "build_encoding_mappings",
     "apply_encoding",
     "load_encoding_mappings",
+    "build_features",
+    "compute_features",
+    "FEATURE_COLUMNS",
 ]
