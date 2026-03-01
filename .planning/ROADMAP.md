@@ -12,7 +12,7 @@ SIP is built as a strictly sequential offline pipeline: a working Python environ
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Project Foundation** - Python 3.12 environment verified, project scaffold and config system in place
+- [x] **Phase 1: Project Foundation** - Python 3.12 environment verified, project scaffold and config system in place (completed 2026-03-01)
 - [ ] **Phase 2: Data Loaders** - Chunked CSV loading for all large SECOP files, correct dtypes/encoding, memory-efficient processing
 - [ ] **Phase 3: RCAC Builder** - 6-source sanction registry built, normalized, deduplicated, serialized, and queryable
 - [ ] **Phase 4: Label Construction** - M1/M2 labels from amendments, M3 from Comptroller bulletins, M4 from RCAC fines
@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. `config/settings.py` exists with all file paths, API URLs, and encoding constants — no hardcoded paths anywhere in business logic
   3. `config/model_weights.json` exists with equal CRI weights (0.20 each) ready to be loaded at runtime
   4. Running the project from any working directory produces the same paths (environment-variable-based resolution)
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 01-01-PLAN.md — Python 3.12 environment setup, project scaffold, dependency verification
 - [ ] 01-02-PLAN.md — Centralized configuration system (settings.py, model_weights.json, requirements.lock)
@@ -141,7 +141,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Project Foundation | 1/2 | In Progress|  |
+| 1. Project Foundation | 2/2 | Complete   | 2026-03-01 |
 | 2. Data Loaders | 0/TBD | Not started | - |
 | 3. RCAC Builder | 0/TBD | Not started | - |
 | 4. Label Construction | 0/TBD | Not started | - |
