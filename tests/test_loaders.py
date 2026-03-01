@@ -1,11 +1,14 @@
 """Tests for sip_engine data loaders and schema utilities.
 
 Structure:
-- TestCleanCurrency: unit tests for clean_currency() — pass NOW (schemas.py exists)
-- TestValidateColumns: unit tests for validate_columns() — pass NOW
-- TestLoadContratos: integration stubs for load_contratos() — xfail until Plan 02
-- TestLoadPacoSiri: integration stubs for load_paco_siri() — xfail until Plan 02
-- TestEncodingReplace: integration stubs for encoding_errors='replace' — xfail until Plan 02
+- TestCleanCurrency: unit tests for clean_currency() — always pass
+- TestValidateColumns: unit tests for validate_columns() — always pass
+- TestLoadContratos: integration tests for load_contratos()
+- TestLoadPacoSiri: integration tests for load_paco_siri()
+- TestEncodingReplace: encoding_errors='replace' tests
+- TestFileNotFound: FileNotFoundError behaviour
+- TestChunkedMemorySafety: chunked reading validates DATA-06
+- TestImportable: verifies all 14 loaders are importable and callable
 
 DATA-06: chunked read yields DataFrames without crash
 DATA-07: dtypes match schema, currency cols cleaned to float
@@ -21,7 +24,7 @@ from sip_engine.data.schemas import clean_currency, validate_columns
 
 
 # ============================================================
-# Schema tests — pass NOW (schemas.py complete)
+# Schema tests — always pass
 # ============================================================
 
 class TestCleanCurrency:
@@ -102,14 +105,9 @@ class TestValidateColumns:
 
 
 # ============================================================
-# Loader tests — xfail until Plan 02 creates loaders.py
+# Loader tests — loaders.py implemented in Plan 02
 # ============================================================
 
-@pytest.mark.xfail(
-    reason="loaders.py not yet created — will be implemented in Plan 02",
-    raises=ImportError,
-    strict=True,
-)
 class TestLoadContratos:
     """DATA-06 / DATA-07: Chunked contratos loader."""
 
@@ -146,11 +144,6 @@ class TestLoadContratos:
             assert col in chunk.columns, f"Missing expected column: {col}"
 
 
-@pytest.mark.xfail(
-    reason="loaders.py not yet created — will be implemented in Plan 02",
-    raises=ImportError,
-    strict=True,
-)
 class TestLoadPacoSiri:
     """DATA-04: Headerless positional read for SIRI sanctions file."""
 
@@ -180,11 +173,6 @@ class TestLoadPacoSiri:
         assert "CÉDULA DE CIUDADANÍA" in chunk["tipo_documento"].values
 
 
-@pytest.mark.xfail(
-    reason="loaders.py not yet created — will be implemented in Plan 02",
-    raises=ImportError,
-    strict=True,
-)
 class TestEncodingReplace:
     """DATA-10: encoding_errors='replace' — bad bytes become replacement char, not crash."""
 
@@ -204,3 +192,123 @@ class TestEncodingReplace:
         # Flatten all string values and check for replacement char
         all_text = " ".join(str(v) for v in chunk.values.flatten())
         assert "\ufffd" in all_text, "Expected replacement char U+FFFD from bad byte"
+
+    def test_encoding_replace_produces_replacement_char(self, bad_byte_csv, monkeypatch):
+        """DATA-10: encoding_errors='replace' yields U+FFFD, not crash or silent loss."""
+        monkeypatch.setenv("SIP_SECOP_DIR", str(bad_byte_csv.parent))
+        from sip_engine.data.loaders import load_contratos  # noqa: PLC0415
+        chunks = list(load_contratos())
+        assert len(chunks) >= 1
+        all_text = " ".join(str(v) for chunk in chunks for v in chunk.values.flatten())
+        assert "\ufffd" in all_text
+
+
+# ============================================================
+# Edge-case tests: FileNotFoundError, chunked memory safety, importability
+# ============================================================
+
+class TestFileNotFound:
+    """FileNotFoundError raised with clear message when source file is missing."""
+
+    def test_file_not_found(self, tmp_path, monkeypatch):
+        """load_contratos() raises FileNotFoundError when SIP_SECOP_DIR has no CSV."""
+        # Point to an empty temp dir — no contratos_SECOP.csv present
+        monkeypatch.setenv("SIP_SECOP_DIR", str(tmp_path))
+        from sip_engine.data.loaders import load_contratos  # noqa: PLC0415
+        with pytest.raises(FileNotFoundError, match="contratos"):
+            # Must call next() to trigger the generator
+            next(load_contratos())
+
+
+class TestChunkedMemorySafety:
+    """DATA-06: chunked reads yield multiple smaller DataFrames, not one huge one."""
+
+    def test_chunked_memory_safety(self, tmp_path, monkeypatch):
+        """With chunk_size=2 and 5 data rows, load_contratos yields 3 chunks."""
+        from sip_engine.data.schemas import CONTRATOS_USECOLS
+
+        # Build a tiny CSV with exactly 5 data rows
+        header = ",".join(CONTRATOS_USECOLS) + "\n"
+        row_template = (
+            "CO1.{i},CON-{i},REF-{i},Liquidado,Servicios,"
+            "Contratación Directa,N/A,NIT,90000000{i},EMPRESA {i},"
+            "Recursos Propios,$1,000,ENTIDAD TEST,899000001,Bogotá,Bogotá,"
+            "Servicio test,2023-01-01,2023-01-05,2023-12-31\n"
+        )
+        content = header + "".join(row_template.format(i=i) for i in range(5))
+        csv_path = tmp_path / "contratos_SECOP.csv"
+        csv_path.write_text(content, encoding="utf-8")
+
+        # Override chunk_size via SIP_* env — use monkeypatch on settings directly
+        monkeypatch.setenv("SIP_SECOP_DIR", str(tmp_path))
+
+        # We need to patch the settings singleton's chunk_size for this test
+        from sip_engine.config import get_settings
+        from unittest.mock import patch
+
+        settings = get_settings()
+        with patch.object(type(settings), "chunk_size", new=2):
+            from sip_engine.data.loaders import load_contratos  # noqa: PLC0415
+            # Reload settings fresh for this call via a new Settings instance
+            from sip_engine.config.settings import Settings
+            fresh_settings = Settings()
+            fresh_settings.chunk_size = 2
+
+            with patch("sip_engine.data.loaders.get_settings", return_value=fresh_settings):
+                chunks = list(load_contratos())
+
+        # 5 rows / chunk_size=2 → 3 chunks (2, 2, 1)
+        assert len(chunks) == 3
+        assert len(chunks[0]) == 2
+        assert len(chunks[1]) == 2
+        assert len(chunks[2]) == 1
+        for chunk in chunks:
+            assert isinstance(chunk, pd.DataFrame)
+
+
+class TestAllLoadersImportable:
+    """All 14 loader functions are importable and callable (return generators)."""
+
+    def test_all_paco_loaders_importable(self):
+        """All 5 PACO loader functions are importable and callable."""
+        from sip_engine.data.loaders import (  # noqa: PLC0415
+            load_paco_colusiones,
+            load_paco_multas,
+            load_paco_resp_fiscales,
+            load_paco_sanciones_penales,
+            load_paco_siri,
+        )
+        for fn in [
+            load_paco_siri,
+            load_paco_multas,
+            load_paco_resp_fiscales,
+            load_paco_colusiones,
+            load_paco_sanciones_penales,
+        ]:
+            assert callable(fn), f"{fn.__name__} is not callable"
+
+    def test_all_secop_loaders_importable(self):
+        """All 9 SECOP loader functions are importable and callable."""
+        from sip_engine.data.loaders import (  # noqa: PLC0415
+            load_adiciones,
+            load_boletines,
+            load_contratos,
+            load_ejecucion,
+            load_ofertas,
+            load_procesos,
+            load_proponentes,
+            load_proveedores,
+            load_suspensiones,
+        )
+        for fn in [
+            load_contratos,
+            load_procesos,
+            load_ofertas,
+            load_proponentes,
+            load_proveedores,
+            load_boletines,
+            load_ejecucion,
+            load_suspensiones,
+            load_adiciones,
+        ]:
+            assert callable(fn), f"{fn.__name__} is not callable"

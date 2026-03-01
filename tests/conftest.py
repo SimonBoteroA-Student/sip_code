@@ -10,6 +10,20 @@ from __future__ import annotations
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def clear_settings_cache():
+    """Clear the get_settings() LRU cache before each test.
+
+    This ensures monkeypatch.setenv() changes to SIP_* env vars take effect
+    when loaders call get_settings() — without this, the cached singleton
+    would return the first Settings() instance regardless of env overrides.
+    """
+    from sip_engine.config import get_settings
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def tiny_contratos_csv(tmp_path):
     """CSV matching contratos_SECOP.csv structure (headers, UTF-8, currency cols).
