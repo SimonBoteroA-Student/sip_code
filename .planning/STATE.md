@@ -9,18 +9,18 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 3 of 9 (RCAC Builder) — IN PROGRESS
-Plan: 1 of 2 completed in current phase
-Status: Phase 3 Plan 01 complete — RCAC normalization engine + builder implemented, 34 tests passing.
-Last activity: 2026-03-01 — Plan 03-01 complete: rcac_builder.py, normalize_numero/tipo/_infer_tipo, build_rcac()
+Phase: 3 of 9 (RCAC Builder) — COMPLETE
+Plan: 2 of 2 completed in current phase
+Status: Phase 3 complete — RCAC lookup interface, CLI wiring, and package exports implemented. 65 tests passing.
+Last activity: 2026-03-01 — Plan 03-02 complete: rcac_lookup.py, build-rcac CLI dispatch, data/__init__.py exports
 
-Progress: [█████░░░░░] 27%
+Progress: [██████░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 4.3 min
+- Total plans completed: 5
+- Average duration: 3.8 min
 - Total execution time: 0.3 hours
 
 **By Phase:**
@@ -29,7 +29,7 @@ Progress: [█████░░░░░] 27%
 |-------|-------|-------|----------|
 | 01-project-foundation | 2 | 7 min | 3.5 min |
 | 02-data-loaders | 2 | 8 min | 4 min |
-| 03-rcac-builder | 1 | 4 min | 4 min |
+| 03-rcac-builder | 2 | 6 min | 3 min |
 
 **Recent Trend:**
 - Last 5 plans: 5 min, 2 min, 4 min, 4 min, 4 min
@@ -63,6 +63,9 @@ Recent decisions affecting current work:
 - [03-01]: resp_fiscales "Tipo y Num Docuemento" is purely numeric — no type+number splitting needed, just normalize_numero()
 - [03-01]: en_sanciones_penales always False in v1 — FGN source has no person-level document IDs
 - [03-01]: build_rcac() uses defaultdict(set) keyed on (tipo, num) — set membership ensures duplicate-source rows count as 1 distinct source
+- [03-02]: rcac_lookup() normalizes inputs at lookup boundary — callers pass raw strings, normalize_tipo/numero called internally
+- [03-02]: Module-level _rcac_index cache with reset_rcac_cache() — lazy loading pattern mirroring get_settings() lru_cache
+- [03-02]: is_malformed() checked before index access — short-circuits for empty/all-zero/short numbers without touching index
 
 ### Pending Todos
 
@@ -77,5 +80,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 03-01-PLAN.md — RCAC normalization engine + build_rcac() implemented, 34 new tests, 59 total passing.
-Resume file: .planning/phases/03-rcac-builder/03-01-SUMMARY.md
+Stopped at: Completed 03-02-PLAN.md — RCAC lookup module + CLI dispatch + package exports, 65 total tests passing. Phase 3 COMPLETE.
+Resume file: .planning/phases/03-rcac-builder/03-02-SUMMARY.md

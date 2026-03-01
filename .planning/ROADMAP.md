@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Project Foundation** - Python 3.12 environment verified, project scaffold and config system in place (completed 2026-03-01)
 - [x] **Phase 2: Data Loaders** - Chunked CSV loading for all large SECOP files, correct dtypes/encoding, memory-efficient processing (completed 2026-03-01)
-- [ ] **Phase 3: RCAC Builder** - 6-source sanction registry built, normalized, deduplicated, serialized, and queryable
+- [x] **Phase 3: RCAC Builder** - 6-source sanction registry built, normalized, deduplicated, serialized, and queryable (completed 2026-03-01)
 - [ ] **Phase 4: Label Construction** - M1/M2 labels from amendments, M3 from Comptroller bulletins, M4 from RCAC fines
 - [ ] **Phase 5: Feature Engineering** - Shared feature pipeline (Categories A/B/C) with temporal leak guard and train-serve parity
 - [ ] **Phase 6: IRIC** - 11-component irregularity index calculated, nationally calibrated by contract type, added as model feature
@@ -62,10 +62,10 @@ Plans:
   3. SIRI file is parsed by positional columns 5 and 6 (no headers); `responsabilidades_fiscales_PACO.csv` combined "Tipo y Num Documento" field is correctly split
   4. Records from multiple sources for the same person are deduplicated into a single entry with `num_fuentes_distintas` correctly counted
   5. `rcac_lookup.py` returns a record in O(1) time for any (document_type, document_number) key, returning `None` for unknown identifiers
-**Plans:** 2 plans (1 complete)
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 03-01-PLAN.md — RCAC normalization engine and builder (TDD: normalization, dedup, serialization)
-- [ ] 03-02-PLAN.md — RCAC lookup interface, CLI wiring, and package exports
+- [x] 03-02-PLAN.md — RCAC lookup interface, CLI wiring, and package exports
 
 ### Phase 4: Label Construction
 **Goal**: Binary target labels for all 4 models exist as correctly constructed columns on the training dataset, using only the correct source for each label
@@ -149,7 +149,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Project Foundation | 2/2 | Complete   | 2026-03-01 |
 | 2. Data Loaders | 2/2 | Complete   | 2026-03-01 |
-| 3. RCAC Builder | 1/2 | In progress | - |
+| 3. RCAC Builder | 2/2 | Complete | 2026-03-01 |
 | 4. Label Construction | 0/TBD | Not started | - |
 | 5. Feature Engineering | 0/TBD | Not started | - |
 | 6. IRIC | 0/TBD | Not started | - |
