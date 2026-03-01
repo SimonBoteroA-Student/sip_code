@@ -19,7 +19,7 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 - [x] **DATA-08**: System serializes RCAC as indexed dict via joblib for fast loading
 - [x] **DATA-09**: System provides O(1) RCAC lookup by (document_type, document_number)
 - [x] **DATA-10**: System handles encoding differences across sources (UTF-8 for SECOP, Latin-1 for PACO files) without silent data corruption
-- [ ] **DATA-11**: System constructs labels for M1 (cost overruns) and M2 (delays) from amendments dataset (`adiciones.csv`): M1=1 if contract has ≥1 value amendment, M2=1 if contract has ≥1 time amendment
+- [x] **DATA-11**: System constructs labels for M1 (cost overruns) and M2 (delays) from amendments dataset (`adiciones.csv`): M1=1 if contract has ≥1 value amendment, M2=1 if contract has ≥1 time amendment
 - [ ] **DATA-12**: System constructs label for M3 from Comptroller bulletins: M3=1 if provider appears as fiscal liability holder
 - [ ] **DATA-13**: System constructs label for M4 from RCAC: M4=1 if provider has SECOP fine/sanction
 

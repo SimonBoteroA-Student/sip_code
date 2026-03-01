@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 3 — RCAC Builder
+**Current focus:** Phase 4 — Label Construction
 
 ## Current Position
 
-Phase: 3 of 9 (RCAC Builder) — COMPLETE
-Plan: 2 of 2 completed in current phase
-Status: Phase 3 complete — RCAC lookup interface, CLI wiring, and package exports implemented. 65 tests passing.
-Last activity: 2026-03-01 — Plan 03-02 complete: rcac_lookup.py, build-rcac CLI dispatch, data/__init__.py exports
+Phase: 4 of 9 (Label Construction) — IN PROGRESS
+Plan: 1 of 2 completed in current phase
+Status: Plan 04-01 complete — label_builder skeleton, M1/M2 sets, contratos dedup, 15 TDD tests. 80 tests passing.
+Last activity: 2026-03-01 — Plan 04-01 complete: label_builder.py, Settings paths, schema fixes
 
-Progress: [██████░░░░] 33%
+Progress: [███████░░░] 39%
 
 ## Performance Metrics
 
@@ -30,6 +30,7 @@ Progress: [██████░░░░] 33%
 | 01-project-foundation | 2 | 7 min | 3.5 min |
 | 02-data-loaders | 2 | 8 min | 4 min |
 | 03-rcac-builder | 2 | 6 min | 3 min |
+| 04-label-construction | 1 | 3 min | 3 min |
 
 **Recent Trend:**
 - Last 5 plans: 5 min, 2 min, 4 min, 4 min, 4 min
@@ -66,6 +67,9 @@ Recent decisions affecting current work:
 - [03-02]: rcac_lookup() normalizes inputs at lookup boundary — callers pass raw strings, normalize_tipo/numero called internally
 - [03-02]: Module-level _rcac_index cache with reset_rcac_cache() — lazy loading pattern mirroring get_settings() lru_cache
 - [03-02]: is_malformed() checked before index access — short-circuits for empty/all-zero/short numbers without touching index
+- [04-01]: label_builder imports rcac_builder utilities now — establishes M3/M4 dependency for Plan 04-02
+- [04-01]: _build_m1_m2_sets uses set membership isin() for orphan filtering — O(1) lookup per row
+- [04-01]: Parquet write deferred to Plan 04-02 — skeleton returns labels_path but doesn't write until M3/M4 columns added
 
 ### Pending Todos
 
@@ -80,5 +84,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-label-construction/04-CONTEXT.md
+Stopped at: Plan 04-01 complete
+Resume file: .planning/phases/04-label-construction/04-02-PLAN.md
