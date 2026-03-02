@@ -109,7 +109,11 @@ Plans:
   4. `iric_thresholds.json` contains national-level percentiles (P1, P5, P95, P99) segmented by contract type, computed only from training-set contracts
   5. IRIC scores (`iric_score`, `iric_competencia`, `iric_transparencia`, `iric_anomalias`) are present as Category D features in the feature vector produced by `pipeline.py`
   6. IRIC anomaly components 9 and 10 (`proveedor_sobrecostos_previos`, `proveedor_retrasos_previos`) return 0 for providers with no contract history before the signing date
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 06-01-PLAN.md — IRIC calculator (11 components + 4 aggregate scores) and threshold calibration machinery
+- [ ] 06-02-PLAN.md — Bid anomaly statistics (kurtosis + DRN) from ofertas data
+- [ ] 06-03-PLAN.md — Pipeline integration (Category D features), CLI build-iric, package exports
 
 ### Phase 7: Model Training
 **Goal**: 4 XGBoost binary classifiers (M1 cost overruns, M2 delays, M3 Comptroller records, M4 SECOP fines) are trained on pre-execution features only, with class imbalance strategy selected per model and hyperparameters optimized via random search, producing serialized `.pkl` artifacts
