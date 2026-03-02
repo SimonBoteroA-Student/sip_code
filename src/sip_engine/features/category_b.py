@@ -16,8 +16,12 @@ Usage:
 from __future__ import annotations
 
 import datetime
+import logging
 import math
+import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -55,7 +59,7 @@ def compute_category_b(
         row: Dict with raw contratos column values. Required keys:
             - "Fecha de Firma"                — datetime.date (contract signing date)
             - "Fecha de Inicio del Contrato"  — datetime.date (contract start date)
-            - "Fecha de Fin del Contrato"     — datetime.date (contract end date)
+            - "Duración del contrato"         — str, text like "143 Dia(s)" (pre-amendment duration)
         procesos_data: Dict with procesos row values for this contract's process
             (may be None if no procesos record matches). Expected keys:
             - "Fecha de Publicacion del Proceso"
@@ -71,7 +75,6 @@ def compute_category_b(
     # ---- Parse contract dates ----
     firma_date = _to_date(row.get("Fecha de Firma"))
     inicio_date = _to_date(row.get("Fecha de Inicio del Contrato"))
-    fin_date = _to_date(row.get("Fecha de Fin del Contrato"))
 
     # ---- 1. dias_firma_a_inicio ----
     if firma_date is not None and inicio_date is not None:
@@ -86,10 +89,7 @@ def compute_category_b(
         firma_posterior_a_inicio = 1 if dias_firma_a_inicio < 0 else 0
 
     # ---- 3. duracion_contrato_dias ----
-    if inicio_date is not None and fin_date is not None:
-        duracion_contrato_dias = (fin_date - inicio_date).days
-    else:
-        duracion_contrato_dias = float("nan")
+    duracion_contrato_dias = _parse_duracion_contrato(row.get("Duración del contrato"))
 
     # ---- 4. mes_firma ----
     mes_firma = firma_date.month if firma_date is not None else float("nan")
@@ -149,6 +149,44 @@ def compute_category_b(
 # Private helpers
 # ============================================================
 
+_DURACION_RE = re.compile(
+    r"^(\d+)\s+(Dia|Mes|Año|Semana|Hora)\((?:s|es)\)$", re.IGNORECASE
+)
+_UNIT_TO_DAYS: dict[str, float] = {
+    "dia": 1,
+    "mes": 30,
+    "año": 365,
+    "semana": 7,
+    "hora": 1 / 24,
+}
+
+
+def _parse_duracion_contrato(raw_value: Any) -> float:
+    """Parse SECOP duration text like '143 Dia(s)' to days as float.
+
+    Handles all 6 empirical formats: Dia(s), Mes(es), Año(s), Semana(s),
+    Hora(s), and "No definido". Returns NaN for None, empty, "No definido",
+    bare unit without number, and unrecognised formats.
+    """
+    if raw_value is None:
+        return float("nan")
+    text = str(raw_value).strip()
+    if not text or text.lower() == "no definido":
+        return float("nan")
+
+    m = _DURACION_RE.match(text)
+    if m is None:
+        # Bare unit like "Dia(s)" without a number
+        if re.match(r"^(Dia|Mes|Año|Semana|Hora)\(", text, re.IGNORECASE):
+            return float("nan")
+        logger.warning("Unknown duration format: %r", text)
+        return float("nan")
+
+    number = int(m.group(1))
+    unit = m.group(2).lower()
+    days = number * _UNIT_TO_DAYS[unit]
+    return round(days)
+
 
 def _to_date(value: Any) -> datetime.date | None:
     """Coerce a value to datetime.date, returning None on failure."""
@@ -163,6 +201,11 @@ def _to_date(value: Any) -> datetime.date | None:
     try:
         date_str = str(value).strip()[:10]
         return datetime.date.fromisoformat(date_str)
+    except (ValueError, TypeError):
+        pass
+    # Handle MM/DD/YYYY format common in SECOP CSVs
+    try:
+        return datetime.datetime.strptime(str(value).strip()[:10], "%m/%d/%Y").date()
     except (ValueError, TypeError):
         return None
 

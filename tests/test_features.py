@@ -91,7 +91,8 @@ def _make_tiny_contratos(tmp_path: Path, rows: list[dict]) -> Path:
         "Tipo de Contrato,Modalidad de Contratacion,Justificacion Modalidad de Contratacion,"
         "TipoDocProveedor,Documento Proveedor,Proveedor Adjudicado,Origen de los Recursos,"
         "Valor del Contrato,Nombre Entidad,Nit Entidad,Departamento,Codigo de Categoria Principal,"
-        "Ciudad,Objeto del Contrato,Fecha de Firma,Fecha de Inicio del Contrato,Fecha de Fin del Contrato"
+        "Ciudad,Objeto del Contrato,Fecha de Firma,Fecha de Inicio del Contrato,"
+        "Duración del contrato,Dias adicionados"
     )
     lines = [header]
     for r in rows:
@@ -102,7 +103,7 @@ def _make_tiny_contratos(tmp_path: Path, rows: list[dict]) -> Path:
             f"Recursos Propios,{r.get('valor','$1000000')},ENTIDAD TEST,899999999,"
             f"{r.get('departamento','Cundinamarca')},{r.get('categoria','A1')},"
             f"Bogota,Servicios,{r.get('fecha_firma','2020-01-01')},"
-            f"2020-01-10,2020-12-31"
+            f"2020-01-10,365 Dia(s),0"
         )
     p = tmp_path / "contratos_SECOP.csv"
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -622,7 +623,7 @@ def test_dias_firma_a_inicio_positive():
     row = {
         "Fecha de Firma": datetime.date(2023, 1, 10),
         "Fecha de Inicio del Contrato": datetime.date(2023, 1, 20),
-        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+        "Duración del contrato": "350 Dia(s)",
     }
     result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
     assert result["dias_firma_a_inicio"] == 10
@@ -635,7 +636,7 @@ def test_dias_firma_a_inicio_negative():
     row = {
         "Fecha de Firma": datetime.date(2023, 1, 25),
         "Fecha de Inicio del Contrato": datetime.date(2023, 1, 20),
-        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+        "Duración del contrato": "350 Dia(s)",
     }
     result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
     assert result["dias_firma_a_inicio"] == -5
@@ -648,7 +649,7 @@ def test_firma_posterior_a_inicio_flag():
     row_before = {
         "Fecha de Firma": datetime.date(2023, 1, 10),
         "Fecha de Inicio del Contrato": datetime.date(2023, 1, 20),
-        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+        "Duración del contrato": "350 Dia(s)",
     }
     result_before = compute_category_b(row_before, procesos_data=None, proveedor_fecha_creacion=None)
     assert result_before["firma_posterior_a_inicio"] == 0
@@ -656,24 +657,79 @@ def test_firma_posterior_a_inicio_flag():
     row_after = {
         "Fecha de Firma": datetime.date(2023, 1, 25),
         "Fecha de Inicio del Contrato": datetime.date(2023, 1, 20),
-        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+        "Duración del contrato": "350 Dia(s)",
     }
     result_after = compute_category_b(row_after, procesos_data=None, proveedor_fecha_creacion=None)
     assert result_after["firma_posterior_a_inicio"] == 1
 
 
 def test_duracion_contrato_dias():
-    """duracion_contrato_dias is (Fecha de Fin - Fecha de Inicio).days."""
-    from sip_engine.features.category_b import compute_category_b
+    """duracion_contrato_dias parses duration text field."""
+    from sip_engine.features.category_b import compute_category_b, _parse_duracion_contrato
 
+    # Direct parser test
+    assert _parse_duracion_contrato("181 Dia(s)") == 181
+
+    # Integration via compute_category_b
     row = {
         "Fecha de Firma": datetime.date(2023, 1, 1),
         "Fecha de Inicio del Contrato": datetime.date(2023, 1, 5),
-        "Fecha de Fin del Contrato": datetime.date(2023, 7, 5),
+        "Duración del contrato": "181 Dia(s)",
     }
     result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
-    expected_days = (datetime.date(2023, 7, 5) - datetime.date(2023, 1, 5)).days
-    assert result["duracion_contrato_dias"] == expected_days
+    assert result["duracion_contrato_dias"] == 181
+
+
+class TestParseDuracionContrato:
+    """Tests for _parse_duracion_contrato() duration text parser."""
+
+    def test_dias(self):
+        from sip_engine.features.category_b import _parse_duracion_contrato
+        assert _parse_duracion_contrato("143 Dia(s)") == 143
+
+    def test_meses(self):
+        from sip_engine.features.category_b import _parse_duracion_contrato
+        assert _parse_duracion_contrato("3 Mes(es)") == 90
+
+    def test_un_mes(self):
+        from sip_engine.features.category_b import _parse_duracion_contrato
+        assert _parse_duracion_contrato("1 Mes(es)") == 30
+
+    def test_anos(self):
+        from sip_engine.features.category_b import _parse_duracion_contrato
+        assert _parse_duracion_contrato("5 Año(s)") == 1825
+
+    def test_semanas(self):
+        from sip_engine.features.category_b import _parse_duracion_contrato
+        assert _parse_duracion_contrato("6 Semana(s)") == 42
+
+    def test_horas_rounded_to_zero(self):
+        from sip_engine.features.category_b import _parse_duracion_contrato
+        assert _parse_duracion_contrato("4 Hora(s)") == 0
+
+    def test_horas_one_day(self):
+        from sip_engine.features.category_b import _parse_duracion_contrato
+        assert _parse_duracion_contrato("24 Hora(s)") == 1
+
+    def test_no_definido(self):
+        from sip_engine.features.category_b import _parse_duracion_contrato
+        assert math.isnan(_parse_duracion_contrato("No definido"))
+
+    def test_no_definido_lowercase(self):
+        from sip_engine.features.category_b import _parse_duracion_contrato
+        assert math.isnan(_parse_duracion_contrato("no definido"))
+
+    def test_bare_unit(self):
+        from sip_engine.features.category_b import _parse_duracion_contrato
+        assert math.isnan(_parse_duracion_contrato("Dia(s)"))
+
+    def test_none(self):
+        from sip_engine.features.category_b import _parse_duracion_contrato
+        assert math.isnan(_parse_duracion_contrato(None))
+
+    def test_empty_string(self):
+        from sip_engine.features.category_b import _parse_duracion_contrato
+        assert math.isnan(_parse_duracion_contrato(""))
 
 
 def test_mes_firma_extraction():
@@ -683,7 +739,7 @@ def test_mes_firma_extraction():
     row = {
         "Fecha de Firma": datetime.date(2023, 3, 15),
         "Fecha de Inicio del Contrato": datetime.date(2023, 3, 20),
-        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+        "Duración del contrato": "350 Dia(s)",
     }
     result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
     assert result["mes_firma"] == 3
@@ -696,7 +752,7 @@ def test_trimestre_firma_extraction():
     row = {
         "Fecha de Firma": datetime.date(2023, 3, 15),
         "Fecha de Inicio del Contrato": datetime.date(2023, 3, 20),
-        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+        "Duración del contrato": "350 Dia(s)",
     }
     result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
     assert result["trimestre_firma"] == 1
@@ -713,7 +769,7 @@ def test_dias_a_proxima_eleccion_before_election():
     row = {
         "Fecha de Firma": signing_date,
         "Fecha de Inicio del Contrato": signing_date + datetime.timedelta(days=5),
-        "Fecha de Fin del Contrato": signing_date + datetime.timedelta(days=365),
+        "Duración del contrato": "365 Dia(s)",
     }
     result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
     assert result["dias_a_proxima_eleccion"] == 30
@@ -731,7 +787,7 @@ def test_dias_a_proxima_eleccion_between_elections():
     row = {
         "Fecha de Firma": mid_date,
         "Fecha de Inicio del Contrato": mid_date + datetime.timedelta(days=5),
-        "Fecha de Fin del Contrato": mid_date + datetime.timedelta(days=365),
+        "Duración del contrato": "365 Dia(s)",
     }
     result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
     expected = (second - mid_date).days
@@ -750,7 +806,7 @@ def test_dias_a_proxima_eleccion_beyond_calendar():
     row = {
         "Fecha de Firma": after_last,
         "Fecha de Inicio del Contrato": after_last + datetime.timedelta(days=5),
-        "Fecha de Fin del Contrato": after_last + datetime.timedelta(days=365),
+        "Duración del contrato": "365 Dia(s)",
     }
     result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
     val = result["dias_a_proxima_eleccion"]
@@ -772,7 +828,7 @@ def test_dias_publicidad_from_procesos():
     row = {
         "Fecha de Firma": datetime.date(2023, 2, 1),
         "Fecha de Inicio del Contrato": datetime.date(2023, 2, 5),
-        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+        "Duración del contrato": "350 Dia(s)",
     }
     result = compute_category_b(row, procesos_data=procesos_data, proveedor_fecha_creacion=None)
     assert result["dias_publicidad"] == 14  # Jan 15 - Jan 1 = 14 days
@@ -793,7 +849,7 @@ def test_dias_decision_from_procesos():
     row = {
         "Fecha de Firma": datetime.date(2023, 2, 1),
         "Fecha de Inicio del Contrato": datetime.date(2023, 2, 5),
-        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+        "Duración del contrato": "350 Dia(s)",
     }
     result = compute_category_b(row, procesos_data=procesos_data, proveedor_fecha_creacion=None)
     assert result["dias_decision"] == 5  # Jan 25 - Jan 20 = 5 days
@@ -806,7 +862,7 @@ def test_dias_proveedor_registrado():
     row = {
         "Fecha de Firma": datetime.date(2023, 6, 1),
         "Fecha de Inicio del Contrato": datetime.date(2023, 6, 10),
-        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+        "Duración del contrato": "350 Dia(s)",
     }
     proveedor_fecha_creacion = datetime.date(2020, 1, 1)
     result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=proveedor_fecha_creacion)
@@ -822,7 +878,7 @@ def test_dias_proveedor_registrado_nan_when_no_match():
     row = {
         "Fecha de Firma": datetime.date(2023, 6, 1),
         "Fecha de Inicio del Contrato": datetime.date(2023, 6, 10),
-        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+        "Duración del contrato": "350 Dia(s)",
     }
     result = compute_category_b(row, procesos_data=None, proveedor_fecha_creacion=None)
     val = result["dias_proveedor_registrado"]
@@ -845,7 +901,7 @@ def test_negative_duration_clipped_to_zero():
     row = {
         "Fecha de Firma": datetime.date(2023, 2, 1),
         "Fecha de Inicio del Contrato": datetime.date(2023, 2, 5),
-        "Fecha de Fin del Contrato": datetime.date(2023, 12, 31),
+        "Duración del contrato": "350 Dia(s)",
     }
     result = compute_category_b(row, procesos_data=procesos_data, proveedor_fecha_creacion=None)
     assert result["dias_publicidad"] == 0
@@ -1288,34 +1344,35 @@ def _make_pipeline_env(tmp_path: Path, monkeypatch) -> None:
         "Tipo de Contrato,Modalidad de Contratacion,Justificacion Modalidad de Contratacion,"
         "TipoDocProveedor,Documento Proveedor,Proveedor Adjudicado,Origen de los Recursos,"
         "Valor del Contrato,Nombre Entidad,Nit Entidad,Departamento,Codigo de Categoria Principal,"
-        "Ciudad,Objeto del Contrato,Fecha de Firma,Fecha de Inicio del Contrato,Fecha de Fin del Contrato"
+        "Ciudad,Objeto del Contrato,Fecha de Firma,Fecha de Inicio del Contrato,"
+        "Duración del contrato,Dias adicionados"
     )
     contratos_rows = [
         # CON-001: NIT 900111111, Cundinamarca, 2022-01-15 — procesos match exists
         "PROC-001,CON-001,REF-001,Liquidado,Prestacion de Servicios,Contratacion Directa,"
         "Urgencia Manifiesta,NIT,900111111,EMPRESA ABC,"
         "Recursos Propios,$5000000,ENTIDAD TEST,899999999,Cundinamarca,V1.80111600,"
-        "Bogota,Servicios,2022-01-15,2022-01-20,2022-12-31",
+        "Bogota,Servicios,2022-01-15,2022-01-20,350 Dia(s),0",
         # CON-002: NIT 900111111, Antioquia, 2023-03-01 (provider has prior history)
         "PROC-002,CON-002,REF-002,En ejecucion,Obra,Licitacion Publica,"
         "N/A,NIT,900111111,EMPRESA ABC,"
         "Recursos Propios,$8000000,ENTIDAD TEST,899999999,Antioquia,V1.72101500,"
-        "Medellin,Obra vial,2023-03-01,2023-03-15,2024-03-14",
+        "Medellin,Obra vial,2023-03-01,2023-03-15,12 Mes(es),0",
         # CON-003: CC (natural person), Bolivar, 2022-06-01
         "PROC-003,CON-003,REF-003,Terminado,Suministro,Seleccion Abreviada,"
         "N/A,CC,12345678,PERSONA NAT,"
         "Recursos Propios,$450000,ENTIDAD B,800000001,Bolivar,V1.47101500,"
-        "Cartagena,Suministro,2022-06-01,2022-06-10,2022-12-31",
+        "Cartagena,Suministro,2022-06-01,2022-06-10,204 Dia(s),0",
         # CON-004: NIT 800222222, Valle del Cauca, 2021-08-20
         "PROC-004,CON-004,REF-004,Liquidado,Consultoria,Concurso de Meritos,"
         "N/A,NIT,800222222,CONSULTORA XYZ,"
         "Regalias,$3000000,ENTIDAD C,806006813,Valle del Cauca,V1.80101600,"
-        "Cali,Consultoria,2021-08-20,2021-09-01,2022-08-19",
+        "Cali,Consultoria,2021-08-20,2021-09-01,12 Mes(es),0",
         # CON-005: missing Fecha de Firma — should be dropped
         "PROC-005,CON-005,REF-005,Liquidado,Prestacion de Servicios,Contratacion Directa,"
         "N/A,NIT,900333333,EMPRESA DEF,"
         "Recursos Propios,$1000000,ENTIDAD D,899000001,Cundinamarca,V1.80111600,"
-        "Bogota,Servicios,,2022-01-10,2022-12-31",
+        "Bogota,Servicios,,2022-01-10,365 Dia(s),0",
     ]
     (secop_dir / "contratos_SECOP.csv").write_text(
         contratos_header + "\n" + "\n".join(contratos_rows) + "\n",
@@ -1570,7 +1627,7 @@ def test_compute_features_parity(tmp_path, monkeypatch):
         "Codigo de Categoria Principal": "V1.80111600",
         "Fecha de Firma": dt.date(2022, 1, 15),
         "Fecha de Inicio del Contrato": dt.date(2022, 1, 20),
-        "Fecha de Fin del Contrato": dt.date(2022, 12, 31),
+        "Duración del contrato": "365 Dia(s)",
     }
     as_of_date = dt.date(2022, 1, 15)
 

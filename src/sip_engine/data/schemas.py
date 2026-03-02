@@ -42,7 +42,8 @@ CONTRATOS_USECOLS: list[str] = [
     "Objeto del Contrato",         # contract description
     "Fecha de Firma",              # signature date
     "Fecha de Inicio del Contrato",
-    "Fecha de Fin del Contrato",
+    "Duración del contrato",       # pre-amendment duration text (e.g. "143 Dia(s)")
+    "Dias adicionados",            # days added by amendments (M2 label source)
 ]
 
 CONTRATOS_DTYPE: dict[str, str] = {
@@ -54,6 +55,8 @@ CONTRATOS_DTYPE: dict[str, str] = {
     "Nit Entidad": str,             # mixed format (with/without hyphens)
     "Valor del Contrato": str,      # "$10,979,236,356" format — clean post-load
     "Codigo de Categoria Principal": str,  # category code — keep as str
+    "Duración del contrato": str,          # text like "143 Dia(s)" — parsed to days
+    "Dias adicionados": str,               # has comma thousands like "1,826" — needs pre-processing
 }
 
 CONTRATOS_CURRENCY_COLS: list[str] = ["Valor del Contrato"]

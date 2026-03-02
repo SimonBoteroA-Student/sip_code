@@ -41,27 +41,28 @@ def tiny_contratos_csv(tmp_path):
         "Tipo de Contrato,Modalidad de Contratacion,Justificacion Modalidad de Contratacion,"
         "TipoDocProveedor,Documento Proveedor,Proveedor Adjudicado,Origen de los Recursos,"
         "Valor del Contrato,Nombre Entidad,Nit Entidad,Departamento,Codigo de Categoria Principal,"
-        "Ciudad,Objeto del Contrato,Fecha de Firma,Fecha de Inicio del Contrato,Fecha de Fin del Contrato\n"
+        "Ciudad,Objeto del Contrato,Fecha de Firma,Fecha de Inicio del Contrato,"
+        "Duración del contrato,Dias adicionados\n"
         "CO1.BDOS.567890,CON-001,REF-001,Liquidado,Prestación de Servicios,"
         "Contratación Directa,Urgencia Manifiesta,NIT,900123456,EMPRESA ABC SAS,"
         "Recursos Propios,$10,979,236,356,MUNICIPIO DE BOGOTA,899999061,Cundinamarca,A1,"
-        "Bogotá,Servicios de consultoría,2023-01-15,2023-01-20,2023-12-31\n"
+        "Bogotá,Servicios de consultoría,2023-01-15,2023-01-20,350 Dia(s),0\n"
         "CO1.BDOS.567891,CON-002,REF-002,En ejecucion,Obra,Licitación Pública,"
         "N/A,NIT,800456789,CONSTRUCTORA XYZ LTDA,Recursos Propios,"
         "$2,500,000,000,GOBERNACION ANTIOQUIA,890982091,Antioquia,B2,"
-        "Medellín,Construcción de vía,2023-02-01,2023-02-15,2024-02-14\n"
+        "Medellín,Construcción de vía,2023-02-01,2023-02-15,12 Mes(es),0\n"
         "CO1.BDOS.567892,CON-003,REF-003,Terminado,Suministro,"
         "Selección Abreviada,Cuantía Menor,CC,12345678,PERSONA NATURAL,"
         "Recursos Propios,$450,000,SECRETARIA EDUCACION,800000001,Valle del Cauca,C3,"
-        "Cali,Suministro de papelería,2023-03-01,2023-03-10,2023-06-30\n"
+        "Cali,Suministro de papelería,2023-03-01,2023-03-10,112 Dia(s),0\n"
         "CO1.BDOS.567893,CON-004,REF-004,Liquidado,Consultoría,"
         "Concurso de Méritos,N/A,NIT,901234567,CONSULTORA DELTA SA,"
         "Sistema General de Regalías,$75,800,000,ALCALDIA CARTAGENA,806006813,"
-        "Bolívar,A1,Cartagena,Diseño arquitectónico,2022-11-01,2022-11-15,2023-05-14\n"
+        "Bolívar,A1,Cartagena,Diseño arquitectónico,2022-11-01,2022-11-15,6 Mes(es),0\n"
         "CO1.BDOS.567894,CON-005,REF-005,En ejecucion,Servicios,"
         "Contratación Directa,Entidad Sin Ánimo de Lucro,NIT,123456789-1,FUNDACION OMEGA,"
         "Recursos de Credito,$1,200,000,HOSPITAL CENTRAL,812000140,Córdoba,D5,"
-        "Montería,Capacitación personal,2023-05-01,2023-05-10,2023-10-31\n"
+        "Montería,Capacitación personal,2023-05-01,2023-05-10,174 Dia(s),0\n"
     )
     p = tmp_path / "contratos_SECOP.csv"
     p.write_text(content, encoding="utf-8")
@@ -139,7 +140,7 @@ def bad_byte_csv(tmp_path):
         "CO1.BDOS.999999,CON-BAD,REF-BAD,Liquidado,Servicios,"
         "Contratación Directa,N/A,NIT,900000001,EMPRESA BAD,"
         "Recursos Propios,$100,000,ENTIDAD TEST,899000001,Bogotá,Bogotá,"
-        "Servicio con byte malo,2023-01-01,2023-01-05,2023-12-31\n"
+        "Servicio con byte malo,2023-01-01,2023-01-05,90 Dia(s),0\n"
     )
     # Inject \xff (invalid in UTF-8) into the middle of the row
     bad_bytes = good_row.encode("utf-8")[:20] + b"\xff" + good_row.encode("utf-8")[20:]
@@ -162,7 +163,7 @@ def missing_column_csv(tmp_path):
     from sip_engine.data.schemas import CONTRATOS_USECOLS
 
     # Drop the last column from the usecols list
-    present_cols = CONTRATOS_USECOLS[:-1]  # all except "Fecha de Fin del Contrato"
+    present_cols = CONTRATOS_USECOLS[:-1]  # all except "Dias adicionados"
     header = ",".join(present_cols) + "\n"
     row = ",".join(["DUMMY_VALUE"] * len(present_cols)) + "\n"
 
