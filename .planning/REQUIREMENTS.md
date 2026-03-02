@@ -70,11 +70,11 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 
 ### Explainability & Composite Index
 
-- [ ] **EXPL-01**: System generates SHAP values via TreeExplainer for each prediction across all 4 models
-- [ ] **EXPL-02**: System extracts top-N features by |SHAP value| per model per prediction
-- [ ] **EXPL-03**: System computes CRI = Σ(wi × Pi) where Pi = P(Mi) for i=1..4 and P5 = IRIC score, with initial equal weights (wi = 0.20)
-- [ ] **EXPL-04**: System categorizes CRI into risk levels: Very Low (0.00-0.20), Low (0.20-0.40), Medium (0.40-0.60), High (0.60-0.80), Very High (0.80-1.00)
-- [ ] **EXPL-05**: CRI weights are configurable via `model_weights.json` without retraining models
+- [x] **EXPL-01**: System generates SHAP values via TreeExplainer for each prediction across all 4 models
+- [x] **EXPL-02**: System extracts top-N features by |SHAP value| per model per prediction
+- [x] **EXPL-03**: System computes CRI = Σ(wi × Pi) where Pi = P(Mi) for i=1..4 and P5 = IRIC score, with initial equal weights (wi = 0.20)
+- [x] **EXPL-04**: System categorizes CRI into risk levels: Very Low (0.00-0.20), Low (0.20-0.40), Medium (0.40-0.60), High (0.60-0.80), Very High (0.80-1.00)
+- [x] **EXPL-05**: CRI weights are configurable via `model_weights.json` without retraining models
 
 ### Project Foundation
 
@@ -180,11 +180,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVAL-04 | Phase 8 | ✅ Complete |
 | EVAL-05 | Phase 8 | ✅ Complete |
 | EVAL-06 | Phase 8 | ✅ Complete |
-| EXPL-01 | Phase 9 | Pending |
-| EXPL-02 | Phase 9 | Pending |
-| EXPL-03 | Phase 9 | Pending |
-| EXPL-04 | Phase 9 | Pending |
-| EXPL-05 | Phase 9 | Pending |
+| EXPL-01 | Phase 9 | Complete |
+| EXPL-02 | Phase 9 | Complete |
+| EXPL-03 | Phase 9 | Complete |
+| EXPL-04 | Phase 9 | Complete |
+| EXPL-05 | Phase 9 | Complete |
 | PROJ-01 | Phase 1 | Complete |
 | PROJ-02 | Phase 1 | Complete |
 | PROJ-03 | Phase 9 | Pending |

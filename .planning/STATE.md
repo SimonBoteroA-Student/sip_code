@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 8 — Evaluation
+**Current focus:** Phase 9 — Explainability, CRI, and Testing
 
 ## Current Position
 
-Phase: 8 of 9 (Evaluation) — Complete
-Plan: 2 of 2 in current phase
-Status: Phase 8 Plan 02 complete — CLI evaluate subcommand with --model/--models-dir/--output-dir flags, tabulate grid console summary table, 5 integration tests. 19 total evaluation tests passing (14 unit + 5 integration). 326 total tests passing.
-Last activity: 2026-03-02 — 08-02-PLAN.md complete
+Phase: 9 of 9 (Explainability, CRI, and Testing) — In Progress
+Plan: 1 of 2 in current phase
+Status: Phase 9 Plan 01 complete — SHAP explainability package (extract_shap_top_n, save_shap_artifact), CRI engine (compute_cri, classify_risk_level), XGBoost 3.x compatibility patch, model_weights.json risk_thresholds, 14 unit tests. 343 total tests passing.
+Last activity: 2026-03-02 — 09-01-PLAN.md complete
 
 Progress: [████████████████████] 100%
 
@@ -44,6 +44,7 @@ Progress: [████████████████████] 100%
 | Phase 06-iric P03 | 12 | 2 tasks | 7 files |
 | Phase 07-model-training P02 | 4 | 2 tasks | 4 files |
 | Phase 08-evaluation P02 | 3 | 2 tasks | 4 files |
+| Phase 09-explainability-cri-and-testing P01 | 9 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -109,6 +110,8 @@ Recent decisions affecting current work:
 - [08-01]: stdlib csv.writer used in _write_csv_report (not pandas) — avoids overhead for simple tabular output
 - [Phase 08-evaluation]: feature_columns key in feature_registry.json fixtures — must match evaluator._load_artifacts() lookup
 - [Phase 08-evaluation]: XGBoost fixtures trained on pd.DataFrame — preserves feature names for predict_proba compatibility
+- [Phase 09-explainability-cri-and-testing]: XGBoost 3.x stores base_score as bracket notation '[2.5E-1]' in UBJSON — fixed via module-level float monkey-patch in shap_explainer.py (_apply_shap_xgboost_compat_patch)
+- [Phase 09-explainability-cri-and-testing]: risk_thresholds added to model_weights.json alongside existing 5 weight keys — backward compatible, CRI band tuning requires no code change
 
 ### Pending Todos
 
@@ -123,5 +126,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 08-02-PLAN.md — CLI evaluate subcommand, tabulate grid console table, 5 integration tests. 19 evaluation tests passing, 326 total passing.
-Resume file: Phase 8 complete — begin Phase 9 if applicable
+Stopped at: Completed 09-01-PLAN.md — SHAP explainability package, CRI engine, XGBoost 3.x compat patch, 14 unit tests. 343 total passing.
+Resume file: Phase 9 Plan 02 — per-contract analyzer function
