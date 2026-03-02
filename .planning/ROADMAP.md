@@ -186,7 +186,9 @@ Plans:
   2. IRIC components 9 (`proveedor_sobrecostos_previos`) and 10 (`proveedor_retrasos_previos`) return 1 for providers with documented prior cost overruns/delays
   3. `test_train_model_missing_features` and `test_train_model_missing_labels` pass regardless of whether real artifacts exist on disk (test isolation)
   4. All 350 tests pass with 0 failures
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 11-01-PLAN.md — Fix IRIC calculator key mismatches (components 3/9/10), test fixture updates, test_models.py isolation fix
 
 ## Progress
 
