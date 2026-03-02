@@ -892,3 +892,238 @@ class TestIricScores:
             "proveedor_sobrecostos_previos", "proveedor_retrasos_previos", "ausencia_proceso",
         }
         assert set(components.keys()) == expected_keys
+
+
+# ============================================================
+# Plan 06-03: pipeline.py tests (compute_iric + build_iric)
+# ============================================================
+
+
+class TestComputeIricOnline:
+    """Tests for compute_iric() online function."""
+
+    def test_compute_iric_online_returns_all_keys(self, base_row, minimal_thresholds, procesos_normal):
+        """compute_iric returns all 11 components + 4 scores + 3 bid stat keys."""
+        from sip_engine.iric.pipeline import compute_iric
+
+        result = compute_iric(
+            contract_row=base_row,
+            procesos_data=procesos_normal,
+            provider_history=None,
+            thresholds=minimal_thresholds,
+            num_actividades=1,
+        )
+
+        # 11 components
+        expected_components = {
+            "unico_proponente", "proveedor_multiproposito", "historial_proveedor_alto",
+            "contratacion_directa", "regimen_especial", "periodo_publicidad_extremo",
+            "datos_faltantes", "periodo_decision_extremo",
+            "proveedor_sobrecostos_previos", "proveedor_retrasos_previos", "ausencia_proceso",
+        }
+        # 4 scores
+        expected_scores = {"iric_score", "iric_competencia", "iric_transparencia", "iric_anomalias"}
+        # 3 bid stats
+        expected_bid_stats = {"curtosis_licitacion", "diferencia_relativa_norm", "n_bids"}
+
+        assert expected_components.issubset(result.keys())
+        assert expected_scores.issubset(result.keys())
+        assert expected_bid_stats.issubset(result.keys())
+        # Total: 11 + 4 + 3 = 18 keys
+        assert len(result) == 18
+
+    def test_compute_iric_online_scores_in_range(self, base_row, minimal_thresholds, procesos_normal):
+        """All 4 aggregate scores are in [0, 1]."""
+        from sip_engine.iric.pipeline import compute_iric
+
+        result = compute_iric(
+            contract_row=base_row,
+            procesos_data=procesos_normal,
+            provider_history=None,
+            thresholds=minimal_thresholds,
+        )
+
+        for score_key in ("iric_score", "iric_competencia", "iric_transparencia", "iric_anomalias"):
+            assert 0.0 <= result[score_key] <= 1.0, f"{score_key} out of range: {result[score_key]}"
+
+    def test_compute_iric_no_bid_values_returns_nan(self, base_row, minimal_thresholds, procesos_normal):
+        """bid_values=None -> curtosis_licitacion and diferencia_relativa_norm are NaN."""
+        import math
+        from sip_engine.iric.pipeline import compute_iric
+
+        result = compute_iric(
+            contract_row=base_row,
+            procesos_data=procesos_normal,
+            provider_history=None,
+            thresholds=minimal_thresholds,
+            bid_values=None,
+        )
+
+        assert math.isnan(result["curtosis_licitacion"])
+        assert math.isnan(result["diferencia_relativa_norm"])
+        assert result["n_bids"] == 0
+
+    def test_compute_iric_with_bid_values(self, base_row, minimal_thresholds, procesos_normal):
+        """bid_values provided -> kurtosis and DRN computed (not NaN for n >= 4/3)."""
+        import math
+        from sip_engine.iric.pipeline import compute_iric
+
+        # 4 bids: kurtosis defined (n>=4), DRN defined (n>=3)
+        result = compute_iric(
+            contract_row=base_row,
+            procesos_data=procesos_normal,
+            provider_history=None,
+            thresholds=minimal_thresholds,
+            bid_values=[100.0, 200.0, 300.0, 400.0],
+        )
+
+        assert not math.isnan(result["curtosis_licitacion"]), "kurtosis should be defined for 4 bids"
+        assert not math.isnan(result["diferencia_relativa_norm"]), "DRN should be defined for 4 bids"
+        assert result["n_bids"] == 4
+
+    def test_compute_iric_parity_with_components_scores(
+        self, base_row, minimal_thresholds, procesos_normal
+    ):
+        """compute_iric result matches calling compute_iric_components + compute_iric_scores directly."""
+        from sip_engine.iric.calculator import compute_iric_components, compute_iric_scores
+        from sip_engine.iric.pipeline import compute_iric
+
+        # Direct call
+        components = compute_iric_components(
+            base_row, procesos_normal, None, minimal_thresholds, 2
+        )
+        scores = compute_iric_scores(components)
+
+        # Via pipeline
+        result = compute_iric(
+            contract_row=base_row,
+            procesos_data=procesos_normal,
+            provider_history=None,
+            thresholds=minimal_thresholds,
+            num_actividades=2,
+        )
+
+        # All component and score values should match
+        for key in components:
+            assert result[key] == components[key], f"Component mismatch for {key}"
+        for key in scores:
+            assert abs(result[key] - scores[key]) < 1e-9, f"Score mismatch for {key}"
+
+
+class TestBuildIricCreatesParquet:
+    """Tests for build_iric() batch orchestrator."""
+
+    def test_build_iric_creates_parquet(self, tmp_path, monkeypatch):
+        """build_iric() with mocked loaders produces parquet with expected columns."""
+        import math
+        import pandas as pd
+        from unittest.mock import patch
+        from sip_engine.config.settings import Settings
+        from sip_engine.iric.pipeline import build_iric
+
+        # Set up temp artifact dir
+        monkeypatch.setenv("SIP_ARTIFACTS_DIR", str(tmp_path / "artifacts"))
+
+        # Clear settings cache so it picks up new env
+        import sip_engine.config
+        sip_engine.config.get_settings.cache_clear()
+
+        # Build minimal features parquet for threshold calibration
+        features_dir = tmp_path / "artifacts" / "features"
+        features_dir.mkdir(parents=True, exist_ok=True)
+        iric_dir = tmp_path / "artifacts" / "iric"
+        iric_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create a minimal features.parquet for threshold calibration
+        features_df = pd.DataFrame({
+            "tipo_contrato": ["Prestacion de servicios"] * 50,
+            "num_contratos_previos_nacional": list(range(50)),
+            "dias_publicidad": [i % 15 for i in range(50)],
+            "dias_decision": [i % 60 for i in range(50)],
+            "valor_contrato": [(i + 1) * 1_000_000 for i in range(50)],
+        })
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        table = pa.Table.from_pandas(features_df)
+        pq.write_table(table, features_dir / "features.parquet")
+
+        # Mock contratos data
+        contrato_row = {
+            "ID Contrato": "CONT-001",
+            "Fecha de Firma": "2023-01-15",
+            "Proceso de Compra": "PROC-001",
+            "TipoDocProveedor": "NIT",
+            "Documento Proveedor": "900123456",
+            "Modalidad de Contratacion": "Licitacion publica",
+            "Tipo de Contrato": "Prestacion de servicios",
+            "Valor del Contrato": 10_000_000.0,
+            "Justificacion Modalidad de Contratacion": "Por necesidad",
+            "Departamento": "BOGOTA",
+            "Codigo de Categoria Principal": "V1.8010",
+        }
+        contratos_df = pd.DataFrame([contrato_row])
+
+        def mock_load_contratos():
+            yield contratos_df
+
+        def mock_load_procesos():
+            yield pd.DataFrame([])
+
+        def mock_load_ofertas():
+            yield pd.DataFrame([])
+
+        with patch("sip_engine.iric.pipeline._build_iric_procesos_lookup", return_value={}), \
+             patch("sip_engine.iric.pipeline._build_iric_num_actividades_lookup", return_value={}), \
+             patch("sip_engine.iric.pipeline.build_bid_stats_lookup", return_value={}), \
+             patch("sip_engine.features.provider_history.build_provider_history_index"), \
+             patch("sip_engine.features.provider_history.lookup_provider_history", return_value=None), \
+             patch("sip_engine.data.loaders.load_contratos", mock_load_contratos):
+
+            path = build_iric(force=True)
+
+        assert path.exists(), f"iric_scores.parquet not created at {path}"
+
+        df_result = pd.read_parquet(path)
+
+        # Check required columns present
+        required_cols = {
+            "unico_proponente", "proveedor_multiproposito", "historial_proveedor_alto",
+            "contratacion_directa", "regimen_especial", "periodo_publicidad_extremo",
+            "datos_faltantes", "periodo_decision_extremo",
+            "proveedor_sobrecostos_previos", "proveedor_retrasos_previos", "ausencia_proceso",
+            "iric_score", "iric_competencia", "iric_transparencia", "iric_anomalias",
+            "curtosis_licitacion", "diferencia_relativa_norm", "n_bids",
+        }
+        assert required_cols.issubset(set(df_result.columns)), (
+            f"Missing columns: {required_cols - set(df_result.columns)}"
+        )
+        # 1 row processed
+        assert len(df_result) == 1
+
+        # Clean up settings cache
+        sip_engine.config.get_settings.cache_clear()
+
+    def test_build_iric_returns_early_if_exists(self, tmp_path, monkeypatch):
+        """build_iric(force=False) returns cached path if parquet already exists."""
+        import pandas as pd
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        from sip_engine.config.settings import Settings
+        from sip_engine.iric.pipeline import build_iric
+        import sip_engine.config
+
+        monkeypatch.setenv("SIP_ARTIFACTS_DIR", str(tmp_path / "artifacts"))
+        sip_engine.config.get_settings.cache_clear()
+
+        # Create the parquet file ahead of time
+        iric_dir = tmp_path / "artifacts" / "iric"
+        iric_dir.mkdir(parents=True, exist_ok=True)
+        existing = iric_dir / "iric_scores.parquet"
+        df_stub = pd.DataFrame({"id_contrato": ["X"], "iric_score": [0.5]})
+        pq.write_table(pa.Table.from_pandas(df_stub), existing)
+
+        # Should return early without touching any loaders
+        path = build_iric(force=False)
+        assert path == existing
+
+        sip_engine.config.get_settings.cache_clear()

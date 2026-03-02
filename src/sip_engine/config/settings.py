@@ -102,6 +102,7 @@ class Settings:
     # Artifact file paths (derived in __post_init__)                      #
     # ------------------------------------------------------------------ #
     iric_thresholds_path: Path = field(default=None)   # type: ignore[assignment]
+    iric_scores_path: Path = field(default=None)        # type: ignore[assignment]
     feature_registry_path: Path = field(default=None)  # type: ignore[assignment]
     rcac_path: Path = field(default=None)               # type: ignore[assignment]
     rcac_bad_rows_path: Path = field(default=None)      # type: ignore[assignment]
@@ -179,6 +180,7 @@ class Settings:
 
         # ---- Derive artifact file paths ----
         self.iric_thresholds_path = self.artifacts_iric_dir / "iric_thresholds.json"
+        self.iric_scores_path = self.artifacts_iric_dir / "iric_scores.parquet"
         self.feature_registry_path = (
             self.artifacts_features_dir / "feature_registry.json"
         )
