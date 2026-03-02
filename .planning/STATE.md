@@ -39,6 +39,7 @@ Progress: [████████████] 67%
 - Trend: Fast
 
 *Updated after each plan completion*
+| Phase 06-iric P01 | 5 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,9 @@ Recent decisions affecting current work:
 - [05-03]: category_a NaN-safe coercion — pandas loader returns float NaN for empty CSV fields; (val or '') pattern fails since NaN is truthy
 - [06-02]: Zero bids filtered by v > 0 guard before DRN — DRN division-by-zero guard is defensive only; [0, 100, 200, 300] becomes [100, 200, 300] -> DRN=1.0 (not NaN)
 - [06-02]: tests written to test_bid_stats.py (not test_iric.py) due to parallel execution — 06-01 owns test_iric.py; no merge conflicts
+- [Phase 06-iric]: IRIC components 9/10 return 0 for new providers (not None) — VigIA pattern avoids penalizing new entrants without prior history
+- [Phase 06-iric]: calibrate_iric_thresholds accepts arbitrary DataFrame — Phase 7 must recalibrate on train-only data for IRIC-08 leakage prevention
+- [Phase 06-iric]: Accent normalization via unicodedata NFD for modality matching — handles Contratacion/Contratación directa variants correctly
 
 ### Pending Todos
 
@@ -100,5 +104,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 06-02-PLAN.md — bid_stats.py (kurtosis + DRN), 36 bid stats tests, 06-02 complete
-Resume file: .planning/phases/06-iric/06-03-PLAN.md (pipeline integration + CLI)
+Stopped at: Completed 06-01-PLAN.md — IRIC calculator (11 components + 4 scores) and threshold calibration machinery; 57 tests passing
+Resume file: .planning/phases/06-iric/06-03-PLAN.md (pipeline integration + CLI, after 06-02 completes)

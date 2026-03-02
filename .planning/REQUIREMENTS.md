@@ -38,14 +38,14 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 
 ### IRIC
 
-- [ ] **IRIC-01**: System calculates 6 competition dimension components: `unico_proponente`, `proveedor_multiproposito`, `historial_proveedor_alto`, `contratacion_directa`, `regimen_especial`, `periodo_publicidad_extremo`
-- [ ] **IRIC-02**: System calculates 2 transparency dimension components: `datos_faltantes`, `periodo_decision_extremo`
-- [ ] **IRIC-03**: System calculates 3 anomaly dimension components: `proveedor_sobrecostos_previos`, `proveedor_retrasos_previos`, `ausencia_proceso`
+- [x] **IRIC-01**: System calculates 6 competition dimension components: `unico_proponente`, `proveedor_multiproposito`, `historial_proveedor_alto`, `contratacion_directa`, `regimen_especial`, `periodo_publicidad_extremo`
+- [x] **IRIC-02**: System calculates 2 transparency dimension components: `datos_faltantes`, `periodo_decision_extremo`
+- [x] **IRIC-03**: System calculates 3 anomaly dimension components: `proveedor_sobrecostos_previos`, `proveedor_retrasos_previos`, `ausencia_proceso`
 - [x] **IRIC-04**: System calculates bid kurtosis (`curtosis_licitacion`) per Imhof (2018) formula for processes with ≥4 bids
 - [x] **IRIC-05**: System calculates normalized relative difference (`diferencia_relativa_norm`) per Imhof (2018) for processes with ≥3 bids
-- [ ] **IRIC-06**: System computes IRIC total score as (1/11) × Σ(11 components) ∈ [0,1], plus dimension sub-scores: `iric_competencia` = (1/6) × Σ(1-6), `iric_transparencia` = (1/2) × Σ(7-8), `iric_anomalias` = (1/3) × Σ(9-11)
-- [ ] **IRIC-07**: System calibrates IRIC thresholds at national level by contract type (percentiles P1, P5, P95, P99 for relevant variables), outputting `iric_thresholds.json`
-- [ ] **IRIC-08**: IRIC threshold calibration uses only training data (not full dataset) to prevent test-set leakage
+- [x] **IRIC-06**: System computes IRIC total score as (1/11) × Σ(11 components) ∈ [0,1], plus dimension sub-scores: `iric_competencia` = (1/6) × Σ(1-6), `iric_transparencia` = (1/2) × Σ(7-8), `iric_anomalias` = (1/3) × Σ(9-11)
+- [x] **IRIC-07**: System calibrates IRIC thresholds at national level by contract type (percentiles P1, P5, P95, P99 for relevant variables), outputting `iric_thresholds.json`
+- [x] **IRIC-08**: IRIC threshold calibration uses only training data (not full dataset) to prevent test-set leakage
 
 ### ML Models
 
@@ -157,14 +157,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FEAT-08 | Phase 5 | Complete |
 | FEAT-09 | Phase 5 | Complete |
 | FEAT-10 | Phase 5 | Complete |
-| IRIC-01 | Phase 6 | Pending |
-| IRIC-02 | Phase 6 | Pending |
-| IRIC-03 | Phase 6 | Pending |
+| IRIC-01 | Phase 6 | Complete |
+| IRIC-02 | Phase 6 | Complete |
+| IRIC-03 | Phase 6 | Complete |
 | IRIC-04 | Phase 6 | Complete |
 | IRIC-05 | Phase 6 | Complete |
-| IRIC-06 | Phase 6 | Pending |
-| IRIC-07 | Phase 6 | Pending |
-| IRIC-08 | Phase 6 | Pending |
+| IRIC-06 | Phase 6 | Complete |
+| IRIC-07 | Phase 6 | Complete |
+| IRIC-08 | Phase 6 | Complete |
 | MODL-01 | Phase 7 | Pending |
 | MODL-02 | Phase 7 | Pending |
 | MODL-03 | Phase 7 | Pending |
