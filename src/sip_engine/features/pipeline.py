@@ -134,6 +134,11 @@ def _to_date(value: Any) -> datetime.date | None:
         date_str = str(value).strip()[:10]
         return datetime.date.fromisoformat(date_str)
     except (ValueError, TypeError):
+        pass
+    # Handle MM/DD/YYYY format common in SECOP CSVs
+    try:
+        return datetime.datetime.strptime(str(value).strip()[:10], "%m/%d/%Y").date()
+    except (ValueError, TypeError):
         return None
 
 
@@ -460,6 +465,11 @@ def build_features(force: bool = False) -> Path:
 
     # ---- Step 5: Build DataFrame and encoding mappings ----
     df = pd.DataFrame(all_rows)
+    if df.empty:
+        raise ValueError(
+            f"No feature rows produced: {rows_processed} rows processed, "
+            f"{rows_dropped} dropped. Check date formats and required fields."
+        )
     df = df.set_index("id_contrato")
 
     # Build encoding mappings from the full feature DataFrame (batch training mode)

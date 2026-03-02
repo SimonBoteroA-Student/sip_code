@@ -175,6 +175,7 @@ def _load_csv(
         encoding=encoding,
         encoding_errors="replace",
         on_bad_lines="warn",
+        low_memory=False,
     )
     if usecols is not None:
         read_kwargs["usecols"] = usecols

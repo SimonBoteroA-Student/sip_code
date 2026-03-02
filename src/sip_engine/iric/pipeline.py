@@ -180,6 +180,11 @@ def _to_date_iric(value: Any):
         date_str = str(value).strip()[:10]
         return datetime.date.fromisoformat(date_str)
     except (ValueError, TypeError):
+        pass
+    # Handle MM/DD/YYYY format common in SECOP CSVs
+    try:
+        return datetime.datetime.strptime(str(value).strip()[:10], "%m/%d/%Y").date()
+    except (ValueError, TypeError):
         return None
 
 
@@ -226,6 +231,23 @@ def build_iric(force: bool = False) -> Path:
                 "Run build_features() first — IRIC threshold calibration requires features."
             )
         df_features = pd.read_parquet(features_path)
+        # features.parquet has tipo_contrato_cat (integer-encoded);
+        # calibrate_iric_thresholds needs tipo_contrato (raw string).
+        # Reverse-decode using encoding mappings.
+        if "tipo_contrato" not in df_features.columns and "tipo_contrato_cat" in df_features.columns:
+            from sip_engine.features.encoding import load_encoding_mappings
+            try:
+                enc_mappings = load_encoding_mappings()
+                tc_mapping = enc_mappings.get("tipo_contrato_cat", {})
+                reverse_tc = {v: k for k, v in tc_mapping.items()}
+                df_features["tipo_contrato"] = df_features["tipo_contrato_cat"].map(
+                    lambda x: reverse_tc.get(int(x), "Otro") if pd.notna(x) else "Otro"
+                )
+            except FileNotFoundError:
+                logger.warning(
+                    "Encoding mappings not found — using 'Otro' for all tipo_contrato"
+                )
+                df_features["tipo_contrato"] = "Otro"
         thresholds = calibrate_iric_thresholds(df_features)
         save_iric_thresholds(thresholds)
 

@@ -145,8 +145,12 @@ def build_provider_history_index(force: bool = False) -> Path:
                 date_str = str(raw_date).strip()[:10]  # take YYYY-MM-DD prefix
                 fecha_firma = datetime.date.fromisoformat(date_str)
             except (ValueError, TypeError):
-                rows_dropped_null_date += 1
-                continue
+                # Handle MM/DD/YYYY format common in SECOP CSVs
+                try:
+                    fecha_firma = datetime.datetime.strptime(date_str, "%m/%d/%Y").date()
+                except (ValueError, TypeError):
+                    rows_dropped_null_date += 1
+                    continue
 
             # --- Normalize provider ID ---
             raw_tipo = row.get("TipoDocProveedor")

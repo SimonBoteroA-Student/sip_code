@@ -651,6 +651,25 @@ Based on three key academic works:
 | 10 | `proveedor_retrasos_previos` | Anomalies | Provider has prior delays |
 | 11 | `ausencia_proceso` | Anomalies | No associated procurement process |
 
+### Bid Anomaly Statistics (Kurtosis & DRN)
+
+In addition to the 11 binary IRIC flags, SIP computes two continuous bid-distribution statistics per procurement process, following the **Imhof (2018)** methodology for detecting bid-rigging patterns. These are stored in `iric_scores.parquet` alongside the IRIC components but are **not** included in the XGBoost feature vector (they are NaN-heavy due to ~60% of contracts using direct contracting with 0–1 bids).
+
+| Statistic | Column Name | Min. Bids | Formula | Interpretation |
+|-----------|-------------|-----------|---------|----------------|
+| **Kurtosis** | `curtosis_licitacion` | ≥ 4 | Fisher excess kurtosis (unbiased), via `scipy.stats.kurtosis(bids, fisher=True, bias=False)` | Measures "tailedness" of bid distribution. High kurtosis → outlier bids; low/negative kurtosis → uniform clustering (potential coordination). |
+| **Normalized Relative Difference (DRN)** | `diferencia_relativa_norm` | ≥ 3 | `(second_lowest - lowest) / lowest` | Measures the relative gap between the two cheapest bids. DRN near 0 → suspiciously tight clustering (bid-rigging signal). Large DRN → healthy price spread. |
+
+**Data pipeline:**
+1. `build_bid_stats_lookup()` streams `ofertas_proceso_SECOP.csv` (~6.5M rows), accumulates bid values per process ID, then calls `compute_bid_stats()` for each unique process.
+2. NaN and non-positive bid values are filtered out before computation.
+3. Results are joined to contracts during `build_iric` and written to `iric_scores.parquet` with columns: `curtosis_licitacion`, `diferencia_relativa_norm`, `n_bids`.
+
+**When values are NaN:**
+- Kurtosis: fewer than 4 valid bids, or all bids are identical (zero variance).
+- DRN: fewer than 3 valid bids.
+- Both: no matching process in `ofertas_proceso_SECOP.csv` (common for direct contracting).
+
 ### Class Imbalance Strategy
 
 For each model, both strategies are evaluated via stratified cross-validation:
