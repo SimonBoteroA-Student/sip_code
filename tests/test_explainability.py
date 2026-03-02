@@ -305,3 +305,176 @@ def test_cri_config_custom_weights_changes_output(tmp_path):
     assert abs(custom_cri - expected_custom) < 1e-6, (
         f"Expected custom CRI {expected_custom}, got {custom_cri}"
     )
+
+
+# =============================================================================
+# Analyzer tests (Tests 15-19) — analyze_contract + serialize_to_json
+# =============================================================================
+
+from sip_engine.features.pipeline import FEATURE_COLUMNS  # noqa: E402
+
+
+def _make_synthetic_feature_dict() -> dict:
+    """Return a synthetic 34-feature dict matching FEATURE_COLUMNS."""
+    rng = np.random.RandomState(123)
+    result: dict = {}
+    for col in FEATURE_COLUMNS:
+        if col.startswith("es_") or col.startswith("firma_") or col.startswith("proponente_"):
+            result[col] = int(rng.randint(0, 2))
+        elif col in ("tipo_persona_proveedor",):
+            result[col] = int(rng.randint(0, 2))
+        else:
+            result[col] = float(round(rng.uniform(0.0, 1.0), 6))
+    return result
+
+
+@pytest.fixture(scope="module")
+def toy_model_dir(tmp_path_factory):
+    """Create M1–M4 model dirs, each with a tiny XGBClassifier trained on 34 features."""
+    base = tmp_path_factory.mktemp("models")
+    models_root = base / "models"
+
+    rng = np.random.RandomState(42)
+    n_train = 50
+    X_data = rng.rand(n_train, len(FEATURE_COLUMNS)).astype(np.float32)
+    y_data = np.array([0] * 40 + [1] * 10, dtype=np.int32)
+    X_df = pd.DataFrame(X_data, columns=FEATURE_COLUMNS)
+
+    import joblib
+
+    for model_id in ["M1", "M2", "M3", "M4"]:
+        model_dir = models_root / model_id
+        model_dir.mkdir(parents=True, exist_ok=True)
+
+        clf = xgb.XGBClassifier(n_estimators=5, max_depth=2, random_state=42, eval_metric="logloss")
+        clf.fit(X_df, y_data)
+
+        joblib.dump(clf, model_dir / "model.pkl")
+
+        feature_registry = {
+            "model_id": model_id,
+            "feature_columns": FEATURE_COLUMNS,
+            "n_features": len(FEATURE_COLUMNS),
+            "training_date": "2026-03-02T00:00:00+00:00",
+        }
+        (model_dir / "feature_registry.json").write_text(
+            json.dumps(feature_registry), encoding="utf-8"
+        )
+
+        training_report = {
+            "model_id": model_id,
+            "training_date": "2026-03-02T00:00:00+00:00",
+        }
+        (model_dir / "training_report.json").write_text(
+            json.dumps(training_report), encoding="utf-8"
+        )
+
+    return models_root
+
+
+def _run_analyze(toy_model_dir, monkeypatch) -> dict:
+    """Helper: run analyze_contract with mocked compute_features."""
+    import datetime
+    import sip_engine.explainability.analyzer as _analyzer
+
+    synth_feats = _make_synthetic_feature_dict()
+    monkeypatch.setattr(_analyzer, "compute_features", lambda *args, **kwargs: synth_feats)
+
+    from sip_engine.explainability import analyze_contract
+
+    contract_row = {"ID Contrato": "TEST-001"}
+    return analyze_contract(
+        contract_row=contract_row,
+        as_of_date=datetime.date(2023, 1, 15),
+        models_dir=toy_model_dir,
+        timestamp="2026-03-02T00:00:00+00:00",
+    )
+
+
+def test_analyze_contract_returns_required_keys(toy_model_dir, monkeypatch):
+    """analyze_contract returns dict with all required top-level keys."""
+    result = _run_analyze(toy_model_dir, monkeypatch)
+    required = {"contract_id", "cri", "models", "iric_score", "raw_features", "metadata"}
+    assert required == set(result.keys()), (
+        f"Missing keys: {required - set(result.keys())}"
+    )
+
+
+def test_analyze_contract_cri_block_has_score_level_weights(toy_model_dir, monkeypatch):
+    """result['cri'] has 'score' (float), 'level' (valid str), 'weights_used' (dict, 5 keys)."""
+    result = _run_analyze(toy_model_dir, monkeypatch)
+    cri = result["cri"]
+
+    assert isinstance(cri["score"], float), f"cri.score must be float, got {type(cri['score'])}"
+    assert 0.0 <= cri["score"] <= 1.0, f"cri.score {cri['score']} out of [0, 1]"
+
+    valid_levels = {"Very Low", "Low", "Medium", "High", "Very High"}
+    assert cri["level"] in valid_levels, f"cri.level {cri['level']!r} not in {valid_levels}"
+
+    assert isinstance(cri["weights_used"], dict), "cri.weights_used must be dict"
+    assert len(cri["weights_used"]) == 5, (
+        f"cri.weights_used must have 5 keys, got {len(cri['weights_used'])}"
+    )
+
+
+def test_analyze_contract_shap_top10_per_model(toy_model_dir, monkeypatch):
+    """Each model in result['models'] has 'shap_top10' list with ≤10 entries."""
+    result = _run_analyze(toy_model_dir, monkeypatch)
+
+    assert len(result["models"]) == 4, f"Expected 4 models, got {len(result['models'])}"
+    for model_id, model_data in result["models"].items():
+        assert "probability" in model_data, f"{model_id} missing 'probability'"
+        assert "shap_top10" in model_data, f"{model_id} missing 'shap_top10'"
+        proba = model_data["probability"]
+        assert 0.0 <= proba <= 1.0, f"{model_id}.probability {proba} out of [0, 1]"
+        shap_list = model_data["shap_top10"]
+        assert isinstance(shap_list, list), f"{model_id}.shap_top10 must be list"
+        assert 1 <= len(shap_list) <= 10, (
+            f"{model_id}.shap_top10 has {len(shap_list)} entries, expected 1-10"
+        )
+
+
+def test_json_determinism_byte_identical(toy_model_dir, monkeypatch):
+    """Two calls with identical inputs and frozen timestamp → byte-identical JSON."""
+    import datetime
+    import sip_engine.explainability.analyzer as _analyzer
+
+    synth_feats = _make_synthetic_feature_dict()
+    monkeypatch.setattr(_analyzer, "compute_features", lambda *args, **kwargs: synth_feats)
+
+    from sip_engine.explainability import analyze_contract, serialize_to_json
+
+    contract_row = {"ID Contrato": "TEST-DET-001"}
+    as_of = datetime.date(2023, 6, 1)
+    frozen_ts = "2026-03-02T12:00:00+00:00"
+
+    result1 = analyze_contract(contract_row=contract_row, as_of_date=as_of,
+                               models_dir=toy_model_dir, timestamp=frozen_ts)
+    result2 = analyze_contract(contract_row=contract_row, as_of_date=as_of,
+                               models_dir=toy_model_dir, timestamp=frozen_ts)
+
+    json1 = serialize_to_json(result1)
+    json2 = serialize_to_json(result2)
+    assert json1 == json2, "Same inputs with frozen timestamp must produce byte-identical JSON"
+
+
+def test_json_sort_keys_verified(toy_model_dir, monkeypatch):
+    """serialize_to_json output has sorted keys at every dict level."""
+    result = _run_analyze(toy_model_dir, monkeypatch)
+
+    from sip_engine.explainability import serialize_to_json
+
+    serialized = serialize_to_json(result)
+    parsed = json.loads(serialized)
+
+    def check_sorted(obj, path="root"):
+        if isinstance(obj, dict):
+            keys = list(obj.keys())
+            assert keys == sorted(keys), f"Keys at {path} not sorted: {keys}"
+            for k, v in obj.items():
+                check_sorted(v, f"{path}.{k}")
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                check_sorted(item, f"{path}[{i}]")
+
+    check_sorted(parsed)

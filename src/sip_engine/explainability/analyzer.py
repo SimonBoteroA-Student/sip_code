@@ -26,6 +26,10 @@ import joblib
 import numpy as np
 import pandas as pd
 
+# Import compute_features at module level so it can be monkeypatched in tests.
+# This is safe — features.pipeline does not import from explainability.
+from sip_engine.features.pipeline import compute_features  # noqa: E402
+
 logger = logging.getLogger(__name__)
 
 # Model IDs to load in order M1 → M4
@@ -168,7 +172,6 @@ def analyze_contract(
         timestamp = datetime.datetime.now(timezone.utc).isoformat()
 
     # ---- Step 1: Compute 34-feature vector ----
-    from sip_engine.features.pipeline import compute_features
     feature_dict = compute_features(
         contract_row=contract_row,
         as_of_date=as_of_date,
