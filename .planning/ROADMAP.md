@@ -21,6 +21,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Model Training** - 4 XGBoost classifiers trained with class imbalance handling and hyperparameter optimization (completed 2026-03-02)
 - [x] **Phase 8: Evaluation** - Full metrics suite (AUC-ROC, MAP@k, NDCG@k, Brier, Precision/Recall) with structured evaluation reports (completed 2026-03-02)
 - [x] **Phase 9: Explainability, CRI, and Testing** - SHAP values, Composite Risk Index, deterministic JSON output, and full test suite (completed 2026-03-02)
+- [ ] **Phase 10: Data Leakage Fix** - Replace post-amendment contract values with pre-amendment sources, retrain and re-evaluate all models *(Gap Closure)*
+- [ ] **Phase 11: Bug Fixes and Test Cleanup** - Fix IRIC key mismatch bug and environment-sensitive test failures *(Gap Closure)*
 
 ## Phase Details
 
@@ -158,10 +160,35 @@ Plans:
 - [ ] 09-01-PLAN.md — SHAP explainer + CRI computation modules with unit tests
 - [ ] 09-02-PLAN.md — Per-contract analyzer, deterministic JSON, master system test, PROJ-04 audit
 
+### Phase 10: Data Leakage Fix
+**Goal**: Eliminate post-amendment data leakage from feature engineering by replacing "Valor del Contrato" (post-amendment total) with the original contract value and replacing "Fecha de Fin del Contrato" (post-amendment) with "Duración del contrato" (col 72, original duration); retrain all 4 models and re-evaluate to get honest performance metrics
+**Depends on**: Phase 9
+**Requirements**: FEAT-02, FEAT-08 (re-verification)
+**Gap Closure**: Closes audit tech debt td-9 (data leakage concern)
+**Success Criteria** (what must be TRUE):
+  1. `duracion_contrato_dias` is computed from "Duración del contrato" (col 72, pre-amendment duration) — NOT derived from "Fecha de Fin del Contrato" (post-amendment)
+  2. `valor_contrato` is sourced from the original contract value column — NOT from "Valor del Contrato" which includes adiciones
+  3. All 4 models are retrained on corrected features and new evaluation reports generated
+  4. New M1 AUC-ROC is reported and compared against previous 0.851 — expected drop of ~7-15pp if leakage was real
+  5. All existing tests pass with the corrected feature sources
+**Plans**: TBD
+
+### Phase 11: Bug Fixes and Test Cleanup
+**Goal**: Fix IRIC calculator key mismatch bug (components 9/10 always return 0) and fix 2 environment-sensitive test failures in test_models.py
+**Depends on**: Phase 10 (retrain after bug fix for accurate results)
+**Requirements**: IRIC-03 (re-verification)
+**Gap Closure**: Closes audit tech debt td-3 (IRIC key mismatch), td-5 (broken tests)
+**Success Criteria** (what must be TRUE):
+  1. `calculator.py` uses correct key names: `num_sobrecostos_previos` (not `num_sobrecostos`) and `num_retrasos_previos` (not `num_retrasos`) when reading from provider_history dict
+  2. IRIC components 9 (`proveedor_sobrecostos_previos`) and 10 (`proveedor_retrasos_previos`) return 1 for providers with documented prior cost overruns/delays
+  3. `test_train_model_missing_features` and `test_train_model_missing_labels` pass regardless of whether real artifacts exist on disk (test isolation)
+  4. All 350 tests pass with 0 failures
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -174,3 +201,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Model Training | 2/2 | Complete   | 2026-03-02 |
 | 8. Evaluation | 2/2 | Complete   | 2026-03-02 |
 | 9. Explainability, CRI, and Testing | 2/2 | Complete    | 2026-03-02 |
+| 10. Data Leakage Fix | TBD | Pending | — |
+| 11. Bug Fixes and Test Cleanup | TBD | Pending | — |

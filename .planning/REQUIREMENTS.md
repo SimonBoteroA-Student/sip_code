@@ -144,22 +144,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-08 | Phase 3 | Complete |
 | DATA-09 | Phase 3 | Complete |
 | DATA-10 | Phase 2 | Complete |
-| DATA-11 | Phase 4 | Pending |
+| DATA-11 | Phase 4 | Complete |
 | DATA-12 | Phase 4 | Complete |
 | DATA-13 | Phase 4 | Complete |
 | FEAT-01 | Phase 5 | Complete |
-| FEAT-02 | Phase 5 | Complete |
+| FEAT-02 | Phase 5, Phase 10 (re-verify) | Re-verification Pending |
 | FEAT-03 | Phase 5 | Complete |
 | FEAT-04 | Phase 6 | Complete |
 | FEAT-05 | Phase 5 | Complete |
 | FEAT-06 | Phase 5 | Complete |
 | FEAT-07 | Phase 5 | Complete |
-| FEAT-08 | Phase 5 | Complete |
+| FEAT-08 | Phase 5, Phase 10 (re-verify) | Re-verification Pending |
 | FEAT-09 | Phase 5 | Complete |
 | FEAT-10 | Phase 5 | Complete |
 | IRIC-01 | Phase 6 | Complete |
 | IRIC-02 | Phase 6 | Complete |
-| IRIC-03 | Phase 6 | Complete |
+| IRIC-03 | Phase 6, Phase 11 (re-verify) | Re-verification Pending |
 | IRIC-04 | Phase 6 | Complete |
 | IRIC-05 | Phase 6 | Complete |
 | IRIC-06 | Phase 6 | Complete |
@@ -194,7 +194,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 - v1 requirements: 53 total
 - Mapped to phases: 53
 - Unmapped: 0
+- Re-verification pending: 3 (FEAT-02, FEAT-08, IRIC-03) — gap closure Phases 10–11
 
 ---
 *Requirements defined: 2026-02-27*
-*Last updated: 2026-02-27 after roadmap creation — all 53 requirements mapped*
+*Last updated: 2026-03-02 after milestone audit gap closure planning*
