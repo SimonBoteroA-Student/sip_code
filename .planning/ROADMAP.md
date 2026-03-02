@@ -171,7 +171,10 @@ Plans:
   3. All 4 models are retrained on corrected features and new evaluation reports generated
   4. New M1 AUC-ROC is reported and compared against previous 0.851 — expected drop of ~7-15pp if leakage was real
   5. All existing tests pass with the corrected feature sources
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 10-01-PLAN.md — Duration leakage fix (schema + category_b parser + test updates)
+- [ ] 10-02-PLAN.md — M2 label fix + artifact versioning + comparison report generator
 
 ### Phase 11: Bug Fixes and Test Cleanup
 **Goal**: Fix IRIC calculator key mismatch bug (components 9/10 always return 0) and fix 2 environment-sensitive test failures in test_models.py
