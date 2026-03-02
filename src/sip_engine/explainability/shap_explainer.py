@@ -11,6 +11,7 @@ Public API:
 
 from __future__ import annotations
 
+import builtins
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -22,6 +23,40 @@ import shap
 
 if TYPE_CHECKING:
     pass
+
+
+def _apply_shap_xgboost_compat_patch() -> None:
+    """Patch SHAP's internal float() to handle XGBoost >=3.x bracket notation.
+
+    XGBoost 3.x serialises base_score in UBJSON as a single-element array
+    string like '[2.5E-1]'.  SHAP <=0.49.x calls float(base_score_str)
+    which raises ValueError for that format.
+
+    Fix: inject a lenient float into shap.explainers._tree namespace that
+    strips leading/trailing brackets before converting.
+
+    This patch is applied once at module import time and is idempotent.
+    """
+    import shap.explainers._tree as _tree_mod
+
+    if getattr(_tree_mod, "_xgb_compat_patched", False):
+        return  # already patched
+
+    _orig_float = builtins.float
+
+    def _lenient_float(val):
+        if isinstance(val, str):
+            s = val.strip()
+            if s.startswith("[") and s.endswith("]"):
+                s = s[1:-1].strip()
+            return _orig_float(s)
+        return _orig_float(val)
+
+    _tree_mod.float = _lenient_float
+    _tree_mod._xgb_compat_patched = True
+
+
+_apply_shap_xgboost_compat_patch()
 
 
 def extract_shap_top_n(
