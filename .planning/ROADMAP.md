@@ -153,6 +153,10 @@ Plans:
   3. Every CRI score is classified into exactly one of the 5 risk levels (Very Low / Low / Medium / High / Very High) based on the 0.20-interval thresholds
   4. Given the same contract input, the full pipeline produces byte-identical JSON output on repeated runs (deterministic)
   5. Unit tests pass for: RCAC document normalization round-trips, provider history as-of-date (no future dates), at least 4 IRIC component flags, and model predict_proba returning values in [0,1]
+**Plans:** 2 plans
+Plans:
+- [ ] 09-01-PLAN.md — SHAP explainer + CRI computation modules with unit tests
+- [ ] 09-02-PLAN.md — Per-contract analyzer, deterministic JSON, master system test, PROJ-04 audit
 
 ## Progress
 
