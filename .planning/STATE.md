@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 10 — Data Leakage Fix
+**Current focus:** Phase 11 — Bug Fixes and Test Cleanup
 
 ## Current Position
 
-Phase: 10 of 11 (Data Leakage Fix) — **Complete**
-Plan: 2/2 plans complete
-Status: Duration leakage fixed, M2 label bug fixed, comparison infrastructure ready. User runs pipeline next.
-Last activity: 2026-03-02 — 10-01 (duration parser) and 10-02 (M2 fix + comparison) executed
+Phase: 11 of 11 (Bug Fixes and Test Cleanup) — **Complete**
+Plan: 1/1 plans complete
+Status: IRIC key mismatches fixed (components 3/9/10), test isolation fixed. 375 tests passing.
+Last activity: 2026-03-02 — 11-01 (IRIC calculator key fixes + test_models.py isolation)
 
 Progress: [████████████████████] 100%
 
@@ -46,6 +46,7 @@ Progress: [████████████████████] 100%
 | Phase 08-evaluation P02 | 3 | 2 tasks | 4 files |
 | Phase 09-explainability-cri-and-testing P01 | 9 | 2 tasks | 6 files |
 | Phase 09-explainability-cri-and-testing P02 | 7 | 2 tasks | 5 files |
+| Phase 11-bug-fixes-and-test-cleanup P01 | 5 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,8 @@ Recent decisions affecting current work:
 - [Phase 09-explainability-cri-and-testing]: compute_features imported at module level in analyzer.py — enables monkeypatch.setattr in tests; safe (no circular imports)
 - [Phase 09-explainability-cri-and-testing]: timestamp parameter defaults to UTC now if None — caller freezes it for deterministic JSON output
 - [Phase 09-explainability-cri-and-testing]: PROJ-04 gap audit: all 4 criteria covered by existing tests — no new gap tests needed
+- [Phase 11]: Use _ZERO_RESULT from provider_history.py as schema template for integration tests — real schema, not synthetic
+- [Phase 11]: Patch artifacts_models_dir to tmp_path in test_models.py to prevent early return at model.pkl existence check
 
 ### Pending Todos
 
@@ -130,5 +133,4 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 10-02 — M2 label fix + comparison infrastructure. Phase 10 complete. 351 total tests passing.
-Resume file: Run pipeline to rebuild features/train/evaluate with corrected data.
+Stopped at: Completed 11-01 — IRIC key mismatch fix + test isolation. 375 tests passing. Phase 11 complete (v1 milestone).

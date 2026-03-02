@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 8: Evaluation** - Full metrics suite (AUC-ROC, MAP@k, NDCG@k, Brier, Precision/Recall) with structured evaluation reports (completed 2026-03-02)
 - [x] **Phase 9: Explainability, CRI, and Testing** - SHAP values, Composite Risk Index, deterministic JSON output, and full test suite (completed 2026-03-02)
 - [x] **Phase 10: Data Leakage Fix** - Replace post-amendment contract values with pre-amendment sources, retrain and re-evaluate all models *(Gap Closure)* (completed 2026-03-02)
-- [ ] **Phase 11: Bug Fixes and Test Cleanup** - Fix IRIC key mismatch bug and environment-sensitive test failures *(Gap Closure)*
+- [x] **Phase 11: Bug Fixes and Test Cleanup** - Fix IRIC key mismatch bug and environment-sensitive test failures *(Gap Closure)* (completed 2026-03-02)
 
 ## Phase Details
 
@@ -186,7 +186,7 @@ Plans:
   2. IRIC components 9 (`proveedor_sobrecostos_previos`) and 10 (`proveedor_retrasos_previos`) return 1 for providers with documented prior cost overruns/delays
   3. `test_train_model_missing_features` and `test_train_model_missing_labels` pass regardless of whether real artifacts exist on disk (test isolation)
   4. All 350 tests pass with 0 failures
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
 - [ ] 11-01-PLAN.md — Fix IRIC calculator key mismatches (components 3/9/10), test fixture updates, test_models.py isolation fix
 
@@ -207,4 +207,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Evaluation | 2/2 | Complete   | 2026-03-02 |
 | 9. Explainability, CRI, and Testing | 2/2 | Complete    | 2026-03-02 |
 | 10. Data Leakage Fix | 2/2 | Complete | 2026-03-02 |
-| 11. Bug Fixes and Test Cleanup | TBD | Pending | — |
+| 11. Bug Fixes and Test Cleanup | 1/1 | Complete   | 2026-03-02 |
