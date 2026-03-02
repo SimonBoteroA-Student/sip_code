@@ -40,6 +40,8 @@ secopDatabases/**
 # Generated artifacts
 artifacts/
 !artifacts/**/.gitkeep
+!artifacts/v1_baseline/
+!artifacts/v1_baseline/**
 
 # Python build artifacts
 *.egg-info/

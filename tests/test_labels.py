@@ -308,6 +308,104 @@ def test_orphan_adiciones_ignored(label_test_env, monkeypatch):
     assert "CO1.PCCNTR.9999" not in m1, "Orphan id_contrato should NOT appear in M1"
 
 
+def _make_contrato_row_with_dias(proceso, id_contrato, tipo_doc, doc_num, dias_adicionados="0"):
+    """Create a contratos CSV row with custom Dias adicionados value."""
+    return (
+        f"{proceso},{id_contrato},REF-{id_contrato},Liquidado,"
+        f"Prestacion de Servicios,Contratacion Directa,N/A,"
+        f"{tipo_doc},{doc_num},EMPRESA TEST,Recursos Propios,"
+        f"$1000000,ENTIDAD TEST,899999999,Cundinamarca,A1,"
+        f"Bogota,Servicios,2023-01-01,2023-01-10,365 Dia(s),{dias_adicionados}"
+    )
+
+
+def test_m2_from_dias_adicionados(tmp_path, monkeypatch):
+    """Contracts with non-zero Dias adicionados must get M2=1."""
+    secop_dir = tmp_path / "secop"
+    secop_dir.mkdir()
+    artifacts_dir = tmp_path / "artifacts"
+    rcac_dir = artifacts_dir / "rcac"
+    rcac_dir.mkdir(parents=True)
+    (artifacts_dir / "labels").mkdir(parents=True)
+    monkeypatch.setenv("SIP_SECOP_DIR", str(secop_dir))
+    monkeypatch.setenv("SIP_ARTIFACTS_DIR", str(artifacts_dir))
+
+    contratos_rows = "\n".join([
+        _CONTRATOS_HEADER,
+        _make_contrato_row_with_dias("PROC-001", "CON-A01", "NIT", "900000001", "180"),
+        _make_contrato_row_with_dias("PROC-002", "CON-A02", "NIT", "900000002", "0"),
+        _make_contrato_row_with_dias("PROC-003", "CON-A03", "NIT", "900000003", "1,826"),
+        "",
+    ])
+    (secop_dir / "contratos_SECOP.csv").write_text(contratos_rows, encoding="utf-8")
+
+    # Empty adiciones — no EXTENSION rows
+    adiciones_rows = "\n".join([_ADICIONES_HEADER, ""])
+    (secop_dir / "adiciones.csv").write_text(adiciones_rows, encoding="utf-8")
+
+    boletines_rows = "\n".join([_BOLETINES_HEADER, ""])
+    (secop_dir / "boletines.csv").write_text(boletines_rows, encoding="utf-8")
+
+    minimal_rcac = {}
+    joblib.dump(minimal_rcac, rcac_dir / "rcac.pkl")
+
+    try:
+        build_labels(force=True)
+        labels = pd.read_parquet(artifacts_dir / "labels" / "labels.parquet")
+        labels = labels.set_index("id_contrato")
+
+        assert int(labels.loc["CON-A01", "M2"]) == 1, "Dias adicionados=180 → M2=1"
+        assert int(labels.loc["CON-A02", "M2"]) == 0, "Dias adicionados=0 → M2=0"
+        assert int(labels.loc["CON-A03", "M2"]) == 1, "Dias adicionados=1,826 → M2=1 (comma handling)"
+    finally:
+        reset_rcac_cache()
+
+
+def test_m2_union_extension_and_dias(tmp_path, monkeypatch):
+    """M2 is the union of EXTENSION from adiciones AND non-zero Dias adicionados."""
+    secop_dir = tmp_path / "secop"
+    secop_dir.mkdir()
+    artifacts_dir = tmp_path / "artifacts"
+    rcac_dir = artifacts_dir / "rcac"
+    rcac_dir.mkdir(parents=True)
+    (artifacts_dir / "labels").mkdir(parents=True)
+    monkeypatch.setenv("SIP_SECOP_DIR", str(secop_dir))
+    monkeypatch.setenv("SIP_ARTIFACTS_DIR", str(artifacts_dir))
+
+    # CON-B01: Dias adicionados=100, no EXTENSION
+    # CON-B02: Dias adicionados=0, has EXTENSION in adiciones
+    contratos_rows = "\n".join([
+        _CONTRATOS_HEADER,
+        _make_contrato_row_with_dias("PROC-001", "CON-B01", "NIT", "900000001", "100"),
+        _make_contrato_row_with_dias("PROC-002", "CON-B02", "NIT", "900000002", "0"),
+        "",
+    ])
+    (secop_dir / "contratos_SECOP.csv").write_text(contratos_rows, encoding="utf-8")
+
+    adiciones_rows = "\n".join([
+        _ADICIONES_HEADER,
+        "ADICION-001,CON-B02,EXTENSION,Tiempo extra,2023-03-01",
+        "",
+    ])
+    (secop_dir / "adiciones.csv").write_text(adiciones_rows, encoding="utf-8")
+
+    boletines_rows = "\n".join([_BOLETINES_HEADER, ""])
+    (secop_dir / "boletines.csv").write_text(boletines_rows, encoding="utf-8")
+
+    minimal_rcac = {}
+    joblib.dump(minimal_rcac, rcac_dir / "rcac.pkl")
+
+    try:
+        build_labels(force=True)
+        labels = pd.read_parquet(artifacts_dir / "labels" / "labels.parquet")
+        labels = labels.set_index("id_contrato")
+
+        assert int(labels.loc["CON-B01", "M2"]) == 1, "Dias adicionados=100 → M2=1"
+        assert int(labels.loc["CON-B02", "M2"]) == 1, "EXTENSION in adiciones → M2=1"
+    finally:
+        reset_rcac_cache()
+
+
 # ============================================================
 # build_labels() tests
 # ============================================================

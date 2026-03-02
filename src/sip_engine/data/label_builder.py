@@ -53,7 +53,7 @@ def _load_contratos_base() -> pd.DataFrame:
         DataFrame with columns: ID Contrato, TipoDocProveedor, Documento Proveedor.
         One row per unique contract ID.
     """
-    needed_cols = ["ID Contrato", "TipoDocProveedor", "Documento Proveedor"]
+    needed_cols = ["ID Contrato", "TipoDocProveedor", "Documento Proveedor", "Dias adicionados"]
     chunks: list[pd.DataFrame] = []
 
     for chunk in load_contratos():
@@ -253,7 +253,8 @@ def build_labels(force: bool = False) -> Path:
 
     M1 = 1 if contract has at least one value amendment (ADICION EN EL VALOR
          or REDUCCION EN EL VALOR) in adiciones.csv.
-    M2 = 1 if contract has at least one time extension (EXTENSION) in adiciones.csv.
+    M2 = 1 if contract has at least one time extension (EXTENSION) in adiciones.csv
+         OR has non-zero "Dias adicionados" in contratos_SECOP.csv.
     M3 = 1 if contract provider is in boletines.csv (Comptroller fiscal liability).
     M4 = 1 if contract provider is found in the RCAC index (corruption antecedents).
     Null for M3/M4 when provider document ID is missing or malformed.
@@ -287,6 +288,18 @@ def build_labels(force: bool = False) -> Path:
 
     # ---- Build M1/M2 sets from adiciones ----
     m1_contracts, m2_contracts = _build_m1_m2_sets(contratos_ids)
+
+    # ---- Augment M2 from "Dias adicionados" column (primary M2 source) ----
+    m2_before = len(m2_contracts)
+    dias_col = df["Dias adicionados"].astype(str).str.replace(",", "", regex=False)
+    dias_numeric = pd.to_numeric(dias_col, errors="coerce").fillna(0)
+    dias_m2_ids = set(df.loc[dias_numeric != 0, "ID Contrato"].tolist())
+    m2_contracts = m2_contracts | dias_m2_ids
+    logger.info(
+        "M2 from Dias adicionados: %d contracts (%d new beyond EXTENSION)",
+        len(dias_m2_ids),
+        len(m2_contracts) - m2_before,
+    )
 
     # ---- Assign M1/M2 columns ----
     df["M1"] = df["ID Contrato"].isin(m1_contracts).astype("Int8")

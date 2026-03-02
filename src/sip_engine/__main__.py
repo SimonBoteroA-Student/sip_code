@@ -103,6 +103,20 @@ def main() -> None:
         help="Override evaluation output directory (default: artifacts/evaluation)",
     )
 
+    subparsers.add_parser("backup-v1", help="Backup current artifacts to v1_baseline/")
+
+    compare_parser = subparsers.add_parser("compare-v1v2", help="Generate v1 vs v2 comparison report")
+    compare_parser.add_argument(
+        "--v1-dir",
+        type=Path,
+        help="Override v1 baseline directory (default: artifacts/v1_baseline)",
+    )
+    compare_parser.add_argument(
+        "--v2-dir",
+        type=Path,
+        help="Override v2 artifacts directory (default: artifacts/)",
+    )
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -208,6 +222,32 @@ def main() -> None:
             sys.exit(1)
         except Exception as e:
             print(f"Error during evaluation: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "backup-v1":
+        from sip_engine.evaluation.comparison import backup_v1_artifacts
+        try:
+            path = backup_v1_artifacts()
+            print(f"V1 baseline backed up: {path}")
+            sys.exit(0)
+        except FileExistsError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error backing up v1: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "compare-v1v2":
+        from sip_engine.evaluation.comparison import generate_comparison_report
+        try:
+            md_path, json_path = generate_comparison_report(
+                v1_dir=getattr(args, 'v1_dir', None),
+                v2_dir=getattr(args, 'v2_dir', None),
+            )
+            print(f"Comparison report generated:\n  {md_path}\n  {json_path}")
+            sys.exit(0)
+        except Exception as e:
+            print(f"Error generating comparison: {e}", file=sys.stderr)
             sys.exit(1)
 
     else:
