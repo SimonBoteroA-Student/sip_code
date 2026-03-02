@@ -39,6 +39,15 @@ def main() -> None:
         help="Force rebuild even if features.parquet exists",
     )
 
+    build_iric_parser = subparsers.add_parser(
+        "build-iric", help="Build IRIC irregularity risk index scores"
+    )
+    build_iric_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force rebuild even if iric_scores.parquet exists",
+    )
+
     subparsers.add_parser("train", help="Train XGBoost prediction models")
     subparsers.add_parser("evaluate", help="Evaluate trained models")
     subparsers.add_parser("run-pipeline", help="Run the full SIP pipeline end to end")
@@ -77,6 +86,16 @@ def main() -> None:
             sys.exit(0)
         except Exception as e:
             print(f"Error building features: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "build-iric":
+        from sip_engine.iric.pipeline import build_iric
+        try:
+            path = build_iric(force=args.force)
+            print(f"IRIC scores built: {path}")
+            sys.exit(0)
+        except Exception as e:
+            print(f"Error building IRIC scores: {e}", file=sys.stderr)
             sys.exit(1)
 
     else:

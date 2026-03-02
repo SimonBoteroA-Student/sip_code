@@ -1127,3 +1127,145 @@ class TestBuildIricCreatesParquet:
         assert path == existing
 
         sip_engine.config.get_settings.cache_clear()
+
+
+# ============================================================
+# Plan 06-03 Task 2: Category D, __init__ exports, CLI
+# ============================================================
+
+
+class TestFeatureColumnsHasCategoryD:
+    """FEATURE_COLUMNS updated to include 4 Category D IRIC entries."""
+
+    def test_feature_columns_has_iric_anomalias(self):
+        """FEATURE_COLUMNS must contain 'iric_anomalias'."""
+        from sip_engine.features.pipeline import FEATURE_COLUMNS
+        assert "iric_anomalias" in FEATURE_COLUMNS
+
+    def test_feature_columns_has_iric_competencia(self):
+        """FEATURE_COLUMNS must contain 'iric_competencia'."""
+        from sip_engine.features.pipeline import FEATURE_COLUMNS
+        assert "iric_competencia" in FEATURE_COLUMNS
+
+    def test_feature_columns_has_iric_score(self):
+        """FEATURE_COLUMNS must contain 'iric_score'."""
+        from sip_engine.features.pipeline import FEATURE_COLUMNS
+        assert "iric_score" in FEATURE_COLUMNS
+
+    def test_feature_columns_has_iric_transparencia(self):
+        """FEATURE_COLUMNS must contain 'iric_transparencia'."""
+        from sip_engine.features.pipeline import FEATURE_COLUMNS
+        assert "iric_transparencia" in FEATURE_COLUMNS
+
+    def test_feature_columns_count_34(self):
+        """FEATURE_COLUMNS must have exactly 34 entries (30 Cat A/B/C + 4 Cat D)."""
+        from sip_engine.features.pipeline import FEATURE_COLUMNS
+        assert len(FEATURE_COLUMNS) == 34, (
+            f"Expected 34 features, got {len(FEATURE_COLUMNS)}: {FEATURE_COLUMNS}"
+        )
+
+    def test_category_d_in_alphabetical_order(self):
+        """Category D features must be in alphabetical order."""
+        from sip_engine.features.pipeline import FEATURE_COLUMNS
+        # Find the Category D entries
+        cat_d_features = [f for f in FEATURE_COLUMNS if f.startswith("iric_")]
+        assert cat_d_features == sorted(cat_d_features), (
+            f"Category D features not in alphabetical order: {cat_d_features}"
+        )
+
+    def test_category_d_at_end(self):
+        """Category D features must appear after all Category C features."""
+        from sip_engine.features.pipeline import FEATURE_COLUMNS
+        cat_d_features = {"iric_anomalias", "iric_competencia", "iric_score", "iric_transparencia"}
+        cat_c_end_index = max(
+            i for i, f in enumerate(FEATURE_COLUMNS) if not f.startswith("iric_")
+        )
+        cat_d_start_index = min(
+            i for i, f in enumerate(FEATURE_COLUMNS) if f in cat_d_features
+        )
+        assert cat_d_start_index > cat_c_end_index, (
+            "Category D features must come after all Category A/B/C features"
+        )
+
+    def test_kurtosis_drn_not_in_feature_columns(self):
+        """kurtosis and DRN bid stats must NOT be in FEATURE_COLUMNS (NaN-heavy)."""
+        from sip_engine.features.pipeline import FEATURE_COLUMNS
+        assert "curtosis_licitacion" not in FEATURE_COLUMNS
+        assert "diferencia_relativa_norm" not in FEATURE_COLUMNS
+
+
+class TestIricInitExports:
+    """sip_engine.iric __init__.py re-exports all public symbols."""
+
+    def test_iric_init_exports_calculator_functions(self):
+        """compute_iric_components and compute_iric_scores importable from sip_engine.iric."""
+        from sip_engine.iric import compute_iric_components, compute_iric_scores
+        assert callable(compute_iric_components)
+        assert callable(compute_iric_scores)
+
+    def test_iric_init_exports_bid_stats_functions(self):
+        """compute_bid_stats and build_bid_stats_lookup importable from sip_engine.iric."""
+        from sip_engine.iric import compute_bid_stats, build_bid_stats_lookup
+        assert callable(compute_bid_stats)
+        assert callable(build_bid_stats_lookup)
+
+    def test_iric_init_exports_threshold_functions(self):
+        """All 5 threshold functions importable from sip_engine.iric."""
+        from sip_engine.iric import (
+            calibrate_iric_thresholds,
+            load_iric_thresholds,
+            reset_iric_thresholds_cache,
+            get_threshold,
+            save_iric_thresholds,
+        )
+        assert callable(calibrate_iric_thresholds)
+        assert callable(load_iric_thresholds)
+        assert callable(reset_iric_thresholds_cache)
+        assert callable(get_threshold)
+        assert callable(save_iric_thresholds)
+
+    def test_iric_init_exports_pipeline_functions(self):
+        """build_iric and compute_iric importable from sip_engine.iric."""
+        from sip_engine.iric import build_iric, compute_iric
+        assert callable(build_iric)
+        assert callable(compute_iric)
+
+    def test_iric_init_all_symbols_count(self):
+        """sip_engine.iric.__all__ must contain all 11 exported symbols."""
+        import sip_engine.iric
+        assert len(sip_engine.iric.__all__) == 11
+
+    def test_iric_init_all_symbols_importable(self):
+        """Every symbol in __all__ must be importable from sip_engine.iric."""
+        import sip_engine.iric
+        for symbol in sip_engine.iric.__all__:
+            obj = getattr(sip_engine.iric, symbol, None)
+            assert obj is not None, f"Symbol '{symbol}' in __all__ but not importable"
+
+
+class TestBuildIricCli:
+    """CLI build-iric subcommand registered and working."""
+
+    def test_build_iric_cli_help(self):
+        """python -m sip_engine build-iric --help must exit 0 and show help text."""
+        import subprocess
+        import sys
+        result = subprocess.run(
+            [sys.executable, "-m", "sip_engine", "build-iric", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+        assert "build-iric" in result.stdout or "iric" in result.stdout.lower()
+
+    def test_main_help_lists_build_iric(self):
+        """python -m sip_engine --help must list build-iric in available commands."""
+        import subprocess
+        import sys
+        result = subprocess.run(
+            [sys.executable, "-m", "sip_engine", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+        assert "build-iric" in result.stdout
