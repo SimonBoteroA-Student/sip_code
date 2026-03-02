@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 9 — Explainability, CRI, and Testing
+**Current focus:** Phase 10 — Data Leakage Fix
 
 ## Current Position
 
-Phase: 9 of 9 (Explainability, CRI, and Testing) — **Complete**
-Plan: 2 of 2 in current phase
-Status: Phase 9 Plan 02 complete — analyze_contract() entry point, serialize_to_json(), master system test (fixture + real-data modes), 5 new unit tests, PROJ-04 audit. 349 total tests passing.
-Last activity: 2026-03-02 — 09-02-PLAN.md complete
+Phase: 10 of 11 (Data Leakage Fix) — **Context Gathered**
+Plan: TBD
+Status: Phase 10 context captured — duration leakage fix, M2 label bug fix (from comparison.md), artifact versioning, comparison reporting decisions made. Ready for planning.
+Last activity: 2026-03-02 — 10-CONTEXT.md created
 
 Progress: [████████████████████] 100%
 
