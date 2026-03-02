@@ -6,7 +6,11 @@
       "Bash(python3:*)",
       "Bash(.venv/bin/python:*)",
       "Bash(ls:*)",
-      "WebSearch"
+      "Bash(git:*)",
+      "Bash(python:*)",
+      "WebSearch",
+      "Skill(gsd:progress)",
+      "Skill(gsd:verify-work)"
     ]
   }
 }
