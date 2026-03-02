@@ -2,6 +2,8 @@
 
 import argparse
 import sys
+import traceback
+from pathlib import Path
 
 
 def main() -> None:
@@ -76,9 +78,30 @@ def main() -> None:
         default=-1,
         help="Parallelism level (default: -1 = all cores)",
     )
+    train_parser.add_argument(
+        "--build-features",
+        action="store_true",
+        help="Run full feature pipeline (rcac → labels → features → iric) before training",
+    )
 
-    subparsers.add_parser("evaluate", help="Evaluate trained models")
     subparsers.add_parser("run-pipeline", help="Run the full SIP pipeline end to end")
+
+    evaluate_parser = subparsers.add_parser("evaluate", help="Evaluate trained models")
+    evaluate_parser.add_argument(
+        "--model",
+        choices=["M1", "M2", "M3", "M4"],
+        help="Evaluate a single model (default: all 4)",
+    )
+    evaluate_parser.add_argument(
+        "--models-dir",
+        type=Path,
+        help="Override model artifacts directory (default: artifacts/models)",
+    )
+    evaluate_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Override evaluation output directory (default: artifacts/evaluation)",
+    )
 
     args = parser.parse_args()
 
@@ -130,6 +153,19 @@ def main() -> None:
         from sip_engine.models.trainer import train_model, MODEL_IDS
         models_to_train = [args.model] if args.model else MODEL_IDS
         try:
+            if args.build_features:
+                from sip_engine.data.rcac_builder import build_rcac
+                from sip_engine.data.label_builder import build_labels
+                from sip_engine.features.pipeline import build_features
+                from sip_engine.iric.pipeline import build_iric
+                print("Building RCAC...")
+                build_rcac(force=args.force)
+                print("Building labels...")
+                build_labels(force=args.force)
+                print("Building features...")
+                build_features(force=args.force)
+                print("Building IRIC scores...")
+                build_iric(force=args.force)
             for mid in models_to_train:
                 model_dir = train_model(
                     model_id=mid,
@@ -144,7 +180,34 @@ def main() -> None:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
         except Exception as e:
+            traceback.print_exc()
             print(f"Error training models: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "evaluate":
+        from sip_engine.evaluation.evaluator import evaluate_all, evaluate_model, MODEL_IDS
+
+        models_to_eval = [args.model] if args.model else MODEL_IDS
+        try:
+            if len(models_to_eval) == 1:
+                report_path = evaluate_model(
+                    model_id=models_to_eval[0],
+                    models_dir=args.models_dir,
+                    output_dir=args.output_dir,
+                )
+                print(f"Evaluation complete: {report_path}")
+            else:
+                summary_path = evaluate_all(
+                    models_dir=args.models_dir,
+                    output_dir=args.output_dir,
+                )
+                print(f"Evaluation complete: {summary_path}")
+            sys.exit(0)
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error during evaluation: {e}", file=sys.stderr)
             sys.exit(1)
 
     else:

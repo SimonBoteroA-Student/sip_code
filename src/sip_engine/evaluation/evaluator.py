@@ -34,6 +34,7 @@ from sklearn.metrics import (
     roc_auc_score,
     roc_curve,
 )
+from tabulate import tabulate as tabulate_fn
 
 logger = logging.getLogger(__name__)
 
@@ -710,32 +711,24 @@ def evaluate_all(
 
 
 def _print_summary_table(summary: dict[str, dict]) -> None:
-    """Print a formatted cross-model summary table to console."""
+    """Print a formatted cross-model summary table to console using tabulate."""
     if not summary:
         return
 
-    print("\n" + "=" * 80)
-    print("CROSS-MODEL EVALUATION SUMMARY")
-    print("=" * 80)
-
-    # Header
-    col_w = 12
-    header_cols = ["Model", "AUC-ROC", "Brier", "MAP@100", "MAP@1000", "NDCG@100", "Opt.Thresh", "F1@Opt"]
-    header = "  ".join(c.ljust(col_w) for c in header_cols)
-    print(header)
-    print("-" * len(header))
-
-    for model_id, m in summary.items():
-        row = "  ".join([
-            model_id.ljust(col_w),
-            f"{m['auc_roc']:.4f}".ljust(col_w),
-            f"{m['brier_score']:.4f}".ljust(col_w),
-            f"{m['map_100']:.4f}".ljust(col_w),
-            f"{m['map_1000']:.4f}".ljust(col_w),
-            f"{m['ndcg_100']:.4f}".ljust(col_w),
-            f"{m['optimal_threshold']:.2f}".ljust(col_w),
-            f"{m['f1_at_optimal']:.4f}".ljust(col_w),
+    headers = ["Model", "AUC-ROC", "Brier", "MAP@100", "MAP@1000", "NDCG@100", "Opt.Thresh", "P@Opt", "R@Opt"]
+    rows = []
+    for mid, m in summary.items():
+        rows.append([
+            mid,
+            f"{m['auc_roc']:.4f}",
+            f"{m['brier_score']:.4f}",
+            f"{m['map_100']:.4f}",
+            f"{m['map_1000']:.4f}",
+            f"{m['ndcg_100']:.4f}",
+            f"{m['optimal_threshold']:.2f}",
+            f"{m['precision_at_optimal']:.4f}",
+            f"{m['recall_at_optimal']:.4f}",
         ])
-        print(row)
 
-    print("=" * 80 + "\n")
+    print("\nCross-Model Summary:")
+    print(tabulate_fn(rows, headers=headers, tablefmt="grid"))
