@@ -346,6 +346,9 @@ def _make_tiny_labels_parquet(tmp_path, n_rows=50, seed=0):
 def test_train_model_missing_features(tmp_path, monkeypatch):
     """train_model raises FileNotFoundError with 'build-features' when no features.parquet."""
     from sip_engine.config import get_settings
+    # Patch artifacts_models_dir to tmp_path to prevent early return when real model.pkl exists.
+    # train_model() checks (model_dir / "model.pkl").exists() BEFORE features_path/labels_path.
+    monkeypatch.setattr(get_settings(), "artifacts_models_dir", tmp_path / "models")
     monkeypatch.setattr(get_settings(), "features_path", tmp_path / "features.parquet")
     monkeypatch.setattr(get_settings(), "labels_path", tmp_path / "labels.parquet")
 
@@ -364,6 +367,9 @@ def test_train_model_missing_labels(tmp_path, monkeypatch):
     features_path = _make_tiny_features_parquet(tmp_path)
 
     from sip_engine.config import get_settings
+    # Patch artifacts_models_dir to tmp_path to prevent early return when real model.pkl exists.
+    # train_model() checks (model_dir / "model.pkl").exists() BEFORE features_path/labels_path.
+    monkeypatch.setattr(get_settings(), "artifacts_models_dir", tmp_path / "models")
     monkeypatch.setattr(get_settings(), "features_path", features_path)
     monkeypatch.setattr(get_settings(), "labels_path", tmp_path / "labels.parquet")
 
