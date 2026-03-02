@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: RCAC Builder** - 6-source sanction registry built, normalized, deduplicated, serialized, and queryable (completed 2026-03-01)
 - [x] **Phase 4: Label Construction** - M1/M2 labels from amendments, M3 from Comptroller bulletins, M4 from RCAC fines (completed 2026-03-01)
 - [x] **Phase 5: Feature Engineering** - Shared feature pipeline (Categories A/B/C) with temporal leak guard and train-serve parity (completed 2026-03-01)
-- [ ] **Phase 6: IRIC** - 11-component irregularity index calculated, nationally calibrated by contract type, added as model feature
+- [x] **Phase 6: IRIC** - 11-component irregularity index calculated, nationally calibrated by contract type, added as model feature (completed 2026-03-02)
 - [ ] **Phase 7: Model Training** - 4 XGBoost classifiers trained with class imbalance handling and hyperparameter optimization
 - [ ] **Phase 8: Evaluation** - Full metrics suite (AUC-ROC, MAP@k, NDCG@k, Brier, Precision/Recall) with structured evaluation reports
 - [ ] **Phase 9: Explainability, CRI, and Testing** - SHAP values, Composite Risk Index, deterministic JSON output, and full test suite
@@ -109,7 +109,7 @@ Plans:
   4. `iric_thresholds.json` contains national-level percentiles (P1, P5, P95, P99) segmented by contract type, computed only from training-set contracts
   5. IRIC scores (`iric_score`, `iric_competencia`, `iric_transparencia`, `iric_anomalias`) are present as Category D features in the feature vector produced by `pipeline.py`
   6. IRIC anomaly components 9 and 10 (`proveedor_sobrecostos_previos`, `proveedor_retrasos_previos`) return 0 for providers with no contract history before the signing date
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [ ] 06-01-PLAN.md — IRIC calculator (11 components + 4 aggregate scores) and threshold calibration machinery
 - [ ] 06-02-PLAN.md — Bid anomaly statistics (kurtosis + DRN) from ofertas data
@@ -163,7 +163,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. RCAC Builder | 2/2 | Complete | 2026-03-01 |
 | 4. Label Construction | 2/2 | Complete   | 2026-03-01 |
 | 5. Feature Engineering | 3/3 | Complete   | 2026-03-01 |
-| 6. IRIC | 2/3 | In Progress|  |
+| 6. IRIC | 3/3 | Complete   | 2026-03-02 |
 | 7. Model Training | 0/TBD | Not started | - |
 | 8. Evaluation | 0/TBD | Not started | - |
 | 9. Explainability, CRI, and Testing | 0/TBD | Not started | - |

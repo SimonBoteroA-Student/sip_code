@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 6 — IRIC (in progress)
+**Current focus:** Phase 7 — Model Training (next)
 
 ## Current Position
 
-Phase: 6 of 9 (IRIC) — IN PROGRESS
-Plan: 2 of 3 completed in current phase
-Status: Plan 06-02 complete — bid_stats.py (kurtosis + DRN), 36 bid stats tests passing (210 total). Plans 06-01 and 06-02 complete.
-Last activity: 2026-03-02 — Plan 06-02 complete: bid_stats.py, test_bid_stats.py
+Phase: 6 of 9 (IRIC) — COMPLETE
+Plan: 3 of 3 completed in current phase
+Status: Phase 6 COMPLETE — iric/pipeline.py (build_iric + compute_iric), Category D in FEATURE_COLUMNS (30->34), build-iric CLI, iric/__init__.py re-exports, 290 total tests passing.
+Last activity: 2026-03-01 — Plan 06-03 complete: pipeline integration + CLI
 
-Progress: [████████████] 67%
+Progress: [███████████████] 78%
 
 ## Performance Metrics
 
@@ -32,14 +32,16 @@ Progress: [████████████] 67%
 | 03-rcac-builder | 2 | 6 min | 3 min |
 | 04-label-construction | 2 | 7 min | 3.5 min |
 | 05-feature-engineering | 3 | 14 min | 4.7 min |
-| 06-iric (partial) | 2 | 4 min | 2 min |
+| 06-iric | 3 | 16 min | 5.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 3 min, 4 min, 5 min, 5 min, 2 min
-- Trend: Fast
+- Last 5 plans: 4 min, 5 min, 2 min, 5 min, 12 min
+- Trend: Stable
 
 *Updated after each plan completion*
 | Phase 06-iric P01 | 5 | 2 tasks | 3 files |
+| Phase 06-iric P02 | 2 | 1 task | 2 files |
+| Phase 06-iric P03 | 12 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -90,6 +92,9 @@ Recent decisions affecting current work:
 - [Phase 06-iric]: IRIC components 9/10 return 0 for new providers (not None) — VigIA pattern avoids penalizing new entrants without prior history
 - [Phase 06-iric]: calibrate_iric_thresholds accepts arbitrary DataFrame — Phase 7 must recalibrate on train-only data for IRIC-08 leakage prevention
 - [Phase 06-iric]: Accent normalization via unicodedata NFD for modality matching — handles Contratacion/Contratación directa variants correctly
+- [06-03]: Path existence check before load_iric_thresholds() in build_features() — prevents stale module-level cache hitting wrong path in test isolation
+- [06-03]: kurtosis/DRN excluded from FEATURE_COLUMNS — NaN-heavy (~60% direct contracting), stored only in iric_scores.parquet artifact
+- [06-03]: Lazy import of iric.pipeline inside features.pipeline function bodies — avoids circular import at module level
 
 ### Pending Todos
 
@@ -103,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-02
-Stopped at: Completed 06-01-PLAN.md — IRIC calculator (11 components + 4 scores) and threshold calibration machinery; 57 tests passing
-Resume file: .planning/phases/06-iric/06-03-PLAN.md (pipeline integration + CLI, after 06-02 completes)
+Last session: 2026-03-01
+Stopped at: Completed 06-03-PLAN.md — Phase 6 COMPLETE. IRIC pipeline integration, Category D (34 features), build-iric CLI, iric/__init__.py re-exports. 290 tests passing.
+Resume file: .planning/phases/07-training/ (Phase 7 — Model Training)
