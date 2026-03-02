@@ -1,0 +1,328 @@
+"""Unit tests for evaluation metrics and report generation.
+
+Tests use synthetic data only — no real model artifacts required.
+All tests complete in under 15 seconds total.
+"""
+
+from __future__ import annotations
+
+import csv
+import json
+from pathlib import Path
+
+import numpy as np
+import pytest
+from sklearn.metrics import ndcg_score
+
+from sip_engine.evaluation.evaluator import (
+    _compute_calibration_metrics,
+    _compute_discrimination_metrics,
+    _compute_ranking_metrics,
+    _compute_threshold_analysis,
+    _get_output_path,
+    _write_csv_report,
+    _write_json_report,
+    _write_markdown_report,
+    map_at_k,
+)
+
+
+# =============================================================================
+# Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def synthetic_data():
+    """Synthetic binary classification data with controlled ranking (20% positive)."""
+    rng = np.random.RandomState(42)
+    n = 200
+    y_true = np.array([1] * 40 + [0] * 160)  # 20% positive
+    y_scores = rng.rand(n)
+    y_scores[:40] += 0.3  # Make positives higher scoring on average
+    y_scores = np.clip(y_scores, 0, 1)
+    return y_true, y_scores
+
+
+@pytest.fixture
+def perfect_ranking_data():
+    """Perfect classifier: all positives scored higher than negatives."""
+    y_true = np.array([1, 1, 1, 0, 0, 0, 0, 0])
+    y_scores = np.array([0.9, 0.8, 0.7, 0.4, 0.3, 0.2, 0.1, 0.05])
+    return y_true, y_scores
+
+
+@pytest.fixture
+def minimal_eval_dict(synthetic_data):
+    """A minimal eval_dict assembled from real computations on synthetic_data."""
+    y_true, y_scores = synthetic_data
+    disc = _compute_discrimination_metrics(y_true, y_scores)
+    ranking = _compute_ranking_metrics(y_true, y_scores)
+    calib = _compute_calibration_metrics(y_true, y_scores)
+    ta = _compute_threshold_analysis(y_true, y_scores)
+    opt = ta["optimal_threshold"]
+    n = len(y_true)
+    positive_rate = float(y_true.mean())
+    return {
+        "model_id": "M1",
+        "evaluation_date": "2026-03-02T00:00:00+00:00",
+        "test_set_size": n,
+        "label_distribution": {
+            "n_positive": int(y_true.sum()),
+            "n_negative": int((y_true == 0).sum()),
+            "positive_rate": positive_rate,
+        },
+        "discrimination": disc,
+        "ranking": ranking,
+        "calibration": calib,
+        "threshold_analysis": ta,
+        "optimal_threshold": opt,
+        "training_context": {
+            "best_params": {"n_estimators": 100, "max_depth": 4},
+            "imbalance_strategy": "scale_pos_weight",
+            "best_cv_scores": {"scores": [0.75, 0.80], "mean": 0.775, "std": 0.025},
+            "hp_search_history": [],
+        },
+    }
+
+
+# =============================================================================
+# MAP@k tests
+# =============================================================================
+
+
+def test_map_at_k_perfect_ranking(perfect_ranking_data):
+    """Perfect ranking: all positives in top-3 → MAP@3 and MAP@8 == 1.0."""
+    y_true, y_scores = perfect_ranking_data
+    # Top-3 are all positives: precision at pos 1=1/1, 2=2/2, 3=3/3 → mean=1.0
+    result = map_at_k(y_true, y_scores, k=3)
+    assert result == pytest.approx(1.0, abs=1e-6), f"Expected MAP@3=1.0, got {result}"
+
+    result_full = map_at_k(y_true, y_scores, k=8)
+    assert result_full == pytest.approx(1.0, abs=1e-6), f"Expected MAP@8=1.0, got {result_full}"
+
+
+def test_map_at_k_worst_ranking():
+    """All positives at bottom → MAP@3 should be 0.0 (no positives in top-3)."""
+    y_true = np.array([0, 0, 0, 1, 1])
+    y_scores = np.array([0.9, 0.8, 0.7, 0.6, 0.5])
+    result = map_at_k(y_true, y_scores, k=3)
+    assert result == pytest.approx(0.0, abs=1e-6), f"Expected MAP@3=0.0, got {result}"
+
+
+def test_map_at_k_k_larger_than_n():
+    """k > n should clamp to n and not crash."""
+    rng = np.random.RandomState(0)
+    n = 10
+    y_true = np.array([1, 0, 1, 0, 1, 0, 0, 0, 0, 0])
+    y_scores = rng.rand(n)
+    # k=1000 >> n=10 — should run fine
+    result = map_at_k(y_true, y_scores, k=1000)
+    assert 0.0 <= result <= 1.0, f"MAP@1000 out of range: {result}"
+
+
+def test_map_at_k_no_positives():
+    """All-zero y_true → MAP@k should be 0.0."""
+    y_true = np.zeros(20, dtype=int)
+    y_scores = np.random.rand(20)
+    for k in [5, 10, 20, 100]:
+        result = map_at_k(y_true, y_scores, k=k)
+        assert result == pytest.approx(0.0, abs=1e-6), f"MAP@{k} should be 0.0 for all-zero labels"
+
+
+# =============================================================================
+# Metric computation tests
+# =============================================================================
+
+
+def test_ndcg_computation(synthetic_data):
+    """NDCG@100 and NDCG@200 should both be in [0, 1]."""
+    y_true, y_scores = synthetic_data
+    ndcg_100 = float(ndcg_score(y_true.reshape(1, -1), y_scores.reshape(1, -1), k=100))
+    ndcg_200 = float(ndcg_score(y_true.reshape(1, -1), y_scores.reshape(1, -1), k=200))
+    assert 0.0 <= ndcg_100 <= 1.0, f"NDCG@100 out of range: {ndcg_100}"
+    assert 0.0 <= ndcg_200 <= 1.0, f"NDCG@200 out of range: {ndcg_200}"
+
+
+def test_discrimination_metrics(synthetic_data):
+    """_compute_discrimination_metrics returns correct keys and reasonable AUC."""
+    y_true, y_scores = synthetic_data
+    result = _compute_discrimination_metrics(y_true, y_scores)
+
+    assert "auc_roc" in result, "Missing key: auc_roc"
+    assert "roc_curve" in result, "Missing key: roc_curve"
+
+    auc = result["auc_roc"]
+    assert 0.5 < auc < 1.0, f"AUC-ROC should be > 0.5 for biased positives, got {auc}"
+
+    roc = result["roc_curve"]
+    assert "fpr" in roc and "tpr" in roc and "thresholds" in roc
+    assert len(roc["fpr"]) == len(roc["tpr"]) == len(roc["thresholds"])
+    assert len(roc["fpr"]) >= 2, "ROC curve should have at least 2 points"
+
+
+def test_ranking_metrics(synthetic_data):
+    """_compute_ranking_metrics returns all 6 keys with values in [0, 1]."""
+    y_true, y_scores = synthetic_data
+    result = _compute_ranking_metrics(y_true, y_scores)
+
+    expected_keys = ["map_100", "map_500", "map_1000", "ndcg_100", "ndcg_500", "ndcg_1000"]
+    for key in expected_keys:
+        assert key in result, f"Missing key: {key}"
+        assert 0.0 <= result[key] <= 1.0, f"{key}={result[key]} out of [0, 1]"
+
+
+def test_calibration_metrics(synthetic_data):
+    """_compute_calibration_metrics returns correct Brier Score and baseline."""
+    y_true, y_scores = synthetic_data
+    result = _compute_calibration_metrics(y_true, y_scores)
+
+    assert "brier_score" in result
+    assert "brier_baseline" in result
+    assert result["brier_score"] > 0, "Brier score should be positive"
+    # 20% positive rate: baseline = 0.2 * 0.8 = 0.16
+    expected_baseline = 0.20 * 0.80
+    assert result["brier_baseline"] == pytest.approx(expected_baseline, abs=0.001), (
+        f"Brier baseline expected ~{expected_baseline:.3f}, got {result['brier_baseline']:.4f}"
+    )
+
+
+def test_threshold_analysis(synthetic_data):
+    """_compute_threshold_analysis returns 19 thresholds and valid optimal threshold."""
+    y_true, y_scores = synthetic_data
+    result = _compute_threshold_analysis(y_true, y_scores)
+
+    assert len(result["thresholds"]) == 19, f"Expected 19 thresholds, got {len(result['thresholds'])}"
+    assert len(result["precision"]) == 19
+    assert len(result["recall"]) == 19
+    assert len(result["f1"]) == 19
+    assert len(result["confusion_matrices"]) == 19
+
+    opt = result["optimal_threshold"]
+    assert isinstance(opt, dict), "optimal_threshold should be a dict"
+    for key in ["value", "precision", "recall", "f1"]:
+        assert key in opt, f"optimal_threshold missing key: {key}"
+
+    # Optimal threshold value should be within the sweep range
+    assert 0.05 <= opt["value"] <= 0.95, f"Optimal threshold {opt['value']} out of sweep range"
+
+
+def test_threshold_analysis_confusion_matrices(synthetic_data):
+    """Confusion matrices at each threshold sum to total samples."""
+    y_true, y_scores = synthetic_data
+    result = _compute_threshold_analysis(y_true, y_scores)
+    n = len(y_true)
+
+    for i, cm in enumerate(result["confusion_matrices"]):
+        total = cm["tn"] + cm["fp"] + cm["fn"] + cm["tp"]
+        assert total == n, f"Threshold {result['thresholds'][i]}: CM sum={total}, expected {n}"
+
+    # At very low threshold (0.05), recall should be high (most predicted positive)
+    idx_low = result["thresholds"].index(0.05)
+    assert result["recall"][idx_low] > 0.7, (
+        f"At threshold 0.05, recall should be high, got {result['recall'][idx_low]:.4f}"
+    )
+
+    # At very high threshold (0.95), precision should be high or zero (few positives predicted)
+    idx_high = result["thresholds"].index(0.95)
+    prec_high = result["precision"][idx_high]
+    assert prec_high >= 0.0, f"Precision at 0.95 should be >= 0, got {prec_high}"
+    # If anything is predicted at 0.95, precision should be high for a biased classifier
+    cm_high = result["confusion_matrices"][idx_high]
+    n_predicted_positive = cm_high["tp"] + cm_high["fp"]
+    if n_predicted_positive > 0:
+        assert prec_high > 0.3, (
+            f"At threshold 0.95, precision should be high if any predicted, got {prec_high:.4f}"
+        )
+
+
+# =============================================================================
+# Report generation tests
+# =============================================================================
+
+
+def test_json_report_schema(minimal_eval_dict, tmp_path):
+    """_write_json_report produces valid JSON with required top-level keys."""
+    output_path = tmp_path / "M1_eval.json"
+    _write_json_report(minimal_eval_dict, output_path)
+
+    assert output_path.exists(), "JSON report file should exist"
+    content = json.loads(output_path.read_text())
+
+    required_keys = [
+        "model_id", "evaluation_date", "discrimination", "ranking",
+        "calibration", "threshold_analysis", "optimal_threshold",
+    ]
+    for key in required_keys:
+        assert key in content, f"JSON report missing required key: {key}"
+
+    assert content["model_id"] == "M1"
+    assert "auc_roc" in content["discrimination"]
+    assert "roc_curve" in content["discrimination"]
+
+
+def test_csv_report_parseable(minimal_eval_dict, tmp_path):
+    """_write_csv_report produces a parseable CSV with correct structure."""
+    output_path = tmp_path / "M1_eval.csv"
+    _write_csv_report(minimal_eval_dict, output_path)
+
+    assert output_path.exists(), "CSV report file should exist"
+
+    with output_path.open() as f:
+        reader = csv.reader(f)
+        rows = list(reader)
+
+    # Header + 19 threshold rows + 13 summary rows = 33 total
+    assert len(rows) >= 20, f"Expected at least 20 rows (header + thresholds), got {len(rows)}"
+
+    header = rows[0]
+    assert "metric_type" in header, f"Header missing 'metric_type': {header}"
+    assert "threshold" in header, f"Header missing 'threshold': {header}"
+
+    # Count threshold rows
+    threshold_rows = [r for r in rows[1:] if r[0] == "threshold"]
+    assert len(threshold_rows) == 19, f"Expected 19 threshold rows, got {len(threshold_rows)}"
+
+    # Count summary rows
+    summary_rows = [r for r in rows[1:] if r[0] == "summary"]
+    assert len(summary_rows) >= 1, "Expected at least 1 summary row"
+
+
+def test_markdown_report_generated(minimal_eval_dict, tmp_path):
+    """_write_markdown_report produces a valid Markdown file."""
+    output_path = tmp_path / "M1_eval.md"
+    _write_markdown_report(minimal_eval_dict, output_path)
+
+    assert output_path.exists(), "Markdown report file should exist"
+    content = output_path.read_text()
+
+    assert content.startswith("# Evaluation Report"), (
+        f"Markdown should start with '# Evaluation Report', got: {content[:50]!r}"
+    )
+    assert "AUC-ROC" in content, "Markdown should contain 'AUC-ROC'"
+    assert "MAP@" in content, "Markdown should contain 'MAP@'"
+    assert "Brier" in content, "Markdown should contain 'Brier'"
+    assert "Threshold" in content, "Markdown should contain 'Threshold'"
+
+
+def test_timestamped_output_no_overwrite(tmp_path):
+    """_get_output_path returns timestamped path when base path already exists."""
+    output_dir = tmp_path / "evaluation"
+    model_id = "M1"
+    extension = ".json"
+
+    # First call: base path doesn't exist → return base path
+    first_path = _get_output_path(output_dir, model_id, extension)
+    assert first_path == output_dir / model_id / f"{model_id}_eval{extension}"
+
+    # Simulate the file existing
+    first_path.parent.mkdir(parents=True, exist_ok=True)
+    first_path.touch()
+
+    # Second call: base path exists → return timestamped path
+    second_path = _get_output_path(output_dir, model_id, extension)
+    assert second_path != first_path, "Second path should differ from first (timestamped)"
+    assert second_path.name.startswith(f"{model_id}_eval_"), (
+        f"Timestamped path should start with '{model_id}_eval_', got: {second_path.name}"
+    )
+    assert second_path.suffix == extension, f"Extension should be {extension}"
