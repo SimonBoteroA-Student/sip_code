@@ -120,12 +120,15 @@ Plans:
 **Depends on**: Phase 6
 **Requirements**: MODL-01, MODL-02, MODL-03, MODL-04, MODL-05, MODL-06, MODL-07, MODL-08, MODL-09
 **Success Criteria** (what must be TRUE):
-  1. Training data is split with temporal ordering preserved (earliest 70% as train, latest 30% as test holdout) — no shuffling before the split
+  1. Training data is split using stratified random 70/30 split (per-model stratification by label, fixed seed=42) — NOT temporal ordering (user decision)
   2. For each of the 4 models, both class imbalance strategies (scale_pos_weight and 25% minority upsampling) are evaluated via stratified cross-validation, and the better strategy is selected and documented
-  3. RandomizedSearchCV with 200 iterations and StratifiedKFold(5) completes for each model without errors
-  4. Four serialized model files exist at `artifacts/models/M1.pkl`, `M2.pkl`, `M3.pkl`, `M4.pkl`
+  3. Manual CV loop with ParameterSampler (200 iterations) and StratifiedKFold(5) completes for each model without errors
+  4. Four serialized model files exist at `artifacts/models/M1/model.pkl`, `M2/model.pkl`, `M3/model.pkl`, `M4/model.pkl`
   5. A `feature_registry.json` is stored alongside each model containing the exact column names and ordering used during training
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 07-01-PLAN.md — Training infrastructure: split, device detection, HP search loop, strategy comparison, unit tests
+- [ ] 07-02-PLAN.md — train_model() orchestrator, artifact serialization, CLI train subcommand, integration tests
 
 ### Phase 8: Evaluation
 **Goal**: All 4 models are comprehensively evaluated with the full academic metrics suite, and structured evaluation reports (JSON + CSV) are generated per model documenting performance, class balance strategy, and best hyperparameters
