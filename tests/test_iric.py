@@ -362,12 +362,12 @@ def procesos_normal():
 def provider_history_normal():
     """Normal provider history — no overruns or delays."""
     return {
-        "num_contratos": 2,
-        "num_sobrecostos": 0,
-        "num_retrasos": 0,
-        "num_contratos_depto": 1,
-        "valor_total_contratos_nacional": 20_000_000.0,
-        "valor_total_contratos_depto": 10_000_000.0,
+        "num_contratos_previos_nacional": 2,
+        "num_sobrecostos_previos": 0,
+        "num_retrasos_previos": 0,
+        "num_contratos_previos_depto": 1,
+        "valor_total_contratos_previos_nacional": 20_000_000.0,
+        "valor_total_contratos_previos_depto": 10_000_000.0,
     }
 
 
@@ -434,7 +434,7 @@ class TestHistorialProveedorAlto:
         """num_contratos=10, threshold=3 -> historial_proveedor_alto = 1."""
         from sip_engine.iric.calculator import compute_iric_components
 
-        provider_history = {"num_contratos": 10, "num_sobrecostos": 0, "num_retrasos": 0}
+        provider_history = {"num_contratos_previos_nacional": 10, "num_sobrecostos_previos": 0, "num_retrasos_previos": 0}
         components = compute_iric_components(
             base_row, procesos_normal, provider_history, minimal_thresholds, 1
         )
@@ -446,7 +446,7 @@ class TestHistorialProveedorAlto:
         """num_contratos=2, threshold=3 -> historial_proveedor_alto = 0."""
         from sip_engine.iric.calculator import compute_iric_components
 
-        provider_history = {"num_contratos": 2, "num_sobrecostos": 0, "num_retrasos": 0}
+        provider_history = {"num_contratos_previos_nacional": 2, "num_sobrecostos_previos": 0, "num_retrasos_previos": 0}
         components = compute_iric_components(
             base_row, procesos_normal, provider_history, minimal_thresholds, 1
         )
@@ -676,7 +676,7 @@ class TestProveedorSobrecostosPrevios:
         """num_sobrecostos=2 -> proveedor_sobrecostos_previos = 1."""
         from sip_engine.iric.calculator import compute_iric_components
 
-        provider_history = {"num_contratos": 5, "num_sobrecostos": 2, "num_retrasos": 0}
+        provider_history = {"num_contratos_previos_nacional": 5, "num_sobrecostos_previos": 2, "num_retrasos_previos": 0}
         components = compute_iric_components(
             base_row, procesos_normal, provider_history, minimal_thresholds, 1
         )
@@ -688,7 +688,7 @@ class TestProveedorSobrecostosPrevios:
         """num_sobrecostos=0, has history -> proveedor_sobrecostos_previos = 0."""
         from sip_engine.iric.calculator import compute_iric_components
 
-        provider_history = {"num_contratos": 5, "num_sobrecostos": 0, "num_retrasos": 0}
+        provider_history = {"num_contratos_previos_nacional": 5, "num_sobrecostos_previos": 0, "num_retrasos_previos": 0}
         components = compute_iric_components(
             base_row, procesos_normal, provider_history, minimal_thresholds, 1
         )
@@ -711,7 +711,7 @@ class TestProveedorRetrasosPrevios:
         """num_retrasos=3 -> proveedor_retrasos_previos = 1."""
         from sip_engine.iric.calculator import compute_iric_components
 
-        provider_history = {"num_contratos": 5, "num_sobrecostos": 0, "num_retrasos": 3}
+        provider_history = {"num_contratos_previos_nacional": 5, "num_sobrecostos_previos": 0, "num_retrasos_previos": 3}
         components = compute_iric_components(
             base_row, procesos_normal, provider_history, minimal_thresholds, 1
         )
@@ -877,6 +877,131 @@ class TestIricScores:
         assert set(scores.keys()) == {
             "iric_score", "iric_competencia", "iric_transparencia", "iric_anomalias"
         }
+
+
+class TestIRICProviderHistoryIntegration:
+    """Integration test: validates calculator uses correct provider_history key names.
+
+    This test validates that compute_iric_components() correctly reads keys from
+    lookup_provider_history() output — the exact integration gap that allowed the
+    key mismatch bug (components 3, 9, 10 silently returning 0) to survive.
+
+    Uses _ZERO_RESULT as the real schema template (not synthetic), then sets
+    individual keys to trigger each component.
+    """
+
+    @pytest.fixture()
+    def base_row(self):
+        return {
+            "Modalidad de Contratacion": "Licitacion publica",
+            "TipoDocProveedor": "NIT",
+            "Documento Proveedor": "900123456",
+            "Valor del Contrato": 10_000_000.0,
+            "Justificacion Modalidad de Contratacion": "Por necesidad institucional",
+            "Tipo de Contrato": "Prestacion de servicios",
+        }
+
+    @pytest.fixture()
+    def procesos_normal(self):
+        return {
+            "Proveedores Unicos con Respuestas": 3,
+            "dias_publicidad": 5,
+            "dias_decision": 10,
+        }
+
+    @pytest.fixture()
+    def thresholds(self):
+        return {
+            "tipo_contrato": {
+                "Prestacion de servicios": {
+                    "num_contratos_previos_nacional": {"p1": 1, "p5": 1, "p95": 3, "p99": 7},
+                    "dias_publicidad": {"p1": 0, "p5": 0, "p95": 10, "p99": 14},
+                    "dias_decision": {"p1": 0, "p5": 0, "p95": 43, "p99": 125},
+                    "valor_contrato": {"p1": 0, "p5": 0, "p95": 120_000_000, "p99": 500_000_000},
+                },
+                "Otro": {
+                    "num_contratos_previos_nacional": {"p1": 1, "p5": 1, "p95": 3, "p99": 7},
+                    "dias_publicidad": {"p1": 0, "p5": 0, "p95": 10, "p99": 14},
+                    "dias_decision": {"p1": 0, "p5": 0, "p95": 43, "p99": 125},
+                    "valor_contrato": {"p1": 0, "p5": 0, "p95": 120_000_000, "p99": 500_000_000},
+                },
+            },
+            "calibration_date": "2026-03-01T00:00:00Z",
+            "n_contracts": 100,
+            "min_group_size": 30,
+        }
+
+    def test_component_9_fires_with_real_schema_key(self, base_row, procesos_normal, thresholds):
+        """Integration: num_sobrecostos_previos=2 (real key) -> component 9 = 1.
+
+        Validates calculator reads 'num_sobrecostos_previos', not old 'num_sobrecostos'.
+        """
+        from sip_engine.features.provider_history import _ZERO_RESULT
+        from sip_engine.iric.calculator import compute_iric_components
+
+        provider_history = dict(_ZERO_RESULT)
+        provider_history["num_sobrecostos_previos"] = 2
+
+        components = compute_iric_components(
+            base_row, procesos_normal, provider_history, thresholds, 1
+        )
+        assert components["proveedor_sobrecostos_previos"] == 1, (
+            "Component 9 should fire when num_sobrecostos_previos=2. "
+            "Failure means calculator is using wrong key name."
+        )
+
+    def test_component_10_fires_with_real_schema_key(self, base_row, procesos_normal, thresholds):
+        """Integration: num_retrasos_previos=3 (real key) -> component 10 = 1.
+
+        Validates calculator reads 'num_retrasos_previos', not old 'num_retrasos'.
+        """
+        from sip_engine.features.provider_history import _ZERO_RESULT
+        from sip_engine.iric.calculator import compute_iric_components
+
+        provider_history = dict(_ZERO_RESULT)
+        provider_history["num_retrasos_previos"] = 3
+
+        components = compute_iric_components(
+            base_row, procesos_normal, provider_history, thresholds, 1
+        )
+        assert components["proveedor_retrasos_previos"] == 1, (
+            "Component 10 should fire when num_retrasos_previos=3. "
+            "Failure means calculator is using wrong key name."
+        )
+
+    def test_component_3_fires_with_real_schema_key(self, base_row, procesos_normal, thresholds):
+        """Integration: num_contratos_previos_nacional=10, p95=3 -> component 3 = 1.
+
+        Validates calculator reads 'num_contratos_previos_nacional', not old 'num_contratos'.
+        """
+        from sip_engine.features.provider_history import _ZERO_RESULT
+        from sip_engine.iric.calculator import compute_iric_components
+
+        provider_history = dict(_ZERO_RESULT)
+        provider_history["num_contratos_previos_nacional"] = 10  # > p95=3
+
+        components = compute_iric_components(
+            base_row, procesos_normal, provider_history, thresholds, 1
+        )
+        assert components["historial_proveedor_alto"] == 1, (
+            "Component 3 should fire when num_contratos_previos_nacional=10 > p95=3. "
+            "Failure means calculator is using wrong key name."
+        )
+
+    def test_all_zero_result_fires_nothing(self, base_row, procesos_normal, thresholds):
+        """Integration: _ZERO_RESULT (all zeros) -> components 3, 9, 10 all return 0.
+
+        Validates that new providers with zero history do not trigger anomaly components.
+        """
+        from sip_engine.features.provider_history import _ZERO_RESULT
+        from sip_engine.iric.calculator import compute_iric_components
+
+        components = compute_iric_components(
+            base_row, procesos_normal, dict(_ZERO_RESULT), thresholds, 1
+        )
+        assert components["historial_proveedor_alto"] == 0
+        assert components["proveedor_sobrecostos_previos"] == 0
+        assert components["proveedor_retrasos_previos"] == 0
 
     def test_iric_components_returns_eleven_keys(
         self, base_row, minimal_thresholds, procesos_normal

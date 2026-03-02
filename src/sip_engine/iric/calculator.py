@@ -189,9 +189,9 @@ def compute_iric_components(
             Must include 'dias_publicidad' and 'dias_decision' (injected by
             pipeline from Category B). None if no process was found.
         provider_history: Dict from lookup_provider_history(). Keys used:
-            - 'num_contratos': total prior contracts
-            - 'num_sobrecostos': prior cost overruns
-            - 'num_retrasos': prior schedule delays
+            - 'num_contratos_previos_nacional': total prior contracts nationally
+            - 'num_sobrecostos_previos': prior cost overruns
+            - 'num_retrasos_previos': prior schedule delays
             None for new providers with no prior history.
         thresholds: Loaded IRIC thresholds dict (from load_iric_thresholds()).
         num_actividades: Count of distinct UNSPSC segments for this provider.
@@ -243,7 +243,7 @@ def compute_iric_components(
     if provider_history is None:
         historial_proveedor_alto = 0
     else:
-        num_contratos = provider_history.get("num_contratos", 0) or 0
+        num_contratos = provider_history.get("num_contratos_previos_nacional", 0) or 0
         p95_contratos = get_threshold(
             thresholds, tipo_contrato, "num_contratos_previos_nacional", "p95"
         )
@@ -329,7 +329,7 @@ def compute_iric_components(
     if provider_history is None:
         proveedor_sobrecostos_previos = 0
     else:
-        num_sobrecostos = provider_history.get("num_sobrecostos", 0) or 0
+        num_sobrecostos = provider_history.get("num_sobrecostos_previos", 0) or 0
         proveedor_sobrecostos_previos = 1 if num_sobrecostos > 0 else 0
 
     # Component 10: proveedor_retrasos_previos
@@ -337,7 +337,7 @@ def compute_iric_components(
     if provider_history is None:
         proveedor_retrasos_previos = 0
     else:
-        num_retrasos = provider_history.get("num_retrasos", 0) or 0
+        num_retrasos = provider_history.get("num_retrasos_previos", 0) or 0
         proveedor_retrasos_previos = 1 if num_retrasos > 0 else 0
 
     # Component 11 already computed above
