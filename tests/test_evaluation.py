@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import csv
 import json
+import subprocess
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 from sklearn.metrics import ndcg_score
 
@@ -326,3 +328,182 @@ def test_timestamped_output_no_overwrite(tmp_path):
         f"Timestamped path should start with '{model_id}_eval_', got: {second_path.name}"
     )
     assert second_path.suffix == extension, f"Extension should be {extension}"
+
+
+# =============================================================================
+# Integration fixtures and helpers
+# =============================================================================
+
+
+def _create_mock_model_artifacts(tmp_models_dir: Path, model_id: str) -> None:
+    """Create minimal model artifacts for a given model_id.
+
+    Creates model.pkl, test_data.parquet, feature_registry.json, and
+    training_report.json in tmp_models_dir / model_id.
+    """
+    import joblib
+    from xgboost import XGBClassifier
+
+    model_dir = tmp_models_dir / model_id
+    model_dir.mkdir(parents=True, exist_ok=True)
+
+    rng = np.random.RandomState(42)
+    feature_names = ["f1", "f2", "f3", "f4", "f5"]
+
+    # Train a tiny XGBoost model on synthetic data using DataFrame for feature names
+    X_train = pd.DataFrame(rng.rand(100, 5), columns=feature_names)
+    y_train = np.array([1] * 20 + [0] * 80)
+
+    clf = XGBClassifier(n_estimators=5, max_depth=2, random_state=42)
+    clf.fit(X_train, y_train)
+
+    # Save model.pkl
+    joblib.dump(clf, model_dir / "model.pkl")
+
+    # Save test_data.parquet with label column named after model_id
+    X_test = pd.DataFrame(rng.rand(50, 5), columns=feature_names)
+    y_test = np.array([1] * 10 + [0] * 40)
+    test_df = X_test.copy()
+    test_df[model_id] = y_test
+    test_df.to_parquet(model_dir / "test_data.parquet", index=False)
+
+    # Save feature_registry.json (key must be "feature_columns" to match evaluator)
+    (model_dir / "feature_registry.json").write_text(
+        json.dumps({"feature_columns": feature_names})
+    )
+
+    # Save training_report.json (minimal — evaluator uses .get() with defaults)
+    (model_dir / "training_report.json").write_text(json.dumps({
+        "model_id": model_id,
+        "best_params": {"n_estimators": 5, "max_depth": 2},
+        "imbalance_strategy": "scale_pos_weight",
+        "best_cv_scores": {"scores": [0.75, 0.73], "mean": 0.74, "std": 0.01},
+        "best_cv_auc_mean": 0.74,
+        "best_cv_auc_std": 0.01,
+    }))
+
+
+@pytest.fixture
+def mock_model_artifacts(tmp_path):
+    """Create minimal model artifacts for M1 to test single-model pipeline."""
+    models_dir = tmp_path / "models"
+    output_dir = tmp_path / "evaluation"
+    _create_mock_model_artifacts(models_dir, "M1")
+    return models_dir, output_dir
+
+
+# =============================================================================
+# Integration tests
+# =============================================================================
+
+
+def test_evaluate_model_end_to_end(mock_model_artifacts):
+    """evaluate_model() loads real artifacts, runs metrics, writes 3 reports."""
+    from sip_engine.evaluation.evaluator import evaluate_model
+
+    models_dir, output_dir = mock_model_artifacts
+    result_dir = evaluate_model("M1", models_dir=models_dir, output_dir=output_dir)
+
+    # All 3 report files exist
+    assert (output_dir / "M1" / "M1_eval.json").exists(), "JSON report missing"
+    assert (output_dir / "M1" / "M1_eval.csv").exists(), "CSV report missing"
+    assert (output_dir / "M1" / "M1_eval.md").exists(), "Markdown report missing"
+
+    # JSON report loads and has required keys
+    report = json.loads((output_dir / "M1" / "M1_eval.json").read_text())
+    required_keys = [
+        "model_id", "evaluation_date", "test_set_size",
+        "discrimination", "ranking", "calibration",
+        "threshold_analysis", "optimal_threshold",
+    ]
+    for key in required_keys:
+        assert key in report, f"JSON report missing key: {key}"
+
+    # Metrics are in valid ranges
+    assert 0.0 <= report["discrimination"]["auc_roc"] <= 1.0, "AUC-ROC out of range"
+    assert 0.0 <= report["ranking"]["map_100"] <= 1.0, "MAP@100 out of range"
+    assert 0.0 <= report["ranking"]["map_1000"] <= 1.0, "MAP@1000 out of range"
+    assert 0.0 <= report["calibration"]["brier_score"] <= 1.0, "Brier score out of range"
+
+    # 19 thresholds in threshold_analysis
+    assert len(report["threshold_analysis"]["thresholds"]) == 19, "Expected 19 thresholds"
+
+    # optimal_threshold has required keys
+    opt = report["optimal_threshold"]
+    for key in ["value", "precision", "recall", "f1"]:
+        assert key in opt, f"optimal_threshold missing key: {key}"
+
+    # Return value is the model output directory
+    assert result_dir == output_dir / "M1"
+
+
+def test_evaluate_model_rerun_no_overwrite(mock_model_artifacts):
+    """Second evaluate_model() call creates timestamped files, not overwriting."""
+    from sip_engine.evaluation.evaluator import evaluate_model
+
+    models_dir, output_dir = mock_model_artifacts
+
+    # First run: creates base files
+    evaluate_model("M1", models_dir=models_dir, output_dir=output_dir)
+
+    # Second run: creates timestamped files
+    evaluate_model("M1", models_dir=models_dir, output_dir=output_dir)
+
+    # Should have 6 files (3 base + 3 timestamped) — verify at least 4 exist
+    report_files = list((output_dir / "M1").glob("M1_eval*"))
+    assert len(report_files) >= 4, (
+        f"Expected >=4 report files after re-run, got {len(report_files)}: "
+        f"{[f.name for f in report_files]}"
+    )
+
+    # The original base files still exist
+    assert (output_dir / "M1" / "M1_eval.json").exists(), "Base JSON missing after re-run"
+
+
+def test_evaluate_model_missing_model(tmp_path):
+    """evaluate_model() raises FileNotFoundError when artifacts are missing."""
+    from sip_engine.evaluation.evaluator import evaluate_model
+
+    nonexistent_dir = tmp_path / "nonexistent_models"
+    with pytest.raises(FileNotFoundError, match="M1"):
+        evaluate_model("M1", models_dir=nonexistent_dir, output_dir=tmp_path / "eval")
+
+
+def test_evaluate_all_summary_files(tmp_path):
+    """evaluate_all() produces summary.json and summary.csv for all 4 models."""
+    from sip_engine.evaluation.evaluator import evaluate_all
+
+    models_dir = tmp_path / "models"
+    output_dir = tmp_path / "evaluation"
+
+    # Create mock artifacts for all 4 models
+    for mid in ["M1", "M2", "M3", "M4"]:
+        _create_mock_model_artifacts(models_dir, mid)
+
+    result_dir = evaluate_all(models_dir=models_dir, output_dir=output_dir)
+
+    # Summary files exist
+    assert (output_dir / "summary.json").exists(), "summary.json missing"
+    assert (output_dir / "summary.csv").exists(), "summary.csv missing"
+
+    # summary.json has entries for all 4 models
+    summary = json.loads((output_dir / "summary.json").read_text())
+    for mid in ["M1", "M2", "M3", "M4"]:
+        assert mid in summary, f"summary.json missing entry for {mid}"
+
+    # Return value is the evaluation output directory
+    assert result_dir == output_dir
+
+
+def test_cli_evaluate_help():
+    """CLI 'python -m sip_engine evaluate --help' exits 0 and shows all flags."""
+    result = subprocess.run(
+        [".venv/bin/python", "-m", "sip_engine", "evaluate", "--help"],
+        capture_output=True,
+        text=True,
+        cwd="/Users/simonb/SIP Code",
+    )
+    assert result.returncode == 0, f"evaluate --help exit code: {result.returncode}"
+    assert "--model" in result.stdout, "--model flag missing from help output"
+    assert "--models-dir" in result.stdout, "--models-dir flag missing from help output"
+    assert "--output-dir" in result.stdout, "--output-dir flag missing from help output"
