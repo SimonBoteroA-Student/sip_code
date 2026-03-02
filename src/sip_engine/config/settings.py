@@ -63,6 +63,7 @@ class Settings:
     artifacts_features_dir: Path = field(default=None)    # type: ignore[assignment]
     artifacts_iric_dir: Path = field(default=None)        # type: ignore[assignment]
     artifacts_labels_dir: Path = field(default=None)      # type: ignore[assignment]
+    artifacts_shap_dir: Path = field(default=None)        # type: ignore[assignment]
 
     # ------------------------------------------------------------------ #
     # SECOP CSV paths (9 files, derived in __post_init__)                 #
@@ -152,6 +153,7 @@ class Settings:
         self.artifacts_features_dir = self.artifacts_dir / "features"
         self.artifacts_iric_dir = self.artifacts_dir / "iric"
         self.artifacts_labels_dir = self.artifacts_dir / "labels"
+        self.artifacts_shap_dir = self.artifacts_dir / "shap"
 
         # ---- Derive SECOP CSV paths ----
         self.contratos_path = self.secop_dir / "contratos_SECOP.csv"

@@ -3,5 +3,12 @@
   "m2_delays": 0.20,
   "m3_comptroller": 0.20,
   "m4_fines": 0.20,
-  "iric": 0.20
+  "iric": 0.20,
+  "risk_thresholds": {
+    "very_low":  [0.00, 0.20],
+    "low":       [0.20, 0.40],
+    "medium":    [0.40, 0.60],
+    "high":      [0.60, 0.80],
+    "very_high": [0.80, 1.00]
+  }
 }
