@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 7 of 9 (Model Training) — COMPLETE
-Plan: 2 of 2 completed in current phase
-Status: Phase 7 COMPLETE — train_model() orchestrator (16-step pipeline), CLI train subcommand with 5 flags (--model, --force, --quick, --n-iter, --n-jobs), 20 tests in test_models.py (4 parameterized M1-M4 e2e). 310 tests total passing. Artifacts: model.pkl + feature_registry.json + training_report.json + test_data.parquet per model.
-Last activity: 2026-03-02 — Plan 07-02 complete: train_model orchestrator + CLI + integration tests
+Phase: 8 of 9 (Evaluation) — Context gathered
+Plan: 0 of TBD in current phase
+Status: Phase 8 context gathered — decisions captured for thresholds (0.05-0.95 sweep), k-values (100/500/1000), report formats (JSON+CSV+MD), cross-model summary, timestamped artifacts, CLI with --model and --models-dir flags.
+Last activity: 2026-03-02 — Phase 8 context gathered via discuss-phase
 
 Progress: [█████████████████] 89%
 
