@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 8 of 9 (Evaluation) — Context gathered
-Plan: 0 of TBD in current phase
-Status: Phase 8 context gathered — decisions captured for thresholds (0.05-0.95 sweep), k-values (100/500/1000), report formats (JSON+CSV+MD), cross-model summary, timestamped artifacts, CLI with --model and --models-dir flags.
-Last activity: 2026-03-02 — Phase 8 context gathered via discuss-phase
+Phase: 8 of 9 (Evaluation) — In progress
+Plan: 1 of 2 in current phase
+Status: Phase 8 Plan 01 complete — evaluation module (evaluator.py) with AUC-ROC, MAP@k, NDCG@k, Brier Score, 19-threshold sweep, JSON/CSV/MD report writers. 14 unit tests passing.
+Last activity: 2026-03-02 — 08-01-PLAN.md complete
 
-Progress: [█████████████████] 89%
+Progress: [██████████████████] 94%
 
 ## Performance Metrics
 
@@ -103,6 +103,9 @@ Recent decisions affecting current work:
 - [Phase 07-02]: train_model wraps IRIC/encoding recalibration in try/except to prevent training failure in edge-case environments
 - [Phase 07-02]: n_splits auto-reduced to max(2, n_pos_train) when M3/M4 positive examples < n_splits to avoid StratifiedKFold error
 - [Phase 07-02]: test_data.parquet uses pyarrow preserve_index=True to maintain id_contrato as named index for Phase 8 evaluation
+- [08-01]: map_at_k() is public (not private) for direct testability — enables edge case unit tests without mocking
+- [08-01]: evaluate_all() recomputes metrics from scratch rather than parsing JSON — avoids report format coupling
+- [08-01]: stdlib csv.writer used in _write_csv_report (not pandas) — avoids overhead for simple tabular output
 
 ### Pending Todos
 
@@ -117,5 +120,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 07-02-PLAN.md — Phase 7 COMPLETE. train_model() orchestrator (16-step pipeline), CLI train subcommand with 5 flags (--model, --force, --quick, --n-iter, --n-jobs), 20 integration tests in test_models.py. 310 tests passing. All 9 MODL requirements complete.
+Stopped at: Completed 08-01-PLAN.md — Evaluation module (evaluator.py) with all metrics + 3 report writers + 14 unit tests. 335 total tests (321 passing + 3 pre-existing iric failures from uncommitted calculator.py changes).
 Resume file: .planning/phases/08-evaluation/ (Phase 8 plans, if generated)

@@ -168,5 +168,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Feature Engineering | 3/3 | Complete   | 2026-03-01 |
 | 6. IRIC | 3/3 | Complete   | 2026-03-02 |
 | 7. Model Training | 2/2 | Complete   | 2026-03-02 |
-| 8. Evaluation | 0/TBD | Not started | - |
+| 8. Evaluation | 1/2 | In progress | 08-01 complete |
 | 9. Explainability, CRI, and Testing | 0/TBD | Not started | - |

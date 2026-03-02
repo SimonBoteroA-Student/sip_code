@@ -61,12 +61,12 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 
 ### Evaluation
 
-- [ ] **EVAL-01**: System reports AUC-ROC as primary metric for all 4 models
-- [ ] **EVAL-02**: System reports MAP@100 and MAP@1000 for all models (critical for M3/M4 with severe imbalance)
-- [ ] **EVAL-03**: System reports NDCG@k for ranking quality assessment
-- [ ] **EVAL-04**: System reports Precision and Recall at multiple thresholds
-- [ ] **EVAL-05**: System reports Brier Score for probability calibration assessment
-- [ ] **EVAL-06**: System generates structured evaluation report (JSON + CSV) per model with all metrics, best hyperparameters, and class balance strategy used
+- [x] **EVAL-01**: System reports AUC-ROC as primary metric for all 4 models
+- [x] **EVAL-02**: System reports MAP@100 and MAP@1000 for all models (critical for M3/M4 with severe imbalance)
+- [x] **EVAL-03**: System reports NDCG@k for ranking quality assessment
+- [x] **EVAL-04**: System reports Precision and Recall at multiple thresholds
+- [x] **EVAL-05**: System reports Brier Score for probability calibration assessment
+- [x] **EVAL-06**: System generates structured evaluation report (JSON + CSV) per model with all metrics, best hyperparameters, and class balance strategy used
 
 ### Explainability & Composite Index
 
@@ -174,12 +174,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MODL-07 | Phase 7 | Complete |
 | MODL-08 | Phase 7 | Complete |
 | MODL-09 | Phase 7 | Complete |
-| EVAL-01 | Phase 8 | Pending |
-| EVAL-02 | Phase 8 | Pending |
-| EVAL-03 | Phase 8 | Pending |
-| EVAL-04 | Phase 8 | Pending |
-| EVAL-05 | Phase 8 | Pending |
-| EVAL-06 | Phase 8 | Pending |
+| EVAL-01 | Phase 8 | ✅ Complete |
+| EVAL-02 | Phase 8 | ✅ Complete |
+| EVAL-03 | Phase 8 | ✅ Complete |
+| EVAL-04 | Phase 8 | ✅ Complete |
+| EVAL-05 | Phase 8 | ✅ Complete |
+| EVAL-06 | Phase 8 | ✅ Complete |
 | EXPL-01 | Phase 9 | Pending |
 | EXPL-02 | Phase 9 | Pending |
 | EXPL-03 | Phase 9 | Pending |
