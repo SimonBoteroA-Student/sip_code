@@ -109,7 +109,7 @@ Plans:
   4. `iric_thresholds.json` contains national-level percentiles (P1, P5, P95, P99) segmented by contract type, computed only from training-set contracts
   5. IRIC scores (`iric_score`, `iric_competencia`, `iric_transparencia`, `iric_anomalias`) are present as Category D features in the feature vector produced by `pipeline.py`
   6. IRIC anomaly components 9 and 10 (`proveedor_sobrecostos_previos`, `proveedor_retrasos_previos`) return 0 for providers with no contract history before the signing date
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 Plans:
 - [ ] 06-01-PLAN.md — IRIC calculator (11 components + 4 aggregate scores) and threshold calibration machinery
 - [ ] 06-02-PLAN.md — Bid anomaly statistics (kurtosis + DRN) from ofertas data
@@ -163,7 +163,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. RCAC Builder | 2/2 | Complete | 2026-03-01 |
 | 4. Label Construction | 2/2 | Complete   | 2026-03-01 |
 | 5. Feature Engineering | 3/3 | Complete   | 2026-03-01 |
-| 6. IRIC | 0/TBD | Not started | - |
+| 6. IRIC | 1/3 | In Progress|  |
 | 7. Model Training | 0/TBD | Not started | - |
 | 8. Evaluation | 0/TBD | Not started | - |
 | 9. Explainability, CRI, and Testing | 0/TBD | Not started | - |
