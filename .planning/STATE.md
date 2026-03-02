@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 7 — Model Training
+**Current focus:** Phase 8 — Evaluation
 
 ## Current Position
 
-Phase: 7 of 9 (Model Training) — IN PROGRESS
-Plan: 1 of 2 completed in current phase
-Status: Phase 7 Plan 01 COMPLETE — trainer.py with 6 infrastructure functions (device detection, stratified split, dual CV scoring strategies, strategy comparison, HP search), 10 unit tests passing, 300 total tests.
-Last activity: 2026-03-02 — Plan 07-01 complete: training infrastructure functions + unit tests
+Phase: 7 of 9 (Model Training) — COMPLETE
+Plan: 2 of 2 completed in current phase
+Status: Phase 7 COMPLETE — train_model() orchestrator (16-step pipeline), CLI train subcommand with 5 flags (--model, --force, --quick, --n-iter, --n-jobs), 20 tests in test_models.py (4 parameterized M1-M4 e2e). 310 tests total passing. Artifacts: model.pkl + feature_registry.json + training_report.json + test_data.parquet per model.
+Last activity: 2026-03-02 — Plan 07-02 complete: train_model orchestrator + CLI + integration tests
 
-Progress: [████████████████] 83%
+Progress: [█████████████████] 89%
 
 ## Performance Metrics
 
@@ -42,6 +42,7 @@ Progress: [████████████████] 83%
 | Phase 06-iric P01 | 5 | 2 tasks | 3 files |
 | Phase 06-iric P02 | 2 | 1 task | 2 files |
 | Phase 06-iric P03 | 12 | 2 tasks | 7 files |
+| Phase 07-model-training P02 | 4 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,9 @@ Recent decisions affecting current work:
 - [07-01]: Upsampling target: n_target = int(n_maj * 0.25 / 0.75) — achieves 25% minority ratio in upsampled fold training set
 - [07-01]: n_jobs parameter reserved but unused in _hp_search — manual loops with upsampling don't parallelize cleanly with joblib
 - [07-01]: Strategy tie goes to scale_pos_weight (simpler model, no synthetic data creation)
+- [Phase 07-02]: train_model wraps IRIC/encoding recalibration in try/except to prevent training failure in edge-case environments
+- [Phase 07-02]: n_splits auto-reduced to max(2, n_pos_train) when M3/M4 positive examples < n_splits to avoid StratifiedKFold error
+- [Phase 07-02]: test_data.parquet uses pyarrow preserve_index=True to maintain id_contrato as named index for Phase 8 evaluation
 
 ### Pending Todos
 
@@ -113,5 +117,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 07-01-PLAN.md — Phase 7 Plan 01 COMPLETE. trainer.py with 6 infrastructure functions (_detect_xgb_device, _stratified_split, _cv_score_scale_pos_weight, _cv_score_upsampling, _compare_strategies, _hp_search), PARAM_DIST (Gallego et al. HP search space), 10 unit tests. 300 tests passing.
-Resume file: .planning/phases/07-model-training/07-02-PLAN.md (Wave 2 — train_model() orchestrator)
+Stopped at: Completed 07-02-PLAN.md — Phase 7 COMPLETE. train_model() orchestrator (16-step pipeline), CLI train subcommand with 5 flags (--model, --force, --quick, --n-iter, --n-jobs), 20 integration tests in test_models.py. 310 tests passing. All 9 MODL requirements complete.
+Resume file: .planning/phases/08-evaluation/ (Phase 8 plans, if generated)

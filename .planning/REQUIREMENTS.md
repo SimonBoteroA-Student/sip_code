@@ -49,15 +49,15 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 
 ### ML Models
 
-- [ ] **MODL-01**: System trains M1 (cost overruns) XGBoost binary classifier using only pre-execution features
-- [ ] **MODL-02**: System trains M2 (delays) XGBoost binary classifier using only pre-execution features
-- [ ] **MODL-03**: System trains M3 (Comptroller records) XGBoost binary classifier using only pre-execution features
-- [ ] **MODL-04**: System trains M4 (SECOP fines) XGBoost binary classifier using only pre-execution features
+- [x] **MODL-01**: System trains M1 (cost overruns) XGBoost binary classifier using only pre-execution features
+- [x] **MODL-02**: System trains M2 (delays) XGBoost binary classifier using only pre-execution features
+- [x] **MODL-03**: System trains M3 (Comptroller records) XGBoost binary classifier using only pre-execution features
+- [x] **MODL-04**: System trains M4 (SECOP fines) XGBoost binary classifier using only pre-execution features
 - [x] **MODL-05**: System evaluates 2 class imbalance strategies per model: (1) XGBoost `scale_pos_weight` = n_neg/n_pos, (2) minority class upsampling to 25% target ratio — selects best based on cross-validation
 - [x] **MODL-06**: System performs hyperparameter optimization via RandomizedSearchCV with 200 iterations and StratifiedKFold(5) cross-validation
 - [x] **MODL-07**: System uses 70/30 train/test split with temporal ordering preserved
-- [ ] **MODL-08**: System serializes trained models to `.pkl` via joblib with feature name ordering metadata
-- [ ] **MODL-09**: System stores `feature_registry.json` alongside each model to guarantee correct feature column ordering between training and inference
+- [x] **MODL-08**: System serializes trained models to `.pkl` via joblib with feature name ordering metadata
+- [x] **MODL-09**: System stores `feature_registry.json` alongside each model to guarantee correct feature column ordering between training and inference
 
 ### Evaluation
 
@@ -165,15 +165,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | IRIC-06 | Phase 6 | Complete |
 | IRIC-07 | Phase 6 | Complete |
 | IRIC-08 | Phase 6 | Complete |
-| MODL-01 | Phase 7 | Pending |
-| MODL-02 | Phase 7 | Pending |
-| MODL-03 | Phase 7 | Pending |
-| MODL-04 | Phase 7 | Pending |
+| MODL-01 | Phase 7 | Complete |
+| MODL-02 | Phase 7 | Complete |
+| MODL-03 | Phase 7 | Complete |
+| MODL-04 | Phase 7 | Complete |
 | MODL-05 | Phase 7 | Complete |
 | MODL-06 | Phase 7 | Complete |
 | MODL-07 | Phase 7 | Complete |
-| MODL-08 | Phase 7 | Pending |
-| MODL-09 | Phase 7 | Pending |
+| MODL-08 | Phase 7 | Complete |
+| MODL-09 | Phase 7 | Complete |
 | EVAL-01 | Phase 8 | Pending |
 | EVAL-02 | Phase 8 | Pending |
 | EVAL-03 | Phase 8 | Pending |

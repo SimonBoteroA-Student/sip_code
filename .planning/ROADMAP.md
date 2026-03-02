@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Label Construction** - M1/M2 labels from amendments, M3 from Comptroller bulletins, M4 from RCAC fines (completed 2026-03-01)
 - [x] **Phase 5: Feature Engineering** - Shared feature pipeline (Categories A/B/C) with temporal leak guard and train-serve parity (completed 2026-03-01)
 - [x] **Phase 6: IRIC** - 11-component irregularity index calculated, nationally calibrated by contract type, added as model feature (completed 2026-03-02)
-- [ ] **Phase 7: Model Training** - 4 XGBoost classifiers trained with class imbalance handling and hyperparameter optimization
+- [x] **Phase 7: Model Training** - 4 XGBoost classifiers trained with class imbalance handling and hyperparameter optimization (completed 2026-03-02)
 - [ ] **Phase 8: Evaluation** - Full metrics suite (AUC-ROC, MAP@k, NDCG@k, Brier, Precision/Recall) with structured evaluation reports
 - [ ] **Phase 9: Explainability, CRI, and Testing** - SHAP values, Composite Risk Index, deterministic JSON output, and full test suite
 
@@ -125,7 +125,7 @@ Plans:
   3. Manual CV loop with ParameterSampler (200 iterations) and StratifiedKFold(5) completes for each model without errors
   4. Four serialized model files exist at `artifacts/models/M1/model.pkl`, `M2/model.pkl`, `M3/model.pkl`, `M4/model.pkl`
   5. A `feature_registry.json` is stored alongside each model containing the exact column names and ordering used during training
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 07-01-PLAN.md — Training infrastructure: split, device detection, HP search loop, strategy comparison, unit tests
 - [ ] 07-02-PLAN.md — train_model() orchestrator, artifact serialization, CLI train subcommand, integration tests
@@ -167,6 +167,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Label Construction | 2/2 | Complete   | 2026-03-01 |
 | 5. Feature Engineering | 3/3 | Complete   | 2026-03-01 |
 | 6. IRIC | 3/3 | Complete   | 2026-03-02 |
-| 7. Model Training | 1/2 | In Progress|  |
+| 7. Model Training | 2/2 | Complete   | 2026-03-02 |
 | 8. Evaluation | 0/TBD | Not started | - |
 | 9. Explainability, CRI, and Testing | 0/TBD | Not started | - |
