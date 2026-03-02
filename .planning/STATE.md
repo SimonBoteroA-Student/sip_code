@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 8 of 9 (Evaluation) — In progress
-Plan: 1 of 2 in current phase
-Status: Phase 8 Plan 01 complete — evaluation module (evaluator.py) with AUC-ROC, MAP@k, NDCG@k, Brier Score, 19-threshold sweep, JSON/CSV/MD report writers. 14 unit tests passing.
-Last activity: 2026-03-02 — 08-01-PLAN.md complete
+Phase: 8 of 9 (Evaluation) — Complete
+Plan: 2 of 2 in current phase
+Status: Phase 8 Plan 02 complete — CLI evaluate subcommand with --model/--models-dir/--output-dir flags, tabulate grid console summary table, 5 integration tests. 19 total evaluation tests passing (14 unit + 5 integration). 326 total tests passing.
+Last activity: 2026-03-02 — 08-02-PLAN.md complete
 
-Progress: [██████████████████] 94%
+Progress: [████████████████████] 100%
 
 ## Performance Metrics
 
@@ -43,6 +43,7 @@ Progress: [██████████████████] 94%
 | Phase 06-iric P02 | 2 | 1 task | 2 files |
 | Phase 06-iric P03 | 12 | 2 tasks | 7 files |
 | Phase 07-model-training P02 | 4 | 2 tasks | 4 files |
+| Phase 08-evaluation P02 | 3 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,8 @@ Recent decisions affecting current work:
 - [08-01]: map_at_k() is public (not private) for direct testability — enables edge case unit tests without mocking
 - [08-01]: evaluate_all() recomputes metrics from scratch rather than parsing JSON — avoids report format coupling
 - [08-01]: stdlib csv.writer used in _write_csv_report (not pandas) — avoids overhead for simple tabular output
+- [Phase 08-evaluation]: feature_columns key in feature_registry.json fixtures — must match evaluator._load_artifacts() lookup
+- [Phase 08-evaluation]: XGBoost fixtures trained on pd.DataFrame — preserves feature names for predict_proba compatibility
 
 ### Pending Todos
 
@@ -120,5 +123,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 08-01-PLAN.md — Evaluation module (evaluator.py) with all metrics + 3 report writers + 14 unit tests. 335 total tests (321 passing + 3 pre-existing iric failures from uncommitted calculator.py changes).
-Resume file: .planning/phases/08-evaluation/ (Phase 8 plans, if generated)
+Stopped at: Completed 08-02-PLAN.md — CLI evaluate subcommand, tabulate grid console table, 5 integration tests. 19 evaluation tests passing, 326 total passing.
+Resume file: Phase 8 complete — begin Phase 9 if applicable

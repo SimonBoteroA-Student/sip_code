@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Feature Engineering** - Shared feature pipeline (Categories A/B/C) with temporal leak guard and train-serve parity (completed 2026-03-01)
 - [x] **Phase 6: IRIC** - 11-component irregularity index calculated, nationally calibrated by contract type, added as model feature (completed 2026-03-02)
 - [x] **Phase 7: Model Training** - 4 XGBoost classifiers trained with class imbalance handling and hyperparameter optimization (completed 2026-03-02)
-- [ ] **Phase 8: Evaluation** - Full metrics suite (AUC-ROC, MAP@k, NDCG@k, Brier, Precision/Recall) with structured evaluation reports
+- [x] **Phase 8: Evaluation** - Full metrics suite (AUC-ROC, MAP@k, NDCG@k, Brier, Precision/Recall) with structured evaluation reports (completed 2026-03-02)
 - [ ] **Phase 9: Explainability, CRI, and Testing** - SHAP values, Composite Risk Index, deterministic JSON output, and full test suite
 
 ## Phase Details
@@ -168,5 +168,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Feature Engineering | 3/3 | Complete   | 2026-03-01 |
 | 6. IRIC | 3/3 | Complete   | 2026-03-02 |
 | 7. Model Training | 2/2 | Complete   | 2026-03-02 |
-| 8. Evaluation | 1/2 | In progress | 08-01 complete |
+| 8. Evaluation | 2/2 | Complete   | 2026-03-02 |
 | 9. Explainability, CRI, and Testing | 0/TBD | Not started | - |
