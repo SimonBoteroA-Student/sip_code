@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 
 ## Current Position
 
-Phase: 10 of 11 (Data Leakage Fix) — **Planned**
-Plan: 2 plans in 2 waves (01: duration fix + schema, 02: M2 label fix + comparison)
-Status: Phase 10 planned and verified. 2 plans, 4 tasks, 9 files. Ready for execution.
-Last activity: 2026-03-02 — 10-01-PLAN.md and 10-02-PLAN.md created, verification passed
+Phase: 10 of 11 (Data Leakage Fix) — **Complete**
+Plan: 2/2 plans complete
+Status: Duration leakage fixed, M2 label bug fixed, comparison infrastructure ready. User runs pipeline next.
+Last activity: 2026-03-02 — 10-01 (duration parser) and 10-02 (M2 fix + comparison) executed
 
 Progress: [████████████████████] 100%
 
@@ -130,5 +130,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 09-02-PLAN.md — analyze_contract() entry point, deterministic JSON, master system test, PROJ-04 audit. Phase 9 complete. 349 total tests passing.
-Resume file: ALL PLANS COMPLETE
+Stopped at: Completed 10-02 — M2 label fix + comparison infrastructure. Phase 10 complete. 351 total tests passing.
+Resume file: Run pipeline to rebuild features/train/evaluate with corrected data.

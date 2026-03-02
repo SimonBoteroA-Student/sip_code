@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Model Training** - 4 XGBoost classifiers trained with class imbalance handling and hyperparameter optimization (completed 2026-03-02)
 - [x] **Phase 8: Evaluation** - Full metrics suite (AUC-ROC, MAP@k, NDCG@k, Brier, Precision/Recall) with structured evaluation reports (completed 2026-03-02)
 - [x] **Phase 9: Explainability, CRI, and Testing** - SHAP values, Composite Risk Index, deterministic JSON output, and full test suite (completed 2026-03-02)
-- [ ] **Phase 10: Data Leakage Fix** - Replace post-amendment contract values with pre-amendment sources, retrain and re-evaluate all models *(Gap Closure)*
+- [x] **Phase 10: Data Leakage Fix** - Replace post-amendment contract values with pre-amendment sources, retrain and re-evaluate all models *(Gap Closure)* (completed 2026-03-02)
 - [ ] **Phase 11: Bug Fixes and Test Cleanup** - Fix IRIC key mismatch bug and environment-sensitive test failures *(Gap Closure)*
 
 ## Phase Details
@@ -171,10 +171,10 @@ Plans:
   3. All 4 models are retrained on corrected features and new evaluation reports generated
   4. New M1 AUC-ROC is reported and compared against previous 0.851 — expected drop of ~7-15pp if leakage was real
   5. All existing tests pass with the corrected feature sources
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
-- [ ] 10-01-PLAN.md — Duration leakage fix (schema + category_b parser + test updates)
-- [ ] 10-02-PLAN.md — M2 label fix + artifact versioning + comparison report generator
+- [x] 10-01-PLAN.md — Duration leakage fix (schema + category_b parser + test updates)
+- [x] 10-02-PLAN.md — M2 label fix + artifact versioning + comparison report generator
 
 ### Phase 11: Bug Fixes and Test Cleanup
 **Goal**: Fix IRIC calculator key mismatch bug (components 9/10 always return 0) and fix 2 environment-sensitive test failures in test_models.py
@@ -204,5 +204,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Model Training | 2/2 | Complete   | 2026-03-02 |
 | 8. Evaluation | 2/2 | Complete   | 2026-03-02 |
 | 9. Explainability, CRI, and Testing | 2/2 | Complete    | 2026-03-02 |
-| 10. Data Leakage Fix | TBD | Pending | — |
+| 10. Data Leakage Fix | 2/2 | Complete | 2026-03-02 |
 | 11. Bug Fixes and Test Cleanup | TBD | Pending | — |
