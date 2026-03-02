@@ -80,8 +80,8 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 
 - [x] **PROJ-01**: System uses Python 3.12 with verified compatibility for XGBoost, SHAP, and all ML dependencies
 - [x] **PROJ-02**: System uses environment-based configuration (no hardcoded local paths in business logic) for future cloud deployment
-- [ ] **PROJ-03**: System produces deterministic, serializable JSON reports for future IPFS anchoring compatibility
-- [ ] **PROJ-04**: Unit tests for RCAC normalization, feature engineering, IRIC components, and model training/prediction
+- [x] **PROJ-03**: System produces deterministic, serializable JSON reports for future IPFS anchoring compatibility
+- [x] **PROJ-04**: Unit tests for RCAC normalization, feature engineering, IRIC components, and model training/prediction
 
 ## v2 Requirements
 
@@ -187,8 +187,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXPL-05 | Phase 9 | Complete |
 | PROJ-01 | Phase 1 | Complete |
 | PROJ-02 | Phase 1 | Complete |
-| PROJ-03 | Phase 9 | Pending |
-| PROJ-04 | Phase 9 | Pending |
+| PROJ-03 | Phase 9 | Complete |
+| PROJ-04 | Phase 9 | Complete |
 
 **Coverage:**
 - v1 requirements: 53 total

@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: IRIC** - 11-component irregularity index calculated, nationally calibrated by contract type, added as model feature (completed 2026-03-02)
 - [x] **Phase 7: Model Training** - 4 XGBoost classifiers trained with class imbalance handling and hyperparameter optimization (completed 2026-03-02)
 - [x] **Phase 8: Evaluation** - Full metrics suite (AUC-ROC, MAP@k, NDCG@k, Brier, Precision/Recall) with structured evaluation reports (completed 2026-03-02)
-- [ ] **Phase 9: Explainability, CRI, and Testing** - SHAP values, Composite Risk Index, deterministic JSON output, and full test suite
+- [x] **Phase 9: Explainability, CRI, and Testing** - SHAP values, Composite Risk Index, deterministic JSON output, and full test suite (completed 2026-03-02)
 
 ## Phase Details
 
@@ -153,7 +153,7 @@ Plans:
   3. Every CRI score is classified into exactly one of the 5 risk levels (Very Low / Low / Medium / High / Very High) based on the 0.20-interval thresholds
   4. Given the same contract input, the full pipeline produces byte-identical JSON output on repeated runs (deterministic)
   5. Unit tests pass for: RCAC document normalization round-trips, provider history as-of-date (no future dates), at least 4 IRIC component flags, and model predict_proba returning values in [0,1]
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 09-01-PLAN.md — SHAP explainer + CRI computation modules with unit tests
 - [ ] 09-02-PLAN.md — Per-contract analyzer, deterministic JSON, master system test, PROJ-04 audit
@@ -173,4 +173,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. IRIC | 3/3 | Complete   | 2026-03-02 |
 | 7. Model Training | 2/2 | Complete   | 2026-03-02 |
 | 8. Evaluation | 2/2 | Complete   | 2026-03-02 |
-| 9. Explainability, CRI, and Testing | 1/2 | In Progress|  |
+| 9. Explainability, CRI, and Testing | 2/2 | Complete   | 2026-03-02 |
