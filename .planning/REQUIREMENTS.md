@@ -53,9 +53,9 @@ Requirements for initial milestone. v1 "done" = trained models + RCAC built and 
 - [ ] **MODL-02**: System trains M2 (delays) XGBoost binary classifier using only pre-execution features
 - [ ] **MODL-03**: System trains M3 (Comptroller records) XGBoost binary classifier using only pre-execution features
 - [ ] **MODL-04**: System trains M4 (SECOP fines) XGBoost binary classifier using only pre-execution features
-- [ ] **MODL-05**: System evaluates 2 class imbalance strategies per model: (1) XGBoost `scale_pos_weight` = n_neg/n_pos, (2) minority class upsampling to 25% target ratio — selects best based on cross-validation
-- [ ] **MODL-06**: System performs hyperparameter optimization via RandomizedSearchCV with 200 iterations and StratifiedKFold(5) cross-validation
-- [ ] **MODL-07**: System uses 70/30 train/test split with temporal ordering preserved
+- [x] **MODL-05**: System evaluates 2 class imbalance strategies per model: (1) XGBoost `scale_pos_weight` = n_neg/n_pos, (2) minority class upsampling to 25% target ratio — selects best based on cross-validation
+- [x] **MODL-06**: System performs hyperparameter optimization via RandomizedSearchCV with 200 iterations and StratifiedKFold(5) cross-validation
+- [x] **MODL-07**: System uses 70/30 train/test split with temporal ordering preserved
 - [ ] **MODL-08**: System serializes trained models to `.pkl` via joblib with feature name ordering metadata
 - [ ] **MODL-09**: System stores `feature_registry.json` alongside each model to guarantee correct feature column ordering between training and inference
 
@@ -169,9 +169,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MODL-02 | Phase 7 | Pending |
 | MODL-03 | Phase 7 | Pending |
 | MODL-04 | Phase 7 | Pending |
-| MODL-05 | Phase 7 | Pending |
-| MODL-06 | Phase 7 | Pending |
-| MODL-07 | Phase 7 | Pending |
+| MODL-05 | Phase 7 | Complete |
+| MODL-06 | Phase 7 | Complete |
+| MODL-07 | Phase 7 | Complete |
 | MODL-08 | Phase 7 | Pending |
 | MODL-09 | Phase 7 | Pending |
 | EVAL-01 | Phase 8 | Pending |

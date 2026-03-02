@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-27)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 7 — Model Training (next)
+**Current focus:** Phase 7 — Model Training
 
 ## Current Position
 
-Phase: 6 of 9 (IRIC) — COMPLETE
-Plan: 3 of 3 completed in current phase
-Status: Phase 6 COMPLETE — iric/pipeline.py (build_iric + compute_iric), Category D in FEATURE_COLUMNS (30->34), build-iric CLI, iric/__init__.py re-exports, 290 total tests passing.
-Last activity: 2026-03-01 — Plan 06-03 complete: pipeline integration + CLI
+Phase: 7 of 9 (Model Training) — IN PROGRESS
+Plan: 1 of 2 completed in current phase
+Status: Phase 7 Plan 01 COMPLETE — trainer.py with 6 infrastructure functions (device detection, stratified split, dual CV scoring strategies, strategy comparison, HP search), 10 unit tests passing, 300 total tests.
+Last activity: 2026-03-02 — Plan 07-01 complete: training infrastructure functions + unit tests
 
-Progress: [███████████████] 78%
+Progress: [████████████████] 83%
 
 ## Performance Metrics
 
@@ -95,6 +95,10 @@ Recent decisions affecting current work:
 - [06-03]: Path existence check before load_iric_thresholds() in build_features() — prevents stale module-level cache hitting wrong path in test isolation
 - [06-03]: kurtosis/DRN excluded from FEATURE_COLUMNS — NaN-heavy (~60% direct contracting), stored only in iric_scores.parquet artifact
 - [06-03]: Lazy import of iric.pipeline inside features.pipeline function bodies — avoids circular import at module level
+- [07-01]: Both imbalance strategies (scale_pos_weight and 25% upsampling) use the same manual ParameterSampler CV loop — consistent comparison; both inject equivalent logic
+- [07-01]: Upsampling target: n_target = int(n_maj * 0.25 / 0.75) — achieves 25% minority ratio in upsampled fold training set
+- [07-01]: n_jobs parameter reserved but unused in _hp_search — manual loops with upsampling don't parallelize cleanly with joblib
+- [07-01]: Strategy tie goes to scale_pos_weight (simpler model, no synthetic data creation)
 
 ### Pending Todos
 
@@ -108,6 +112,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-01
-Stopped at: Completed 06-03-PLAN.md — Phase 6 COMPLETE. IRIC pipeline integration, Category D (34 features), build-iric CLI, iric/__init__.py re-exports. 290 tests passing.
-Resume file: .planning/phases/07-training/ (Phase 7 — Model Training)
+Last session: 2026-03-02
+Stopped at: Completed 07-01-PLAN.md — Phase 7 Plan 01 COMPLETE. trainer.py with 6 infrastructure functions (_detect_xgb_device, _stratified_split, _cv_score_scale_pos_weight, _cv_score_upsampling, _compare_strategies, _hp_search), PARAM_DIST (Gallego et al. HP search space), 10 unit tests. 300 tests passing.
+Resume file: .planning/phases/07-model-training/07-02-PLAN.md (Wave 2 — train_model() orchestrator)

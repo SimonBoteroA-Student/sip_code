@@ -125,7 +125,7 @@ Plans:
   3. Manual CV loop with ParameterSampler (200 iterations) and StratifiedKFold(5) completes for each model without errors
   4. Four serialized model files exist at `artifacts/models/M1/model.pkl`, `M2/model.pkl`, `M3/model.pkl`, `M4/model.pkl`
   5. A `feature_registry.json` is stored alongside each model containing the exact column names and ordering used during training
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 - [ ] 07-01-PLAN.md — Training infrastructure: split, device detection, HP search loop, strategy comparison, unit tests
 - [ ] 07-02-PLAN.md — train_model() orchestrator, artifact serialization, CLI train subcommand, integration tests
@@ -167,6 +167,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Label Construction | 2/2 | Complete   | 2026-03-01 |
 | 5. Feature Engineering | 3/3 | Complete   | 2026-03-01 |
 | 6. IRIC | 3/3 | Complete   | 2026-03-02 |
-| 7. Model Training | 0/TBD | Not started | - |
+| 7. Model Training | 1/2 | In Progress|  |
 | 8. Evaluation | 0/TBD | Not started | - |
 | 9. Explainability, CRI, and Testing | 0/TBD | Not started | - |
