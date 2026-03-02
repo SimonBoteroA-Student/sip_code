@@ -48,7 +48,35 @@ def main() -> None:
         help="Force rebuild even if iric_scores.parquet exists",
     )
 
-    subparsers.add_parser("train", help="Train XGBoost prediction models")
+    train_parser = subparsers.add_parser("train", help="Train XGBoost prediction models")
+    train_parser.add_argument(
+        "--model",
+        choices=["M1", "M2", "M3", "M4"],
+        help="Train a single model (default: all 4)",
+    )
+    train_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Retrain even if model artifacts already exist",
+    )
+    train_parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Fast mode: ~20 iterations, 3-fold CV",
+    )
+    train_parser.add_argument(
+        "--n-iter",
+        type=int,
+        default=200,
+        help="Number of HP search iterations (default: 200)",
+    )
+    train_parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=-1,
+        help="Parallelism level (default: -1 = all cores)",
+    )
+
     subparsers.add_parser("evaluate", help="Evaluate trained models")
     subparsers.add_parser("run-pipeline", help="Run the full SIP pipeline end to end")
 
@@ -96,6 +124,27 @@ def main() -> None:
             sys.exit(0)
         except Exception as e:
             print(f"Error building IRIC scores: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "train":
+        from sip_engine.models.trainer import train_model, MODEL_IDS
+        models_to_train = [args.model] if args.model else MODEL_IDS
+        try:
+            for mid in models_to_train:
+                model_dir = train_model(
+                    model_id=mid,
+                    force=args.force,
+                    quick=args.quick,
+                    n_iter=args.n_iter,
+                    n_jobs=args.n_jobs,
+                )
+                print(f"Model {mid} trained: {model_dir}")
+            sys.exit(0)
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error training models: {e}", file=sys.stderr)
             sys.exit(1)
 
     else:

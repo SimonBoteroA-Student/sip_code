@@ -3,13 +3,20 @@
 All tests use tiny in-memory fixtures (no disk I/O, no real data).
 Tests must complete in under 15 seconds total.
 
-Tests cover MODL-05, MODL-06, MODL-07 requirements.
+Tests cover MODL-01 through MODL-09 requirements.
 """
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+
+import joblib
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 
 from sip_engine.models.trainer import (
@@ -21,7 +28,9 @@ from sip_engine.models.trainer import (
     _detect_xgb_device,
     _hp_search,
     _stratified_split,
+    train_model,
 )
+from sip_engine.features.pipeline import FEATURE_COLUMNS
 
 
 # =============================================================================
@@ -278,3 +287,228 @@ def test_model_ids():
     assert MODEL_IDS == ["M1", "M2", "M3", "M4"], (
         f"MODEL_IDS should be ['M1', 'M2', 'M3', 'M4'], got {MODEL_IDS}"
     )
+
+
+# =============================================================================
+# Integration test helpers
+# =============================================================================
+
+
+def _make_tiny_features_parquet(tmp_path, n_rows=50, seed=0):
+    """Create a tiny features.parquet with FEATURE_COLUMNS and id_contrato index."""
+    rng = np.random.RandomState(seed)
+    data = {col: rng.rand(n_rows).astype(np.float32) for col in FEATURE_COLUMNS}
+    df = pd.DataFrame(data)
+    df.index = pd.Index([f"CON-{i:04d}" for i in range(n_rows)], name="id_contrato")
+    path = tmp_path / "features.parquet"
+    table = pa.Table.from_pandas(df, preserve_index=True)
+    pq.write_table(table, path)
+    return path
+
+
+def _make_tiny_labels_parquet(tmp_path, n_rows=50, seed=0):
+    """Create a tiny labels.parquet with M1-M4 as nullable Int8 and id_contrato column.
+
+    M1/M2: ~20% positive (10 of 50).
+    M3/M4: ~6% positive (3 of 50) with some NaN to test extreme imbalance.
+    """
+    rng = np.random.RandomState(seed)
+    ids = [f"CON-{i:04d}" for i in range(n_rows)]
+
+    # M1/M2: 20% positive
+    m1 = pd.array([1 if i < 10 else 0 for i in range(n_rows)], dtype="Int8")
+    m2 = pd.array([1 if i < 10 else 0 for i in range(n_rows)], dtype="Int8")
+
+    # M3/M4: 3 positives, 5 NaN, rest 0
+    m3_vals = [1] * 3 + [pd.NA] * 5 + [0] * (n_rows - 8)
+    m4_vals = [1] * 3 + [pd.NA] * 5 + [0] * (n_rows - 8)
+    m3 = pd.array(m3_vals, dtype="Int8")
+    m4 = pd.array(m4_vals, dtype="Int8")
+
+    df = pd.DataFrame({
+        "id_contrato": ids,
+        "M1": m1,
+        "M2": m2,
+        "M3": m3,
+        "M4": m4,
+    })
+    path = tmp_path / "labels.parquet"
+    table = pa.Table.from_pandas(df, preserve_index=False)
+    pq.write_table(table, path)
+    return path
+
+
+# =============================================================================
+# Test 11: train_model raises FileNotFoundError when features.parquet missing
+# =============================================================================
+
+
+def test_train_model_missing_features(tmp_path, monkeypatch):
+    """train_model raises FileNotFoundError with 'build-features' when no features.parquet."""
+    from sip_engine.config import get_settings
+    monkeypatch.setattr(get_settings(), "features_path", tmp_path / "features.parquet")
+    monkeypatch.setattr(get_settings(), "labels_path", tmp_path / "labels.parquet")
+
+    with pytest.raises(FileNotFoundError, match="build-features"):
+        train_model("M1")
+
+
+# =============================================================================
+# Test 12: train_model raises FileNotFoundError when labels.parquet missing
+# =============================================================================
+
+
+def test_train_model_missing_labels(tmp_path, monkeypatch):
+    """train_model raises FileNotFoundError with 'build-labels' when no labels.parquet."""
+    # Create features.parquet but NOT labels.parquet
+    features_path = _make_tiny_features_parquet(tmp_path)
+
+    from sip_engine.config import get_settings
+    monkeypatch.setattr(get_settings(), "features_path", features_path)
+    monkeypatch.setattr(get_settings(), "labels_path", tmp_path / "labels.parquet")
+
+    with pytest.raises(FileNotFoundError, match="build-labels"):
+        train_model("M1")
+
+
+# =============================================================================
+# Test 13: train_model raises ValueError for invalid model_id
+# =============================================================================
+
+
+def test_train_model_invalid_model_id():
+    """train_model raises ValueError for model_id not in MODEL_IDS."""
+    with pytest.raises(ValueError, match="M99"):
+        train_model("M99")
+
+
+# =============================================================================
+# Test 14: train_model skips existing model without --force
+# =============================================================================
+
+
+def test_train_model_skip_existing(tmp_path, monkeypatch):
+    """train_model returns early when model.pkl exists and force=False."""
+    features_path = _make_tiny_features_parquet(tmp_path)
+    labels_path = _make_tiny_labels_parquet(tmp_path)
+
+    from sip_engine.config import get_settings
+    settings = get_settings()
+    monkeypatch.setattr(settings, "features_path", features_path)
+    monkeypatch.setattr(settings, "labels_path", labels_path)
+    monkeypatch.setattr(settings, "artifacts_models_dir", tmp_path / "models")
+
+    # Create a fake model.pkl in the expected directory
+    model_dir = tmp_path / "models" / "M1"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    (model_dir / "model.pkl").write_text("fake_model")
+
+    # Call without force — should return early without creating training_report.json
+    result_dir = train_model("M1", force=False)
+
+    assert result_dir == model_dir
+    # training_report.json should NOT exist (we returned early)
+    assert not (model_dir / "training_report.json").exists(), (
+        "training_report.json should NOT be created when skipping existing model"
+    )
+
+
+# =============================================================================
+# Test 15: train_model end-to-end quick mode — parameterized M1-M4
+# =============================================================================
+
+
+@pytest.mark.parametrize("model_id", ["M1", "M2", "M3", "M4"])
+def test_train_model_end_to_end_quick(tmp_path, monkeypatch, model_id):
+    """train_model produces all 4 artifacts in quick mode with synthetic data."""
+    features_path = _make_tiny_features_parquet(tmp_path, n_rows=50)
+    labels_path = _make_tiny_labels_parquet(tmp_path, n_rows=50)
+
+    from sip_engine.config import get_settings
+    settings = get_settings()
+    monkeypatch.setattr(settings, "features_path", features_path)
+    monkeypatch.setattr(settings, "labels_path", labels_path)
+    monkeypatch.setattr(settings, "artifacts_models_dir", tmp_path / "models")
+    # Monkeypatch recalibration paths to tmp_path so they don't conflict
+    monkeypatch.setattr(settings, "iric_thresholds_path", tmp_path / "iric_thresholds.json")
+    monkeypatch.setattr(settings, "encoding_mappings_path", tmp_path / "encoding_mappings.json")
+    # Also ensure iric_thresholds_path parent exists
+    (tmp_path / "iric_thresholds.json").parent.mkdir(parents=True, exist_ok=True)
+
+    model_dir = train_model(model_id, quick=True, n_iter=3, force=True)
+
+    # Check all 4 artifacts exist
+    assert (model_dir / "model.pkl").exists(), "model.pkl must exist"
+    assert (model_dir / "feature_registry.json").exists(), "feature_registry.json must exist"
+    assert (model_dir / "training_report.json").exists(), "training_report.json must exist"
+    assert (model_dir / "test_data.parquet").exists(), "test_data.parquet must exist"
+
+    # Verify feature_registry.json has 34 feature columns
+    registry = json.loads((model_dir / "feature_registry.json").read_text())
+    assert "feature_columns" in registry, "feature_registry.json must have 'feature_columns'"
+    assert len(registry["feature_columns"]) == 34, (
+        f"feature_columns must have 34 entries, got {len(registry['feature_columns'])}"
+    )
+
+    # Verify training_report.json has strategy_comparison
+    report = json.loads((model_dir / "training_report.json").read_text())
+    assert "strategy_comparison" in report, "training_report.json must have 'strategy_comparison'"
+
+    # Verify test_data.parquet has id_contrato as named index
+    test_df = pq.read_table(model_dir / "test_data.parquet").to_pandas()
+    assert test_df.index.name == "id_contrato", (
+        f"test_data.parquet index must be 'id_contrato', got {test_df.index.name!r}"
+    )
+
+    # Verify model.pkl loads and predict_proba works
+    clf = joblib.load(model_dir / "model.pkl")
+    n_test = len(test_df)
+    X_for_pred = test_df[FEATURE_COLUMNS].values
+    proba = clf.predict_proba(X_for_pred)
+    assert proba.shape == (n_test, 2), f"predict_proba shape must be ({n_test}, 2)"
+    assert (proba >= 0).all() and (proba <= 1).all(), "predict_proba values must be in [0, 1]"
+
+
+# =============================================================================
+# Test 16: feature_registry.json column order matches FEATURE_COLUMNS
+# =============================================================================
+
+
+def test_feature_registry_column_order(tmp_path, monkeypatch):
+    """feature_registry.json feature_columns must match FEATURE_COLUMNS exactly (order matters)."""
+    features_path = _make_tiny_features_parquet(tmp_path, n_rows=50)
+    labels_path = _make_tiny_labels_parquet(tmp_path, n_rows=50)
+
+    from sip_engine.config import get_settings
+    settings = get_settings()
+    monkeypatch.setattr(settings, "features_path", features_path)
+    monkeypatch.setattr(settings, "labels_path", labels_path)
+    monkeypatch.setattr(settings, "artifacts_models_dir", tmp_path / "models")
+    monkeypatch.setattr(settings, "iric_thresholds_path", tmp_path / "iric_thresholds.json")
+    monkeypatch.setattr(settings, "encoding_mappings_path", tmp_path / "encoding_mappings.json")
+
+    model_dir = train_model("M1", quick=True, n_iter=3, force=True)
+
+    registry = json.loads((model_dir / "feature_registry.json").read_text())
+    assert registry["feature_columns"] == FEATURE_COLUMNS, (
+        "feature_registry.json feature_columns must match FEATURE_COLUMNS exactly "
+        "(order and contents)"
+    )
+
+
+# =============================================================================
+# Test 17: CLI train --help shows all 5 flags
+# =============================================================================
+
+
+def test_cli_train_help():
+    """python -m sip_engine train --help exits 0 and shows all required flags."""
+    result = subprocess.run(
+        [sys.executable, "-m", "sip_engine", "train", "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"train --help should exit 0, got {result.returncode}"
+    output = result.stdout
+    for flag in ("--model", "--force", "--quick", "--n-iter", "--n-jobs"):
+        assert flag in output, f"train --help output must contain '{flag}'"
