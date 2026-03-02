@@ -597,10 +597,9 @@ def evaluate_model(
         "optimal_threshold": opt,
         "training_context": {
             "best_params": training_report.get("best_params", {}),
-            "imbalance_strategy": training_report.get("imbalance_strategy", "Unknown"),
-            "best_cv_scores": training_report.get("best_cv_scores", {}),
-            "hp_search_history": training_report.get("hp_search_history", []),
-            "train_size": training_report.get("train_size", None),
+            "imbalance_strategy": training_report.get("strategy_comparison", {}).get("winner", "Unknown"),
+            "strategy_comparison": training_report.get("strategy_comparison", {}),
+            "train_size": training_report.get("label_distribution", {}).get("0", None),
             "test_size": training_report.get("test_size", None),
         },
     }

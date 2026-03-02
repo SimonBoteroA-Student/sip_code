@@ -372,14 +372,16 @@ def _create_mock_model_artifacts(tmp_models_dir: Path, model_id: str) -> None:
         json.dumps({"feature_columns": feature_names})
     )
 
-    # Save training_report.json (minimal — evaluator uses .get() with defaults)
+    # Save training_report.json (matches trainer.py output structure)
     (model_dir / "training_report.json").write_text(json.dumps({
         "model_id": model_id,
         "best_params": {"n_estimators": 5, "max_depth": 2},
-        "imbalance_strategy": "scale_pos_weight",
-        "best_cv_scores": {"scores": [0.75, 0.73], "mean": 0.74, "std": 0.01},
-        "best_cv_auc_mean": 0.74,
-        "best_cv_auc_std": 0.01,
+        "strategy_comparison": {
+            "scale_pos_weight": {"mean_cv_auc": 0.75, "best_cv_auc": 0.76},
+            "upsampling_25pct": {"mean_cv_auc": 0.73, "best_cv_auc": 0.74},
+            "winner": "scale_pos_weight",
+        },
+        "label_distribution": {"0": 80, "1": 20},
     }))
 
 
