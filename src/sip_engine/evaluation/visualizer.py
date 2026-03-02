@@ -7,6 +7,7 @@ Generates publication-quality charts for model evaluation metrics:
 - Ranking metrics bar chart (MAP@k, NDCG@k)
 - Score distribution histogram (positive vs. negative class)
 - Calibration summary bar chart (Brier score vs. baseline)
+- SHAP feature importance horizontal bar chart (top-N by mean |SHAP|)
 
 All functions accept pre-computed metric dicts (from evaluator.py) and
 write PNG files to a specified output directory.
@@ -350,6 +351,62 @@ def plot_calibration_summary(
     return path
 
 
+def plot_shap_importance(
+    eval_dict: dict,
+    output_dir: Path,
+    filename: str = "shap_importance.png",
+) -> Path | None:
+    """Plot a horizontal bar chart of top-10 features by mean absolute SHAP value.
+
+    Args:
+        eval_dict: Full evaluation dictionary from evaluator (must contain "shap.top_features").
+        output_dir: Directory to save the image.
+        filename: Output filename.
+
+    Returns:
+        Path to the saved image, or None if no SHAP data is available.
+    """
+    shap = eval_dict.get("shap", {})
+    top_features = shap.get("top_features", [])
+    if not top_features:
+        return None
+
+    _apply_style()
+    model_id = eval_dict.get("model_id", "?")
+
+    features = [e["feature"] for e in top_features]
+    values = [e["mean_abs_shap"] for e in top_features]
+
+    # Reverse so highest bar is at the top
+    features = features[::-1]
+    values = values[::-1]
+
+    fig, ax = plt.subplots(figsize=(8, max(4, len(features) * 0.45 + 1)))
+    bars = ax.barh(features, values, color=_COLORS["primary"], alpha=0.85)
+
+    # Value labels at end of each bar
+    for bar, val in zip(bars, values):
+        ax.text(
+            bar.get_width() + max(values) * 0.01,
+            bar.get_y() + bar.get_height() / 2,
+            f"{val:.4f}",
+            va="center",
+            fontsize=8,
+        )
+
+    ax.set_xlabel("Mean |SHAP value| (test set)")
+    ax.set_title(f"{model_id} — SHAP Feature Importance (top {len(top_features)})")
+    ax.set_xlim([0, max(values) * 1.18])
+    ax.grid(True, alpha=0.3, axis="x")
+    fig.tight_layout()
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / filename
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
 # =============================================================================
 # Orchestrator
 # =============================================================================
@@ -383,6 +440,10 @@ def generate_all_charts(
     paths.append(plot_ranking_metrics(eval_dict, output_dir))
     paths.append(plot_score_distribution(y_true, y_scores, eval_dict, output_dir))
     paths.append(plot_calibration_summary(eval_dict, output_dir))
+
+    shap_path = plot_shap_importance(eval_dict, output_dir)
+    if shap_path is not None:
+        paths.append(shap_path)
 
     logger.info("Generated %d charts for %s", len(paths), model_id)
     return paths

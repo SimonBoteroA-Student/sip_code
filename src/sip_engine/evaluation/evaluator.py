@@ -514,6 +514,8 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
             lines.append(f"| {idx} | {feat.get('feature', '')} | {feat.get('mean_abs_shap', 0.0):.6f} |")
         lines += [
             "",
+            f"![SHAP Feature Importance]({img}/shap_importance.png)",
+            "",
             f"SHAP artifact (parquet): {Path(shap.get('parquet', '')).name}",
             "",
             "---",
