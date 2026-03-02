@@ -14,6 +14,7 @@ A Python machine learning pipeline that detects corruption risk in Colombian pub
 - [Installation](#installation)
 - [Data Setup](#data-setup)
 - [CLI Commands Reference](#cli-commands-reference)
+  - [download-data](#0-download-data)
   - [build-rcac](#1-build-rcac)
   - [build-labels](#2-build-labels)
   - [build-features](#3-build-features)
@@ -134,7 +135,13 @@ SIP expects data in two directories:
 
 ### SECOP II Data (`secopDatabases/`)
 
-Place these CSV files in the `secopDatabases/` directory at the project root:
+Download these CSV files automatically from datos.gov.co:
+
+```bash
+python -m sip_engine download-data
+```
+
+Or place them manually in the `secopDatabases/` directory at the project root:
 
 | File | Description | Approx. Size |
 |------|-------------|-------------|
@@ -186,6 +193,73 @@ All commands are run via:
 ```bash
 python -m sip_engine <command> [options]
 ```
+
+### 0. `download-data`
+
+**Downloads SECOP II databases from the datos.gov.co open data API.**
+
+```bash
+python -m sip_engine download-data [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--dataset NAME [...]` | Download specific dataset(s) only (default: all 8). Choices: `contratos`, `procesos`, `ofertas`, `proponentes`, `proveedores`, `ejecucion`, `adiciones`, `suspensiones` |
+| `--output-dir PATH` | Override output directory (default: `secopDatabases/`) |
+| `--parallel N` | Max concurrent downloads (default: 4) |
+| `--dry-run` | Show download URLs and file sizes without downloading |
+| `--skip-existing` | Skip datasets whose target CSV already exists |
+| `--resume` | Resume interrupted downloads from `.part` files |
+| `--validate-only` | Only validate existing CSVs against expected column schemas |
+
+**What it does:**
+- Downloads 8 SECOP II CSV datasets via the datos.gov.co full export API (total ~15 GB)
+- Runs up to 4 parallel curl processes, scheduling largest files first
+- Shows live progress with per-file speed, percentage, and ETA
+- Uses HTTP/2, compression, and TCP keepalive for throughput
+- Includes stall detection (auto-aborts if < 1 KB/s for 60 seconds)
+- Writes to `.csv.part` temp files with atomic rename on completion
+- On interruption (Ctrl+C), preserves `.part` files — resume with `--resume`
+- After download, validates that all required columns from `schemas.py` are present
+
+**datasets and their datos.gov.co identifiers:**
+
+| Dataset | API ID | Approx. Size |
+|---------|--------|-------------|
+| `contratos` | `jbjy-vk9h` | 570 MB |
+| `procesos` | `p6dx-8zbt` | 5.3 GB |
+| `ofertas` | `wi7w-2nvm` | 3.4 GB |
+| `proponentes` | `hgi6-6wh3` | 842 MB |
+| `proveedores` | `qmzu-gj57` | 564 MB |
+| `ejecucion` | `mfmm-jqmq` | 682 MB |
+| `adiciones` | `cb9c-h8sn` | 3.9 GB |
+| `suspensiones` | `u99c-7mfm` | 87 MB |
+
+> **Note:** `boletines.csv` (Comptroller fiscal responsibility bulletins) is not available via the datos.gov.co API — it is manually curated from quarterly PDF bulletins in the `Boletines/` directory.
+
+**Examples:**
+
+```bash
+# Download all 8 datasets
+python -m sip_engine download-data
+
+# Download only contracts and processes
+python -m sip_engine download-data --dataset contratos procesos
+
+# Preview what would be downloaded
+python -m sip_engine download-data --dry-run
+
+# Resume after an interrupted download
+python -m sip_engine download-data --resume
+
+# Download missing files only, with 2 connections
+python -m sip_engine download-data --skip-existing --parallel 2
+
+# Validate column schemas of existing downloads
+python -m sip_engine download-data --validate-only
+```
+
+---
 
 ### 1. `build-rcac`
 
@@ -405,6 +479,10 @@ Run each stage separately to monitor progress and catch issues early:
 ```bash
 source .venv/bin/activate
 
+# Step 0: Download SECOP data from datos.gov.co (~15 GB)
+python -m sip_engine download-data
+# Output: secopDatabases/*.csv
+
 # Step 1: Build the corruption background registry
 python -m sip_engine build-rcac
 # Output: artifacts/rcac/rcac.pkl
@@ -571,6 +649,7 @@ SIP Code/
 │   ├── data/
 │   │   ├── schemas.py          # Column schemas for all 14 CSV files
 │   │   ├── loaders.py          # Chunked CSV loading (14 generators)
+│   │   ├── downloader.py       # datos.gov.co parallel download with resume
 │   │   ├── rcac_builder.py     # RCAC construction & normalization
 │   │   ├── rcac_lookup.py      # O(1) RCAC lookup by (tipo, numero)
 │   │   └── label_builder.py    # M1/M2/M3/M4 label construction

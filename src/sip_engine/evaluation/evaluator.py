@@ -495,7 +495,42 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
         "",
         "---",
         "",
-        "## 7. Training Context",
+    ]
+
+    # SHAP explainability section (optional)
+    shap = eval_dict.get("shap", {})
+    top_features = shap.get("top_features", [])
+
+    if top_features:
+        lines += [
+            "## 8. SHAP Feature Importance",
+            "",
+            "Top features by mean absolute SHAP value (test set):",
+            "",
+            "| Rank | Feature | Mean abs SHAP |",
+            "|-----:|--------|--------------:|",
+        ]
+        for idx, feat in enumerate(top_features, 1):
+            lines.append(f"| {idx} | {feat.get('feature', '')} | {feat.get('mean_abs_shap', 0.0):.6f} |")
+        lines += [
+            "",
+            f"SHAP artifact (parquet): {Path(shap.get('parquet', '')).name}",
+            "",
+            "---",
+            "",
+        ]
+    else:
+        lines += [
+            "## 8. SHAP Feature Importance",
+            "",
+            "No SHAP explainability available for this evaluation run.",
+            "",
+            "---",
+            "",
+        ]
+
+    lines += [
+        "## 9. Training Context",
         "",
     ]
 
@@ -642,7 +677,45 @@ def evaluate_model(
         },
     }
 
-    # Step 5: Generate charts
+    # Step 5: Generate charts (and compute SHAP explainability)
+    # Compute SHAP explainability and write Parquet artifact + summary into eval_dict["shap"]
+    try:
+        from sip_engine.explainability.shap_explainer import extract_shap_top_n, save_shap_artifact
+
+        if len(feature_columns) > 0 and len(X_test) > 0:
+            shap_rows_all = extract_shap_top_n(model, X_test, feature_columns, n=len(feature_columns))
+
+            # Resolve contract ids from test_df if available
+            if "id_contrato" in test_df.columns:
+                contract_ids = test_df["id_contrato"].astype(str).tolist()
+            elif "ID Contrato" in test_df.columns:
+                contract_ids = test_df["ID Contrato"].astype(str).tolist()
+            elif "id" in test_df.columns:
+                contract_ids = test_df["id"].astype(str).tolist()
+            else:
+                contract_ids = [str(i) for i in range(len(test_df))]
+
+            # Save shap Parquet to model-specific output dir
+            shap_out_path = save_shap_artifact(shap_rows_all, contract_ids, model_id, output_dir=output_dir / model_id)
+
+            # Aggregate mean absolute SHAP per feature across test set
+            importance: dict[str, float] = {}
+            n_samples = len(shap_rows_all)
+            for sample in shap_rows_all:
+                for entry in sample:
+                    importance[entry["feature"]] = importance.get(entry["feature"], 0.0) + abs(float(entry["shap_value"]))
+            mean_abs = [{"feature": f, "mean_abs_shap": importance[f] / n_samples} for f in importance]
+            mean_abs.sort(key=lambda x: x["mean_abs_shap"], reverse=True)
+            top_features = [{"feature": e["feature"], "mean_abs_shap": round(float(e["mean_abs_shap"]), 6)} for e in mean_abs[:10]]
+
+            eval_dict["shap"] = {"parquet": str(shap_out_path), "top_features": top_features}
+            print(f"  ✓ SHAP explainability computed and saved → {shap_out_path}")
+        else:
+            eval_dict["shap"] = {}
+    except Exception as e:
+        logger.exception("Failed to compute SHAP explainability: %s", e)
+        eval_dict["shap"] = {}
+
     images_dir = output_dir / model_id / "images"
     chart_paths = generate_all_charts(eval_dict, y_test, y_scores, images_dir)
     print(f"  ✓ Generated {len(chart_paths)} charts → {images_dir}/")

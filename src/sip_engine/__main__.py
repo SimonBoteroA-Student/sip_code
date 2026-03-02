@@ -105,6 +105,53 @@ def main() -> None:
 
     subparsers.add_parser("backup-v1", help="Backup current artifacts to v1_baseline/")
 
+    # ---- download-data ----
+    dl_parser = subparsers.add_parser(
+        "download-data",
+        help="Download SECOP databases from datos.gov.co",
+    )
+    dl_parser.add_argument(
+        "--dataset",
+        nargs="+",
+        choices=[
+            "contratos", "procesos", "ofertas", "proponentes",
+            "proveedores", "ejecucion", "adiciones", "suspensiones",
+        ],
+        metavar="NAME",
+        help="Download specific dataset(s) only (default: all 8)",
+    )
+    dl_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Override output directory (default: secopDatabases/)",
+    )
+    dl_parser.add_argument(
+        "--parallel",
+        type=int,
+        default=4,
+        help="Max concurrent downloads (default: 4)",
+    )
+    dl_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show download URLs without actually downloading",
+    )
+    dl_parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip datasets whose target CSV already exists",
+    )
+    dl_parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume interrupted downloads from .part files",
+    )
+    dl_parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Only validate existing CSVs against expected schemas (no download)",
+    )
+
     compare_parser = subparsers.add_parser("compare-v1v2", help="Generate v1 vs v2 comparison report")
     compare_parser.add_argument(
         "--v1-dir",
@@ -235,6 +282,41 @@ def main() -> None:
             sys.exit(1)
         except Exception as e:
             print(f"Error backing up v1: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "download-data":
+        from sip_engine.data.downloader import (
+            DATASET_BY_KEY,
+            download_datasets,
+            validate_downloads,
+        )
+        try:
+            if args.validate_only:
+                validate_downloads(output_dir=args.output_dir)
+                sys.exit(0)
+
+            selected = None
+            if args.dataset:
+                selected = [DATASET_BY_KEY[k] for k in args.dataset]
+
+            paths = download_datasets(
+                datasets=selected,
+                output_dir=args.output_dir,
+                parallel=args.parallel,
+                dry_run=args.dry_run,
+                skip_existing=args.skip_existing,
+                resume=args.resume,
+            )
+
+            if paths and not args.dry_run:
+                validate_downloads(output_dir=args.output_dir)
+
+            sys.exit(0)
+        except KeyboardInterrupt:
+            print("\n  Download interrupted.")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error downloading data: {e}", file=sys.stderr)
             sys.exit(1)
 
     elif args.command == "compare-v1v2":
