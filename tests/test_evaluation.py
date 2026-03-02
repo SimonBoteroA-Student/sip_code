@@ -27,6 +27,15 @@ from sip_engine.evaluation.evaluator import (
     _write_markdown_report,
     map_at_k,
 )
+from sip_engine.evaluation.visualizer import (
+    generate_all_charts,
+    plot_calibration_summary,
+    plot_confusion_matrix,
+    plot_precision_recall_f1,
+    plot_ranking_metrics,
+    plot_roc_curve,
+    plot_score_distribution,
+)
 
 
 # =============================================================================
@@ -509,3 +518,85 @@ def test_cli_evaluate_help():
     assert "--model" in result.stdout, "--model flag missing from help output"
     assert "--models-dir" in result.stdout, "--models-dir flag missing from help output"
     assert "--output-dir" in result.stdout, "--output-dir flag missing from help output"
+
+
+# =============================================================================
+# Visualizer tests
+# =============================================================================
+
+
+def test_plot_confusion_matrix(minimal_eval_dict, tmp_path):
+    """plot_confusion_matrix creates a PNG file."""
+    img_dir = tmp_path / "images"
+    path = plot_confusion_matrix(minimal_eval_dict, img_dir)
+    assert path.exists(), "Confusion matrix image should exist"
+    assert path.suffix == ".png"
+    assert path.stat().st_size > 1000, "Image file should have content"
+
+
+def test_plot_roc_curve(minimal_eval_dict, tmp_path):
+    """plot_roc_curve creates a PNG file."""
+    img_dir = tmp_path / "images"
+    path = plot_roc_curve(minimal_eval_dict, img_dir)
+    assert path.exists(), "ROC curve image should exist"
+    assert path.suffix == ".png"
+    assert path.stat().st_size > 1000
+
+
+def test_plot_precision_recall_f1(minimal_eval_dict, tmp_path):
+    """plot_precision_recall_f1 creates a PNG file."""
+    img_dir = tmp_path / "images"
+    path = plot_precision_recall_f1(minimal_eval_dict, img_dir)
+    assert path.exists(), "P/R/F1 image should exist"
+    assert path.suffix == ".png"
+
+
+def test_plot_ranking_metrics(minimal_eval_dict, tmp_path):
+    """plot_ranking_metrics creates a PNG file."""
+    img_dir = tmp_path / "images"
+    path = plot_ranking_metrics(minimal_eval_dict, img_dir)
+    assert path.exists(), "Ranking metrics image should exist"
+    assert path.suffix == ".png"
+
+
+def test_plot_score_distribution(synthetic_data, minimal_eval_dict, tmp_path):
+    """plot_score_distribution creates a PNG file."""
+    y_true, y_scores = synthetic_data
+    img_dir = tmp_path / "images"
+    path = plot_score_distribution(y_true, y_scores, minimal_eval_dict, img_dir)
+    assert path.exists(), "Score distribution image should exist"
+    assert path.suffix == ".png"
+
+
+def test_plot_calibration_summary(minimal_eval_dict, tmp_path):
+    """plot_calibration_summary creates a PNG file."""
+    img_dir = tmp_path / "images"
+    path = plot_calibration_summary(minimal_eval_dict, img_dir)
+    assert path.exists(), "Calibration image should exist"
+    assert path.suffix == ".png"
+
+
+def test_generate_all_charts(synthetic_data, minimal_eval_dict, tmp_path):
+    """generate_all_charts creates all 6 chart files."""
+    y_true, y_scores = synthetic_data
+    img_dir = tmp_path / "images"
+    paths = generate_all_charts(minimal_eval_dict, y_true, y_scores, img_dir)
+    assert len(paths) == 6, f"Expected 6 charts, got {len(paths)}"
+    for p in paths:
+        assert p.exists(), f"Chart file missing: {p.name}"
+        assert p.stat().st_size > 1000, f"Chart file too small: {p.name}"
+
+
+def test_markdown_report_contains_images(minimal_eval_dict, tmp_path):
+    """Updated _write_markdown_report embeds image references."""
+    output_path = tmp_path / "M1_eval.md"
+    _write_markdown_report(minimal_eval_dict, output_path)
+
+    content = output_path.read_text()
+    assert "![ROC Curve]" in content, "Markdown should embed ROC curve image"
+    assert "![Confusion Matrix]" in content, "Markdown should embed confusion matrix image"
+    assert "![Precision-Recall-F1]" in content, "Markdown should embed P/R/F1 image"
+    assert "![Ranking Metrics]" in content, "Markdown should embed ranking image"
+    assert "![Score Distribution]" in content, "Markdown should embed score distribution image"
+    assert "![Calibration]" in content, "Markdown should embed calibration image"
+    assert "images/" in content, "Image paths should reference images/ directory"

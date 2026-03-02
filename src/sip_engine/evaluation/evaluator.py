@@ -36,6 +36,8 @@ from sklearn.metrics import (
 )
 from tabulate import tabulate as tabulate_fn
 
+from sip_engine.evaluation.visualizer import generate_all_charts
+
 logger = logging.getLogger(__name__)
 
 # =============================================================================
@@ -347,7 +349,7 @@ def _write_csv_report(eval_dict: dict, output_path: Path) -> None:
 
 
 def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
-    """Write a human-readable Markdown evaluation report.
+    """Write a human-readable Markdown evaluation report with embedded charts.
 
     Args:
         eval_dict: Full evaluation dictionary with all metrics.
@@ -358,6 +360,8 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
     test_size = eval_dict.get("test_set_size", 0)
     label_dist = eval_dict.get("label_distribution", {})
     positive_rate = label_dist.get("positive_rate", 0.0)
+    n_positive = label_dist.get("n_positive", 0)
+    n_negative = label_dist.get("n_negative", 0)
 
     disc = eval_dict.get("discrimination", {})
     ranking = eval_dict.get("ranking", {})
@@ -366,70 +370,78 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
     opt = eval_dict.get("optimal_threshold", {})
     ctx = eval_dict.get("training_context", {})
 
-    lines = [
+    # Image paths relative to the Markdown file (sibling images/ dir)
+    img = "images"
+
+    lines: list[str] = [
         f"# Evaluation Report — Model {model_id}",
         "",
-        f"**Evaluation date:** {eval_date}  ",
-        f"**Test set size:** {test_size:,}  ",
-        f"**Positive rate:** {positive_rate:.4f} ({label_dist.get('n_positive', 0):,} positives / {test_size:,} total)  ",
+        "| Property | Value |",
+        "|----------|-------|",
+        f"| Evaluation date | {eval_date} |",
+        f"| Test set size | {test_size:,} |",
+        f"| Positives | {n_positive:,} ({positive_rate:.2%}) |",
+        f"| Negatives | {n_negative:,} ({1 - positive_rate:.2%}) |",
         "",
         "---",
         "",
-        "## Discrimination Metrics",
+        "## 1. Discrimination — ROC Curve",
         "",
-        "| Metric | Value |",
-        "|--------|-------|",
-        f"| AUC-ROC | {disc.get('auc_roc', 'N/A'):.4f} |",
+        f"| Metric | Value |",
+        f"|--------|-------|",
+        f"| **AUC-ROC** | **{disc.get('auc_roc', 0):.4f}** |",
         "",
-        "> ROC curve data (FPR/TPR pairs) available in the JSON report for plotting.",
-        "",
-        "---",
-        "",
-        "## Ranking Metrics",
-        "",
-        "| Metric | Value |",
-        "|--------|-------|",
-        f"| MAP@100 | {ranking.get('map_100', 'N/A'):.4f} |",
-        f"| MAP@500 | {ranking.get('map_500', 'N/A'):.4f} |",
-        f"| MAP@1000 | {ranking.get('map_1000', 'N/A'):.4f} |",
-        f"| NDCG@100 | {ranking.get('ndcg_100', 'N/A'):.4f} |",
-        f"| NDCG@500 | {ranking.get('ndcg_500', 'N/A'):.4f} |",
-        f"| NDCG@1000 | {ranking.get('ndcg_1000', 'N/A'):.4f} |",
+        f"![ROC Curve]({img}/roc_curve.png)",
         "",
         "---",
         "",
-        "## Calibration Metrics",
+        "## 2. Score Distribution",
         "",
-        "| Metric | Value |",
-        "|--------|-------|",
-        f"| Brier Score | {calib.get('brier_score', 'N/A'):.4f} |",
-        f"| Brier Baseline (random) | {calib.get('brier_baseline', 'N/A'):.4f} |",
-        "",
-        "> Lower Brier Score is better. Baseline = positive_rate × (1 − positive_rate).",
+        f"![Score Distribution]({img}/score_distribution.png)",
         "",
         "---",
         "",
-        "## Threshold Analysis",
+        "## 3. Precision / Recall / F1 vs. Threshold",
         "",
-        "| Threshold | Precision | Recall | F1 | TN | FP | FN | TP |",
-        "|-----------|-----------|--------|----|----|----|----|-----|",
+        f"![Precision-Recall-F1]({img}/precision_recall_f1.png)",
+        "",
     ]
 
+    # Threshold analysis table
     thresholds = ta.get("thresholds", [])
     precision_vals = ta.get("precision", [])
     recall_vals = ta.get("recall", [])
     f1_vals = ta.get("f1", [])
     cms = ta.get("confusion_matrices", [])
 
+    lines += [
+        "<details>",
+        "<summary>Threshold Analysis Table (click to expand)</summary>",
+        "",
+        "| Threshold | Precision | Recall | F1 | TN | FP | FN | TP |",
+        "|:---------:|:---------:|:------:|:--:|---:|---:|---:|---:|",
+    ]
+
     for i, t in enumerate(thresholds):
         cm = cms[i] if i < len(cms) else {}
         p = precision_vals[i] if i < len(precision_vals) else 0.0
         r = recall_vals[i] if i < len(recall_vals) else 0.0
         f = f1_vals[i] if i < len(f1_vals) else 0.0
+        marker = " **←**" if abs(t - opt.get("value", -1)) < 0.001 else ""
         lines.append(
-            f"| {t:.2f} | {p:.4f} | {r:.4f} | {f:.4f} | "
-            f"{cm.get('tn', 0)} | {cm.get('fp', 0)} | {cm.get('fn', 0)} | {cm.get('tp', 0)} |"
+            f"| {t:.2f}{marker} | {p:.4f} | {r:.4f} | {f:.4f} | "
+            f"{cm.get('tn', 0):,} | {cm.get('fp', 0):,} | {cm.get('fn', 0):,} | {cm.get('tp', 0):,} |"
         )
+
+    lines += [
+        "",
+        "</details>",
+        "",
+        "---",
+        "",
+        "## 4. Optimal Threshold & Confusion Matrix",
+        "",
+    ]
 
     opt_val = opt.get("value", "N/A")
     opt_p = opt.get("precision", 0.0)
@@ -438,27 +450,52 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
     opt_cm = opt.get("confusion_matrix", {})
 
     lines += [
-        "",
-        "---",
-        "",
-        "## Optimal Threshold",
-        "",
-        f"**Recommended operating point (F1-maximizing):** threshold = {opt_val}",
+        f"**Recommended operating point (F1-maximizing):** threshold = **{opt_val}**",
         "",
         "| Metric | Value |",
-        "|--------|-------|",
+        "|--------|------:|",
         f"| Threshold | {opt_val} |",
         f"| Precision | {opt_p:.4f} |",
         f"| Recall | {opt_r:.4f} |",
         f"| F1 | {opt_f:.4f} |",
-        f"| TN | {opt_cm.get('tn', 0)} |",
-        f"| FP | {opt_cm.get('fp', 0)} |",
-        f"| FN | {opt_cm.get('fn', 0)} |",
-        f"| TP | {opt_cm.get('tp', 0)} |",
+        f"| TN | {opt_cm.get('tn', 0):,} |",
+        f"| FP | {opt_cm.get('fp', 0):,} |",
+        f"| FN | {opt_cm.get('fn', 0):,} |",
+        f"| TP | {opt_cm.get('tp', 0):,} |",
+        "",
+        f"![Confusion Matrix]({img}/confusion_matrix.png)",
         "",
         "---",
         "",
-        "## Training Context",
+        "## 5. Ranking Metrics",
+        "",
+        "| Metric | Value |",
+        "|--------|------:|",
+        f"| MAP@100 | {ranking.get('map_100', 0):.4f} |",
+        f"| MAP@500 | {ranking.get('map_500', 0):.4f} |",
+        f"| MAP@1000 | {ranking.get('map_1000', 0):.4f} |",
+        f"| NDCG@100 | {ranking.get('ndcg_100', 0):.4f} |",
+        f"| NDCG@500 | {ranking.get('ndcg_500', 0):.4f} |",
+        f"| NDCG@1000 | {ranking.get('ndcg_1000', 0):.4f} |",
+        "",
+        f"![Ranking Metrics]({img}/ranking_metrics.png)",
+        "",
+        "---",
+        "",
+        "## 6. Calibration",
+        "",
+        "| Metric | Value |",
+        "|--------|------:|",
+        f"| Brier Score | {calib.get('brier_score', 0):.4f} |",
+        f"| Brier Baseline (random) | {calib.get('brier_baseline', 0):.4f} |",
+        "",
+        "> Lower Brier Score = better calibration. Baseline = positive_rate × (1 − positive_rate).",
+        "",
+        f"![Calibration]({img}/calibration_summary.png)",
+        "",
+        "---",
+        "",
+        "## 7. Training Context",
         "",
     ]
 
@@ -467,26 +504,27 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
     cv_scores = ctx.get("best_cv_scores", {})
 
     lines += [
-        f"**Imbalance strategy:** {strategy}  ",
+        f"**Imbalance strategy:** {strategy}",
         "",
         "**Best hyperparameters:**",
         "",
         "| Parameter | Value |",
-        "|-----------|-------|",
+        "|-----------|------:|",
     ]
     for param, val in best_params.items():
         lines.append(f"| {param} | {val} |")
 
     if cv_scores:
+        scores = cv_scores.get("scores", [])
         lines += [
             "",
             "**Cross-validation scores (best configuration):**",
             "",
             "| Fold | AUC-ROC |",
-            "|------|---------|",
+            "|-----:|--------:|",
         ]
-        for fold_score in cv_scores.get("scores", []):
-            lines.append(f"| — | {fold_score:.4f} |")
+        for idx, fold_score in enumerate(scores, 1):
+            lines.append(f"| {idx} | {fold_score:.4f} |")
         lines.append(f"| **Mean** | **{cv_scores.get('mean', 0.0):.4f}** |")
         lines.append(f"| **Std** | {cv_scores.get('std', 0.0):.4f} |")
 
@@ -494,8 +532,8 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
         "",
         "---",
         "",
-        "*See companion JSON and CSV files for full data including ROC curve points,*  ",
-        "*hyperparameter search history (all iterations), and machine-readable metrics.*",
+        "*Report generated automatically by SIP Engine evaluation module.*  ",
+        "*See companion JSON and CSV files for machine-readable data.*",
         "",
     ]
 
@@ -604,7 +642,12 @@ def evaluate_model(
         },
     }
 
-    # Step 5: Write reports
+    # Step 5: Generate charts
+    images_dir = output_dir / model_id / "images"
+    chart_paths = generate_all_charts(eval_dict, y_test, y_scores, images_dir)
+    print(f"  ✓ Generated {len(chart_paths)} charts → {images_dir}/")
+
+    # Step 6: Write reports
     model_output_dir = output_dir / model_id
     model_output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -645,21 +688,16 @@ def evaluate_all(
 
     for model_id in MODEL_IDS:
         try:
-            # Re-run evaluate_model and capture metrics by re-loading artifacts
-            model, test_df, training_report, feature_registry = _load_artifacts(model_id, models_dir)
-            feature_columns = feature_registry["feature_columns"]
-            X_test = test_df[feature_columns]
-            y_test = test_df[model_id].values.astype(int)
-            y_scores = model.predict_proba(X_test)[:, 1]
+            # Delegate to evaluate_model for full pipeline (metrics + charts + reports)
+            evaluate_model(model_id, models_dir=models_dir, output_dir=output_dir)
 
-            disc = _compute_discrimination_metrics(y_test, y_scores)
-            rank = _compute_ranking_metrics(y_test, y_scores)
-            calib = _compute_calibration_metrics(y_test, y_scores)
-            ta = _compute_threshold_analysis(y_test, y_scores)
-            opt = ta["optimal_threshold"]
-
-            n_samples = len(y_test)
-            positive_rate = float(y_test.mean())
+            # Read back the generated JSON to extract summary metrics
+            json_path = output_dir / model_id / f"{model_id}_eval.json"
+            report = json.loads(json_path.read_text())
+            disc = report["discrimination"]
+            rank = report["ranking"]
+            calib = report["calibration"]
+            opt = report["optimal_threshold"]
 
             summary[model_id] = {
                 "auc_roc": disc["auc_roc"],
@@ -674,8 +712,8 @@ def evaluate_all(
                 "precision_at_optimal": opt["precision"],
                 "recall_at_optimal": opt["recall"],
                 "f1_at_optimal": opt["f1"],
-                "test_set_size": n_samples,
-                "positive_rate": positive_rate,
+                "test_set_size": report["test_set_size"],
+                "positive_rate": report["label_distribution"]["positive_rate"],
             }
         except FileNotFoundError as e:
             logger.warning("Skipping %s: %s", model_id, e)
