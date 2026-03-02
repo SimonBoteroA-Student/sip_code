@@ -10,6 +10,7 @@ from sip_engine.models.trainer import (
     _detect_xgb_device,
     _hp_search,
     _stratified_split,
+    train_model,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "_detect_xgb_device",
     "_hp_search",
     "_stratified_split",
+    "train_model",
 ]

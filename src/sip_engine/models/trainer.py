@@ -6,6 +6,7 @@ This module provides the building blocks used by train_model() (Plan 07-02):
 - Cross-validation scoring for both imbalance strategies
 - Strategy comparison
 - Hyperparameter search loop
+- train_model() orchestrator (Plan 07-02)
 
 All functions are designed for unit testing with tiny in-memory fixtures
 and reuse across Model IDs M1-M4.
@@ -19,12 +20,18 @@ Anti-patterns avoided per RESEARCH.md:
 
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
+import time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
+import joblib
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 import scipy.stats as stats
 from sklearn.model_selection import ParameterSampler, StratifiedKFold, train_test_split
 from sklearn.metrics import roc_auc_score
@@ -430,3 +437,443 @@ def _hp_search(
         "n_iter": n_iter,
         "n_splits": n_splits,
     }
+
+
+# =============================================================================
+# JSON serialization helper
+# =============================================================================
+
+
+def _json_safe(obj: Any) -> Any:
+    """Recursively convert numpy/pandas scalar types to Python natives for JSON.
+
+    Handles: np.integer, np.floating, np.bool_, np.ndarray, pd.NA, dicts, lists.
+    All other types passed through as-is.
+    """
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_json_safe(item) for item in obj]
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if obj is pd.NA:
+        return None
+    return obj
+
+
+# =============================================================================
+# train_model() orchestrator
+# =============================================================================
+
+
+def train_model(
+    model_id: str,
+    force: bool = False,
+    quick: bool = False,
+    n_iter: int = 200,
+    n_jobs: int = -1,
+) -> Path:
+    """Train a single XGBoost classifier and serialize all artifacts.
+
+    Implements MODL-01 through MODL-04 and MODL-08/09 — the full training
+    pipeline for one model (M1, M2, M3, or M4):
+
+    1. Validate model_id
+    2. Check force / existing artifacts
+    3. Load features.parquet + labels.parquet
+    4. Merge on id_contrato (inner join), set id_contrato as named index
+    5. Drop NaN labels for this model
+    6. Stratified 70/30 split
+    7. Recalibrate IRIC thresholds on train-only (IRIC-08)
+    7b. Recompute encoding mappings on train-only (for online inference)
+    8. Quick-mode adjustments
+    9. HP search with strategy comparison
+    10. Final refit on full training set with best HPs
+    11. Save model.pkl
+    12. Save feature_registry.json
+    13. Save training_report.json
+    14. Save test_data.parquet (with id_contrato as named index)
+    15. Log completion and return model_dir
+
+    Args:
+        model_id: One of 'M1', 'M2', 'M3', 'M4'.
+        force: If True, retrain even if model.pkl already exists.
+        quick: If True, use reduced iterations (~20) and 3-fold CV.
+        n_iter: Number of HP search iterations. Default 200.
+        n_jobs: Reserved for future parallel execution (currently unused).
+
+    Returns:
+        Path to the model directory containing all serialized artifacts.
+
+    Raises:
+        ValueError: If model_id is not in MODEL_IDS.
+        FileNotFoundError: If features.parquet or labels.parquet don't exist.
+    """
+    from sip_engine.config import get_settings
+    from sip_engine.features.pipeline import FEATURE_COLUMNS
+
+    t_start = time.time()
+
+    # ------------------------------------------------------------------
+    # Step 1: Validate model_id
+    # ------------------------------------------------------------------
+    if model_id not in MODEL_IDS:
+        raise ValueError(
+            f"Invalid model_id {model_id!r}. Must be one of {MODEL_IDS}."
+        )
+
+    settings = get_settings()
+
+    # ------------------------------------------------------------------
+    # Step 2: Check force / existing artifacts
+    # ------------------------------------------------------------------
+    model_dir = settings.artifacts_models_dir / model_id
+    if (model_dir / "model.pkl").exists() and not force:
+        logger.info(
+            "Model %s already exists at %s. Use --force to retrain.",
+            model_id,
+            model_dir,
+        )
+        return model_dir
+
+    model_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Training model %s — artifacts will be saved to %s", model_id, model_dir)
+
+    # ------------------------------------------------------------------
+    # Step 3: Load features.parquet + labels.parquet
+    # ------------------------------------------------------------------
+    features_path = settings.features_path
+    labels_path = settings.labels_path
+
+    if not features_path.exists():
+        raise FileNotFoundError(
+            f"features.parquet not found at {features_path}. "
+            "Run 'python -m sip_engine build-features' first."
+        )
+    if not labels_path.exists():
+        raise FileNotFoundError(
+            f"labels.parquet not found at {labels_path}. "
+            "Run 'python -m sip_engine build-labels' first."
+        )
+
+    logger.info("Loading features.parquet from %s", features_path)
+    features_df = pq.read_table(features_path).to_pandas()
+
+    logger.info("Loading labels.parquet from %s", labels_path)
+    labels_df = pq.read_table(labels_path).to_pandas()
+
+    # ------------------------------------------------------------------
+    # Step 4: Merge on id_contrato, set as named index
+    # ------------------------------------------------------------------
+    # features_df has id_contrato as index (from build_features parquet write)
+    # labels_df has id_contrato as a regular column
+    if features_df.index.name == "id_contrato":
+        features_df = features_df.reset_index()
+
+    merged = features_df.merge(labels_df, on="id_contrato", how="inner")
+    merged = merged.set_index("id_contrato")
+    assert merged.index.name == "id_contrato", "id_contrato must be the named index"
+
+    # Ensure all FEATURE_COLUMNS are present (add NaN columns if missing)
+    for col in FEATURE_COLUMNS:
+        if col not in merged.columns:
+            merged[col] = float("nan")
+
+    X = merged[FEATURE_COLUMNS]
+    y = merged[model_id]
+
+    # ------------------------------------------------------------------
+    # Step 5: Drop NaN labels
+    # ------------------------------------------------------------------
+    mask = y.notna()
+    n_dropped = (~mask).sum()
+    X = X[mask]
+    y = y[mask].astype(int)
+
+    logger.info(
+        "Model %s: %d rows dropped (NaN labels), %d remaining "
+        "(%d positive, %d negative)",
+        model_id,
+        n_dropped,
+        len(y),
+        int((y == 1).sum()),
+        int((y == 0).sum()),
+    )
+
+    if (y == 1).sum() == 0:
+        logger.warning(
+            "Model %s: no positive examples found after dropping NaN labels. "
+            "Cannot train. Returning early.",
+            model_id,
+        )
+        return model_dir
+
+    # ------------------------------------------------------------------
+    # Step 6: Stratified split
+    # ------------------------------------------------------------------
+    X_train, X_test, y_train, y_test = _stratified_split(X, y)
+    logger.info(
+        "Model %s split — train: %d (pos=%d, neg=%d), test: %d (pos=%d, neg=%d)",
+        model_id,
+        len(y_train),
+        int((y_train == 1).sum()),
+        int((y_train == 0).sum()),
+        len(y_test),
+        int((y_test == 1).sum()),
+        int((y_test == 0).sum()),
+    )
+    assert X_train.index.name == "id_contrato", "X_train must have id_contrato index"
+    assert X_test.index.name == "id_contrato", "X_test must have id_contrato index"
+
+    # ------------------------------------------------------------------
+    # Step 7: IRIC threshold recalibration on train-only (IRIC-08)
+    # ------------------------------------------------------------------
+    try:
+        from sip_engine.iric.thresholds import calibrate_iric_thresholds, save_iric_thresholds
+
+        train_thresholds = calibrate_iric_thresholds(X_train)
+        save_iric_thresholds(train_thresholds)
+        logger.info(
+            "IRIC thresholds recalibrated on train-only data and saved. "
+            "Note: iric_* feature column VALUES in features.parquet still reflect "
+            "full-dataset calibration from Phase 6. Saved thresholds are for future "
+            "online inference."
+        )
+    except Exception as exc:
+        logger.warning(
+            "IRIC threshold recalibration failed (%s). Continuing without recalibration.",
+            exc,
+        )
+
+    # ------------------------------------------------------------------
+    # Step 7b: Encoding mappings recalibration on train-only
+    # ------------------------------------------------------------------
+    try:
+        from sip_engine.features.encoding import build_encoding_mappings
+
+        build_encoding_mappings(X_train, force=True)
+        logger.info(
+            "Encoding mappings recomputed on train-only data for online inference. "
+            "features.parquet integer codes unchanged."
+        )
+    except Exception as exc:
+        logger.warning(
+            "Encoding mappings recalibration failed (%s). Continuing without recalibration.",
+            exc,
+        )
+
+    # ------------------------------------------------------------------
+    # Step 8: Quick mode adjustments
+    # ------------------------------------------------------------------
+    if quick:
+        n_iter = min(n_iter, 20)
+        n_splits = 3
+        logger.info("Quick mode: n_iter=%d, n_splits=%d", n_iter, n_splits)
+    else:
+        n_splits = 5
+
+    # Guard against extreme class imbalance breaking StratifiedKFold
+    n_pos_train = int((y_train == 1).sum())
+    if n_pos_train < n_splits:
+        n_splits = max(2, n_pos_train)
+        logger.warning(
+            "Model %s: only %d positive examples in train set. "
+            "Reducing n_splits to %d to avoid StratifiedKFold error.",
+            model_id,
+            n_pos_train,
+            n_splits,
+        )
+
+    # ------------------------------------------------------------------
+    # Step 9: HP search
+    # ------------------------------------------------------------------
+    device_kwargs = _detect_xgb_device()
+    logger.info(
+        "Starting HP search for model %s: n_iter=%d, n_splits=%d, device=%s",
+        model_id,
+        n_iter,
+        n_splits,
+        device_kwargs,
+    )
+
+    search_result = _hp_search(
+        X_train.values,
+        y_train.values,
+        n_iter=n_iter,
+        n_splits=n_splits,
+        seed=RANDOM_SEED,
+        n_jobs=n_jobs,
+        device_kwargs=device_kwargs,
+        progress=True,
+    )
+
+    best_params = search_result["best_params"]
+    best_strategy = search_result["best_strategy"]
+    logger.info(
+        "HP search complete — best strategy: %s, best CV AUC-ROC: %.4f±%.4f",
+        best_strategy,
+        search_result["best_cv_auc_mean"],
+        search_result["best_cv_auc_std"],
+    )
+
+    # ------------------------------------------------------------------
+    # Step 10: Final refit on full training set
+    # ------------------------------------------------------------------
+    scale_pos_weight_value = float((y_train == 0).sum()) / max(int((y_train == 1).sum()), 1)
+
+    clf_kwargs: dict = {
+        **best_params,
+        **device_kwargs,
+        "objective": "binary:logistic",
+        "verbosity": 0,
+        "random_state": RANDOM_SEED,
+    }
+
+    if best_strategy == "scale_pos_weight":
+        clf_kwargs["scale_pos_weight"] = scale_pos_weight_value
+
+    clf = xgb.XGBClassifier(**clf_kwargs)
+
+    if best_strategy == "upsampling_25pct":
+        # Upsample minority on full training set before final fit
+        X_train_arr = X_train.values
+        y_train_arr = y_train.values
+        maj_mask = y_train_arr == 0
+        min_mask = y_train_arr == 1
+        X_maj, y_maj = X_train_arr[maj_mask], y_train_arr[maj_mask]
+        X_min, y_min = X_train_arr[min_mask], y_train_arr[min_mask]
+        n_maj = len(X_maj)
+        n_target = int(n_maj * 0.25 / 0.75)
+        if len(X_min) > 0 and n_target > 0:
+            X_min_up = resample(X_min, n_samples=max(n_target, 1), replace=True, random_state=RANDOM_SEED)
+            y_min_up = np.ones(len(X_min_up), dtype=y_train_arr.dtype)
+            X_fit_arr = np.vstack([X_maj, X_min_up])
+            y_fit_arr = np.concatenate([y_maj, y_min_up])
+        else:
+            X_fit_arr, y_fit_arr = X_train_arr, y_train_arr
+        # Wrap in DataFrame with column names so feature_names_in_ is set
+        X_fit_df = pd.DataFrame(X_fit_arr, columns=FEATURE_COLUMNS)
+        clf.fit(X_fit_df, y_fit_arr)
+    else:
+        # scale_pos_weight strategy — fit on training DataFrame directly
+        clf.fit(X_train[FEATURE_COLUMNS], y_train)
+
+    logger.info("Final model refitted on full training set (%d samples)", len(y_train))
+
+    # ------------------------------------------------------------------
+    # Step 11: Save model.pkl
+    # ------------------------------------------------------------------
+    model_pkl_path = model_dir / "model.pkl"
+    joblib.dump(clf, model_pkl_path)
+    logger.info("model.pkl saved to %s", model_pkl_path)
+
+    # ------------------------------------------------------------------
+    # Step 12: Save feature_registry.json
+    # ------------------------------------------------------------------
+    feature_registry = _json_safe({
+        "model_id": model_id,
+        "feature_columns": FEATURE_COLUMNS,
+        "n_features": len(FEATURE_COLUMNS),
+        "training_date": datetime.now(tz=timezone.utc).isoformat(),
+        "label": model_id,
+        "best_strategy": best_strategy,
+        "best_params": best_params,
+        "cv_auc_roc_mean": search_result["best_cv_auc_mean"],
+        "cv_auc_roc_std": search_result["best_cv_auc_std"],
+        "train_size": len(y_train),
+        "test_size": len(y_test),
+        "class_distribution": {
+            "0": int((y_train == 0).sum()),
+            "1": int((y_train == 1).sum()),
+        },
+        "random_seed": RANDOM_SEED,
+    })
+    registry_path = model_dir / "feature_registry.json"
+    registry_path.write_text(json.dumps(feature_registry, indent=2))
+    logger.info("feature_registry.json saved to %s", registry_path)
+
+    # ------------------------------------------------------------------
+    # Step 13: Save training_report.json
+    # ------------------------------------------------------------------
+    t_duration = time.time() - t_start
+
+    # Build strategy comparison summary from HP search
+    # Find the best-scoring candidate for each strategy
+    spw_scores = [r["scale_pos_weight"]["mean_cv_auc"] for r in search_result["all_results"]]
+    ups_scores = [r["upsampling_25pct"]["mean_cv_auc"] for r in search_result["all_results"]]
+    strategy_comparison = {
+        "scale_pos_weight": {
+            "mean_cv_auc": float(np.mean(spw_scores)) if spw_scores else 0.0,
+            "best_cv_auc": float(max(spw_scores)) if spw_scores else 0.0,
+        },
+        "upsampling_25pct": {
+            "mean_cv_auc": float(np.mean(ups_scores)) if ups_scores else 0.0,
+            "best_cv_auc": float(max(ups_scores)) if ups_scores else 0.0,
+        },
+        "winner": best_strategy,
+    }
+
+    training_report = _json_safe({
+        "model_id": model_id,
+        "label_distribution": {
+            "0": int((y == 0).sum()),
+            "1": int((y == 1).sum()),
+        },
+        "scale_pos_weight_value": scale_pos_weight_value,
+        "strategy_comparison": strategy_comparison,
+        "all_cv_results": search_result["all_results"],
+        "best_params": best_params,
+        "training_duration_seconds": t_duration,
+        "feature_count": len(FEATURE_COLUMNS),
+        "seed": RANDOM_SEED,
+        "n_iter": n_iter,
+        "n_splits": n_splits,
+        "quick_mode": quick,
+        "iric_note": (
+            "IRIC thresholds recalibrated on train-only and saved for online inference. "
+            "iric_* feature column VALUES in features.parquet still reflect full-dataset "
+            "calibration from Phase 6."
+        ),
+        "encoding_note": (
+            "encoding_mappings.json recomputed on train-only for online inference. "
+            "features.parquet integer codes unchanged."
+        ),
+    })
+    report_path = model_dir / "training_report.json"
+    report_path.write_text(json.dumps(training_report, indent=2))
+    logger.info("training_report.json saved to %s", report_path)
+
+    # ------------------------------------------------------------------
+    # Step 14: Save test_data.parquet (with id_contrato as named index)
+    # ------------------------------------------------------------------
+    assert X_test.index.name == "id_contrato", (
+        f"X_test index must be 'id_contrato', got {X_test.index.name!r}"
+    )
+    test_df = X_test[FEATURE_COLUMNS].copy()
+    test_df[model_id] = y_test
+    assert test_df.index.name == "id_contrato", (
+        "test_df must have 'id_contrato' as named index"
+    )
+    test_parquet_path = model_dir / "test_data.parquet"
+    import pyarrow as pa
+    test_table = pa.Table.from_pandas(test_df, preserve_index=True)
+    pq.write_table(test_table, test_parquet_path)
+    logger.info("test_data.parquet saved to %s", test_parquet_path)
+
+    # ------------------------------------------------------------------
+    # Step 15: Log completion
+    # ------------------------------------------------------------------
+    logger.info(
+        "Model %s trained in %.1fs. Saved to %s",
+        model_id,
+        t_duration,
+        model_dir,
+    )
+
+    return model_dir
