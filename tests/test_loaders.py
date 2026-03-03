@@ -312,3 +312,27 @@ class TestAllLoadersImportable:
             load_adiciones,
         ]:
             assert callable(fn), f"{fn.__name__} is not callable"
+
+
+# ============================================================
+# Downloader tests — curl fallback and requests availability
+# ============================================================
+
+class TestDownloaderCurlFallback:
+    """PLAT-07: Verify curl availability check and requests fallback."""
+
+    def test_curl_available_check(self):
+        """Verify _curl_available() returns bool without error."""
+        from sip_engine.data.downloader import _curl_available
+        result = _curl_available()
+        assert isinstance(result, bool)
+
+    def test_requests_import(self):
+        """Verify requests is importable (dependency for curl-less systems)."""
+        import requests
+        assert hasattr(requests, "get")
+
+    def test_download_with_requests_function_exists(self):
+        """Verify _download_with_requests is importable."""
+        from sip_engine.data.downloader import _download_with_requests
+        assert callable(_download_with_requests)

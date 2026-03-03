@@ -13,6 +13,7 @@ Features:
 - Instantaneous speed (3-second rolling window) and ETA
 - Graceful Ctrl+C that preserves .part files for retry
 - Post-download column validation against schemas.py
+- Automatic fallback to Python requests when curl is unavailable
 
 Usage (from CLI):
     python -m sip_engine download-data                    # all 8 datasets
@@ -33,6 +34,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
+
+import requests  # Fallback when curl is not available
 
 from sip_engine.config import get_settings
 
@@ -173,6 +176,56 @@ def _clear_lines(n: int) -> None:
 
 
 # ── Core download logic ──────────────────────────────────────────────────────
+
+def _curl_available() -> bool:
+    """Check if curl is installed and callable."""
+    try:
+        result = subprocess.run(
+            ["curl", "--version"],
+            capture_output=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def _download_with_requests(
+    datasets: list[SECOPDataset],
+    output_dir: Path,
+    succeeded: list[Path],
+) -> list[Path]:
+    """Sequential download fallback using Python requests (no curl needed).
+
+    Simpler than the parallel curl path but fully functional.  Used
+    automatically on Windows or any system where curl is not installed.
+    """
+    for ds in datasets:
+        target = output_dir / ds.filename
+        tmp = target.with_suffix(".csv.part")
+        print(f"  ⟳  Downloading {ds.key} ({ds.description})...")
+        try:
+            response = requests.get(ds.url, stream=True, timeout=600)
+            response.raise_for_status()
+            downloaded = 0
+            with tmp.open("wb") as f:
+                for chunk in response.iter_content(chunk_size=65536):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        # Print progress every ~10 MB
+                        if downloaded % (10 * 1024 * 1024) < 65536:
+                            print(f"\r    {_fmt_size(downloaded)}", end="", flush=True)
+            print(f"\r  ✓  {ds.key:<16} {_fmt_size(downloaded)}")
+            tmp.rename(target)
+            succeeded.append(target)
+        except KeyboardInterrupt:
+            print(f"\n  ⚠  Download interrupted. Partial file preserved: {tmp}")
+            break
+        except Exception as e:
+            print(f"\r  ✗  {ds.key:<16} {e}")
+    return succeeded
+
 
 # Rolling window size for instantaneous speed calculation
 _SPEED_WINDOW_SECONDS = 3.0
@@ -417,6 +470,13 @@ def download_datasets(
         print("  Aborted.")
         return []
     print()
+
+    # ── Check curl availability; fall back to requests if missing ─────
+    use_curl = _curl_available()
+    if not use_curl:
+        print("  ℹ  curl not found — using Python requests library (slower, no HTTP/2)")
+        succeeded: list[Path] = []
+        return _download_with_requests(list(datasets), output_dir, succeeded)
 
     # ── Run parallel downloads with live progress ─────────────────────
     queue = list(datasets)
