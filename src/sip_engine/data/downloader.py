@@ -1,24 +1,24 @@
 """Download SECOP databases from datos.gov.co.
 
-Uses the full CSV export endpoint (api/views/{id}/rows.csv) with parallel
-curl processes for concurrent downloads.  Interactive progress is displayed
-via periodic polling of partially-downloaded file sizes.
+Uses the Socrata Open Data API (SODA) endpoint
+(resource/{id}.csv?$limit=N) with parallel curl processes for concurrent
+downloads.  Interactive progress is displayed via periodic polling of
+partially-downloaded file sizes.
 
 Features:
 - Parallel downloads (configurable concurrency, default 4)
-- Resume interrupted downloads (curl -C -, preserved .part files)
 - Largest-first scheduling to minimise wall-clock time
 - Stall detection (abort + retry if speed < 1 KB/s for 60 s)
 - HTTP/2 and compression for throughput
 - Instantaneous speed (3-second rolling window) and ETA
-- Graceful Ctrl+C that preserves .part files for resume
+- Graceful Ctrl+C that preserves .part files for retry
 - Post-download column validation against schemas.py
 
 Usage (from CLI):
     python -m sip_engine download-data                    # all 8 datasets
     python -m sip_engine download-data --dataset contratos procesos
     python -m sip_engine download-data --dry-run          # show URLs only
-    python -m sip_engine download-data --resume           # resume interrupted
+    python -m sip_engine download-data --resume           # retry failed ones
 """
 
 from __future__ import annotations
@@ -61,11 +61,15 @@ class SECOPDataset:
     filename: str          # target filename inside secop_dir
     description: str       # human-readable name
 
+    # Maximum rows to request from the SODA API.  Must exceed the largest
+    # dataset (adiciones ≈ 15.8 M rows as of 2025-02).
+    _SODA_LIMIT: int = 50_000_000
+
     @property
     def url(self) -> str:
         return (
-            f"https://www.datos.gov.co/api/views/{self.api_id}"
-            f"/rows.csv?accessType=DOWNLOAD"
+            f"https://www.datos.gov.co/resource/{self.api_id}"
+            f".csv?$limit={self._SODA_LIMIT}"
         )
 
     @property
@@ -224,8 +228,11 @@ def _launch_curl(
         "--output", str(tmp),
     ]
 
+    # NOTE: --continue-at is incompatible with the SODA API (dynamic
+    # response, no Content-Range support).  On resume we simply re-download
+    # from scratch and overwrite the .part file.
     if resume and tmp.exists() and tmp.stat().st_size > 0:
-        cmd.extend(["--continue-at", "-"])
+        pass  # .part will be overwritten by --output
 
     cmd.append(ds.url)
 
