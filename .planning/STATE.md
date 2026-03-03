@@ -10,10 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Milestone: v1.0 — **Shipped 2026-03-02**
-Status: All 11 phases complete. 53/53 requirements satisfied. 375 tests passing.
-Last activity: 2026-03-02 — Milestone archived and tagged.
+Phase 12: Cross-platform OS Compatibility & Training Optimization
+Current Plan: 4/4 (Plan 04 complete)
+Status: Plan 12-04 (requests fallback + Docker support) complete.
 
-Progress: [████████████████████] 100%
+Progress: [████████████████████] Phase 12 Plan 4/4
 
 ## Accumulated Context
 
@@ -21,9 +22,16 @@ Progress: [████████████████████] 100%
 
 All v1.0 decisions archived in PROJECT.md Key Decisions table.
 
+Phase 12-04 decisions:
+- Kept curl as primary download method; requests is sequential fallback only
+- Multi-stage Docker build to minimize runtime image size
+- Non-root user (sip:1000) in both Docker images for security
+- CUDA image uses nvidia/cuda:12.1.0-runtime-ubuntu22.04 with deadsnakes PPA
+
 ### Roadmap Evolution
 
 - Phase 12 added: Cross-platform OS compatibility and training optimization
+- Phase 12 Plan 04 complete: requests fallback + Docker support
 
 ### Pending Todos
 
@@ -36,4 +44,4 @@ None — all prior blockers resolved.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Phase 12 planned (4 plans, 3 waves, verified). Ready for /gsd:execute-phase 12.
+Stopped at: Completed 12-04-PLAN.md (requests fallback + Docker support)
