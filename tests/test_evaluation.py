@@ -449,7 +449,7 @@ def test_evaluate_model_end_to_end(mock_model_artifacts):
 
 
 def test_evaluate_model_rerun_no_overwrite(mock_model_artifacts):
-    """Second evaluate_model() call creates timestamped files, not overwriting."""
+    """Second evaluate_model() call archives old files to old/ subfolder."""
     from sip_engine.evaluation.evaluator import evaluate_model
 
     models_dir, output_dir = mock_model_artifacts
@@ -457,18 +457,20 @@ def test_evaluate_model_rerun_no_overwrite(mock_model_artifacts):
     # First run: creates base files
     evaluate_model("M1", models_dir=models_dir, output_dir=output_dir)
 
-    # Second run: creates timestamped files
+    # Second run: archives first run to old/, then creates new base files
     evaluate_model("M1", models_dir=models_dir, output_dir=output_dir)
 
-    # Should have 6 files (3 base + 3 timestamped) — verify at least 4 exist
-    report_files = list((output_dir / "M1").glob("M1_eval*"))
-    assert len(report_files) >= 4, (
-        f"Expected >=4 report files after re-run, got {len(report_files)}: "
-        f"{[f.name for f in report_files]}"
-    )
-
-    # The original base files still exist
+    # The base files still exist (freshly written by the second run)
     assert (output_dir / "M1" / "M1_eval.json").exists(), "Base JSON missing after re-run"
+
+    # Old evaluation was archived
+    old_dir = output_dir / "M1" / "old"
+    assert old_dir.exists(), "old/ directory missing after re-run"
+    archive_dirs = list(old_dir.iterdir())
+    assert len(archive_dirs) >= 1, "Expected at least one archive folder in old/"
+    # Archived folder should contain the previous evaluation files
+    archived_files = list(archive_dirs[0].iterdir())
+    assert any("M1_eval" in f.name for f in archived_files), "Archived M1_eval file missing"
 
 
 def test_evaluate_model_missing_model(tmp_path):

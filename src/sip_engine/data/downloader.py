@@ -49,6 +49,7 @@ _APPROX_SIZES: dict[str, int] = {
     "ejecucion": 682_000_000,
     "adiciones": 3_900_000_000,
     "suspensiones": 87_000_000,
+    "rues": 2_000_000_000,
 }
 
 
@@ -125,6 +126,12 @@ DATASETS: tuple[SECOPDataset, ...] = (
         api_id="u99c-7mfm",
         filename="suspensiones_contratos.csv",
         description="SECOP II – Suspensiones de Contratos",
+    ),
+    SECOPDataset(
+        key="rues",
+        api_id="c82u-588k",
+        filename="rues_personas.csv",
+        description="RUES – Personas Naturales, Jurídicas y ESADL (CONFECAMARAS)",
     ),
 )
 

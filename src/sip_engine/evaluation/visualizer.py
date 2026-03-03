@@ -430,18 +430,19 @@ def generate_all_charts(
         List of paths to all generated image files.
     """
     model_id = eval_dict.get("model_id", "?")
+    model_suffix = f"_{model_id.lower()}" if model_id != "?" else ""
     logger.info("Generating charts for %s → %s", model_id, output_dir)
 
     paths: list[Path] = []
 
-    paths.append(plot_confusion_matrix(eval_dict, output_dir))
-    paths.append(plot_roc_curve(eval_dict, output_dir))
-    paths.append(plot_precision_recall_f1(eval_dict, output_dir))
-    paths.append(plot_ranking_metrics(eval_dict, output_dir))
-    paths.append(plot_score_distribution(y_true, y_scores, eval_dict, output_dir))
-    paths.append(plot_calibration_summary(eval_dict, output_dir))
+    paths.append(plot_confusion_matrix(eval_dict, output_dir, filename=f"confusion_matrix{model_suffix}.png"))
+    paths.append(plot_roc_curve(eval_dict, output_dir, filename=f"roc_curve{model_suffix}.png"))
+    paths.append(plot_precision_recall_f1(eval_dict, output_dir, filename=f"precision_recall_f1{model_suffix}.png"))
+    paths.append(plot_ranking_metrics(eval_dict, output_dir, filename=f"ranking_metrics{model_suffix}.png"))
+    paths.append(plot_score_distribution(y_true, y_scores, eval_dict, output_dir, filename=f"score_distribution{model_suffix}.png"))
+    paths.append(plot_calibration_summary(eval_dict, output_dir, filename=f"calibration_summary{model_suffix}.png"))
 
-    shap_path = plot_shap_importance(eval_dict, output_dir)
+    shap_path = plot_shap_importance(eval_dict, output_dir, filename=f"shap_importance{model_suffix}.png")
     if shap_path is not None:
         paths.append(shap_path)
 

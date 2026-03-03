@@ -62,6 +62,7 @@ from sip_engine.data.schemas import (
     SUSPENSIONES_DTYPE,
     SUSPENSIONES_USECOLS,
     clean_currency,
+    resolve_soda_columns,
     validate_columns,
 )
 
@@ -156,6 +157,15 @@ def _load_csv(
     if validate:
         validate_columns(str(path), usecols if usecols is not None else [], encoding=encoding)
 
+    # Auto-detect SODA headers and resolve usecols/dtype if needed
+    soda_rename_map: dict[str, str] = {}
+    resolved_usecols = usecols
+    resolved_dtype = dtype
+    if usecols is not None and usecols and isinstance(usecols[0], str):
+        resolved_usecols, resolved_dtype, soda_rename_map = resolve_soda_columns(
+            str(path), usecols, dtype, encoding
+        )
+
     settings = get_settings()
     chunk_size = settings.chunk_size
     total = _total_chunks(path, chunk_size, has_header=has_header)
@@ -171,30 +181,39 @@ def _load_csv(
 
     read_kwargs: dict = dict(
         chunksize=chunk_size,
-        dtype=dtype,
+        dtype=resolved_dtype,
         encoding=encoding,
         encoding_errors="replace",
         on_bad_lines="warn",
         low_memory=False,
     )
-    if usecols is not None:
-        read_kwargs["usecols"] = usecols
+    if resolved_usecols is not None:
+        read_kwargs["usecols"] = resolved_usecols
     if not has_header:
         read_kwargs["header"] = None
 
     reader = pd.read_csv(path, **read_kwargs)
 
+    pbar = tqdm.tqdm(total=total or None, desc=desc, unit="chunk")
     try:
-        for chunk in tqdm.tqdm(reader, total=total, desc=desc, unit="chunk"):
+        for chunk in reader:
             if colnames is not None:
                 chunk.columns = colnames
+            if soda_rename_map:
+                chunk.rename(columns=soda_rename_map, inplace=True)
             if currency_cols:
                 for col in currency_cols:
                     if col in chunk.columns:
                         chunk[col] = clean_currency(chunk[col])
             rows_loaded += len(chunk)
+            pbar.update(1)
             yield chunk
     finally:
+        # Correct the total so the bar shows 100% on completion
+        if pbar.n > 0 and (pbar.total is None or pbar.total != pbar.n):
+            pbar.total = pbar.n
+            pbar.refresh()
+        pbar.close()
         py_warnings_logger.removeHandler(counter)
         elapsed = time.time() - t0
         logger.info(

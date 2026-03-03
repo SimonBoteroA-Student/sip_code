@@ -472,6 +472,53 @@ def _json_safe(obj: Any) -> Any:
 # =============================================================================
 
 
+def _archive_existing_model(model_dir: Path) -> None:
+    """Move existing model artifacts to old/{YYYY-MM-DD}/ subfolder.
+
+    Archives model.pkl, feature_registry.json, training_report.json,
+    test_data.parquet, and any other files in the model directory.
+    Reads training date from training_report.json; falls back to file mtime.
+    """
+    import shutil
+
+    if not model_dir.exists():
+        return
+
+    existing_files = [f for f in model_dir.iterdir() if f.name != "old"]
+    if not existing_files:
+        return
+
+    # Determine archive date from training_report.json
+    archive_date = None
+    report_path = model_dir / "training_report.json"
+    if report_path.exists():
+        try:
+            data = json.loads(report_path.read_text())
+            ts = data.get("timestamp", "")
+            if ts:
+                archive_date = ts[:10]
+        except Exception:
+            pass
+
+    if archive_date is None:
+        oldest = min(existing_files, key=lambda p: p.stat().st_mtime)
+        archive_date = datetime.fromtimestamp(oldest.stat().st_mtime).strftime("%Y-%m-%d")
+
+    archive_dir = model_dir / "old" / archive_date
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    for item in existing_files:
+        dest = archive_dir / item.name
+        if item.is_dir():
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.move(str(item), str(dest))
+        else:
+            shutil.move(str(item), str(dest))
+
+    logger.info("Archived existing model artifacts to %s", archive_dir)
+
+
 def train_model(
     model_id: str,
     force: bool = False,
@@ -541,6 +588,9 @@ def train_model(
             model_dir,
         )
         return model_dir
+
+    # Archive existing artifacts before overwriting
+    _archive_existing_model(model_dir)
 
     model_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Training model %s — artifacts will be saved to %s", model_id, model_dir)
@@ -636,8 +686,23 @@ def train_model(
     # ------------------------------------------------------------------
     try:
         from sip_engine.iric.thresholds import calibrate_iric_thresholds, save_iric_thresholds
+        from sip_engine.features.encoding import load_encoding_mappings as _load_enc
 
-        train_thresholds = calibrate_iric_thresholds(X_train)
+        # calibrate_iric_thresholds needs 'tipo_contrato' (string), but X_train
+        # only has 'tipo_contrato_cat' (integer-encoded). Reverse-decode it.
+        X_calib = X_train.copy()
+        if "tipo_contrato_cat" in X_calib.columns and "tipo_contrato" not in X_calib.columns:
+            try:
+                enc_mappings = _load_enc()
+                tc_mapping = enc_mappings.get("tipo_contrato_cat", {})
+                reverse_tc = {v: k for k, v in tc_mapping.items()}
+                X_calib["tipo_contrato"] = X_calib["tipo_contrato_cat"].map(
+                    lambda x: reverse_tc.get(int(x), "Otro") if pd.notna(x) else "Otro"
+                )
+            except FileNotFoundError:
+                X_calib["tipo_contrato"] = "Otro"
+
+        train_thresholds = calibrate_iric_thresholds(X_calib)
         save_iric_thresholds(train_thresholds)
         logger.info(
             "IRIC thresholds recalibrated on train-only data and saved. "

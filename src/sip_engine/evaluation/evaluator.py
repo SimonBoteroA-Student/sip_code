@@ -270,6 +270,58 @@ def _get_output_path(output_dir: Path, model_id: str, extension: str) -> Path:
     return base_path.parent / f"{model_id}_eval_{ts}{extension}"
 
 
+def _archive_existing_evaluation(model_output_dir: Path) -> None:
+    """Move existing evaluation artifacts to old/{YYYY-MM-DD}/ subfolder.
+
+    Archives JSON/CSV/MD reports, images/, and shap_*.parquet files.
+    Reads the evaluation_date from the existing JSON report to determine
+    the archive folder name; falls back to file modification time.
+    """
+    import shutil
+
+    if not model_output_dir.exists():
+        return
+
+    # Check if there's anything to archive
+    existing_files = list(model_output_dir.iterdir())
+    # Filter out the old/ directory itself
+    existing_files = [f for f in existing_files if f.name != "old"]
+    if not existing_files:
+        return
+
+    # Determine archive date from existing JSON report
+    archive_date = None
+    for f in existing_files:
+        if f.suffix == ".json" and "_eval" in f.name:
+            try:
+                data = json.loads(f.read_text())
+                eval_date_str = data.get("evaluation_date", "")
+                if eval_date_str:
+                    archive_date = eval_date_str[:10]  # YYYY-MM-DD
+            except Exception:
+                pass
+            break
+
+    if archive_date is None:
+        # Fall back to modification time of oldest file
+        oldest = min(existing_files, key=lambda p: p.stat().st_mtime)
+        archive_date = datetime.fromtimestamp(oldest.stat().st_mtime).strftime("%Y-%m-%d")
+
+    archive_dir = model_output_dir / "old" / archive_date
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    for item in existing_files:
+        dest = archive_dir / item.name
+        if item.is_dir():
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.move(str(item), str(dest))
+        else:
+            shutil.move(str(item), str(dest))
+
+    logger.info("Archived existing evaluation to %s", archive_dir)
+
+
 # =============================================================================
 # Private helpers: report writers
 # =============================================================================
@@ -372,6 +424,7 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
 
     # Image paths relative to the Markdown file (sibling images/ dir)
     img = "images"
+    ms = f"_{model_id.lower()}" if model_id != "Unknown" else ""
 
     lines: list[str] = [
         f"# Evaluation Report — Model {model_id}",
@@ -391,19 +444,19 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
         f"|--------|-------|",
         f"| **AUC-ROC** | **{disc.get('auc_roc', 0):.4f}** |",
         "",
-        f"![ROC Curve]({img}/roc_curve.png)",
+        f"![ROC Curve]({img}/roc_curve{ms}.png)",
         "",
         "---",
         "",
         "## 2. Score Distribution",
         "",
-        f"![Score Distribution]({img}/score_distribution.png)",
+        f"![Score Distribution]({img}/score_distribution{ms}.png)",
         "",
         "---",
         "",
         "## 3. Precision / Recall / F1 vs. Threshold",
         "",
-        f"![Precision-Recall-F1]({img}/precision_recall_f1.png)",
+        f"![Precision-Recall-F1]({img}/precision_recall_f1{ms}.png)",
         "",
     ]
 
@@ -463,7 +516,7 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
         f"| FN | {opt_cm.get('fn', 0):,} |",
         f"| TP | {opt_cm.get('tp', 0):,} |",
         "",
-        f"![Confusion Matrix]({img}/confusion_matrix.png)",
+        f"![Confusion Matrix]({img}/confusion_matrix{ms}.png)",
         "",
         "---",
         "",
@@ -478,7 +531,7 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
         f"| NDCG@500 | {ranking.get('ndcg_500', 0):.4f} |",
         f"| NDCG@1000 | {ranking.get('ndcg_1000', 0):.4f} |",
         "",
-        f"![Ranking Metrics]({img}/ranking_metrics.png)",
+        f"![Ranking Metrics]({img}/ranking_metrics{ms}.png)",
         "",
         "---",
         "",
@@ -491,7 +544,7 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
         "",
         "> Lower Brier Score = better calibration. Baseline = positive_rate × (1 − positive_rate).",
         "",
-        f"![Calibration]({img}/calibration_summary.png)",
+        f"![Calibration]({img}/calibration_summary{ms}.png)",
         "",
         "---",
         "",
@@ -514,7 +567,7 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
             lines.append(f"| {idx} | {feat.get('feature', '')} | {feat.get('mean_abs_shap', 0.0):.6f} |")
         lines += [
             "",
-            f"![SHAP Feature Importance]({img}/shap_importance.png)",
+            f"![SHAP Feature Importance]({img}/shap_importance{ms}.png)",
             "",
             f"SHAP artifact (parquet): {Path(shap.get('parquet', '')).name}",
             "",
@@ -611,6 +664,9 @@ def evaluate_model(
         raise ValueError(f"Unknown model_id '{model_id}'. Expected one of {MODEL_IDS}.")
 
     print(f"\nEvaluating model {model_id}...")
+
+    # Archive existing evaluation artifacts before writing new ones
+    _archive_existing_evaluation(output_dir / model_id)
 
     # Step 1: Load artifacts
     model, test_df, training_report, feature_registry = _load_artifacts(model_id, models_dir)

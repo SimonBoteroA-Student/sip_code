@@ -153,6 +153,7 @@ Or place them manually in the `secopDatabases/` directory at the project root:
 | `ejecucion_contratos.csv` | Execution data (4.2M rows) | 682 MB |
 | `adiciones.csv` | Amendments (for M1/M2 labels) | ~4 GB |
 | `suspensiones_contratos.csv` | Suspended contracts | 91 MB |
+| `rues_personas.csv` | RUES – Personas Naturales, Jurídicas y ESADL (CONFECAMARAS, ~9.2M rows) | ~2 GB |
 | `boletines.csv` | Comptroller bulletins (10.8K rows) | 1.3 MB |
 
 ### RCAC Sources (`Data/Propia/PACO/`)
@@ -204,7 +205,7 @@ python -m sip_engine download-data [options]
 
 | Option | Description |
 |--------|-------------|
-| `--dataset NAME [...]` | Download specific dataset(s) only (default: all 8). Choices: `contratos`, `procesos`, `ofertas`, `proponentes`, `proveedores`, `ejecucion`, `adiciones`, `suspensiones` |
+| `--dataset NAME [...]` | Download specific dataset(s) only (default: all 9). Choices: `contratos`, `procesos`, `ofertas`, `proponentes`, `proveedores`, `ejecucion`, `adiciones`, `suspensiones`, `rues` |
 | `--output-dir PATH` | Override output directory (default: `secopDatabases/`) |
 | `--parallel N` | Max concurrent downloads (default: 4) |
 | `--dry-run` | Show download URLs and file sizes without downloading |
@@ -213,7 +214,7 @@ python -m sip_engine download-data [options]
 | `--validate-only` | Only validate existing CSVs against expected column schemas |
 
 **What it does:**
-- Downloads 8 SECOP II CSV datasets via the datos.gov.co full export API (total ~15 GB)
+- Downloads 9 SECOP II CSV datasets via the datos.gov.co full export API (total ~17 GB)
 - Runs up to 4 parallel curl processes, scheduling largest files first
 - Shows live progress with per-file speed, percentage, and ETA
 - Uses HTTP/2, compression, and TCP keepalive for throughput
@@ -234,13 +235,14 @@ python -m sip_engine download-data [options]
 | `ejecucion` | `mfmm-jqmq` | 682 MB |
 | `adiciones` | `cb9c-h8sn` | 3.9 GB |
 | `suspensiones` | `u99c-7mfm` | 87 MB |
+| `rues` | `c82u-588k` | ~2 GB |
 
 > **Note:** `boletines.csv` (Comptroller fiscal responsibility bulletins) is not available via the datos.gov.co API — it is manually curated from quarterly PDF bulletins in the `Boletines/` directory.
 
 **Examples:**
 
 ```bash
-# Download all 8 datasets
+# Download all 9 datasets
 python -m sip_engine download-data
 
 # Download only contracts and processes
@@ -455,7 +457,29 @@ python -m sip_engine evaluate [options]
 
 ### 7. `run-pipeline`
 
-**Runs the full SIP pipeline end to end.** *(Not yet implemented — use the step-by-step workflow below.)*
+**Runs the full SIP pipeline end to end:** `build-rcac` → `build-labels` → `build-features` → `build-iric` → `train` → `evaluate`.
+
+```bash
+python -m sip_engine run-pipeline [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--model {M1,M2,M3,M4}` | Train and evaluate only this model (features are always built for all) |
+| `--quick` | Quick mode: reduced HP search (20 iters, 3-fold CV) |
+| `--force` | Rebuild all stages from scratch even if artifacts exist |
+| `--n-iter N` | HP search iterations per model (default: 200) |
+| `--n-jobs N` | Parallelism level (default: -1 = all cores) |
+
+**Examples:**
+
+```bash
+# Full pipeline, all models
+python -m sip_engine run-pipeline --force
+
+# Quick training for M1 only
+python -m sip_engine run-pipeline --model M1 --quick --force
+```
 
 ---
 
@@ -463,14 +487,20 @@ python -m sip_engine evaluate [options]
 
 ### Quick Start (one command)
 
-The fastest way to go from raw data to trained models:
+The fastest way to go from raw data to trained and evaluated models:
 
 ```bash
 source .venv/bin/activate
-python -m sip_engine train --build-features --force
+python -m sip_engine run-pipeline --force
 ```
 
-This runs: `build-rcac` → `build-labels` → `build-features` → `build-iric` → `train` (all 4 models).
+This runs: `build-rcac` → `build-labels` → `build-features` → `build-iric` → `train` → `evaluate` (all 4 models).
+
+For a single model with quick HP search:
+
+```bash
+python -m sip_engine run-pipeline --model M1 --quick --force
+```
 
 ### Step-by-Step (recommended for first run)
 

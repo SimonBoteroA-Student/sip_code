@@ -30,6 +30,8 @@ Data/**
 
 #New location of databases
 secopDatabases/**
+newSecopDatabases/**
+
 # Ensure .DS_Store is still ignored even if folders are whitelisted
 **/.DS_Store
 
@@ -37,11 +39,7 @@ secopDatabases/**
 !.planning/**
 !.claude/**
 
-# Generated artifacts
-artifacts/
-!artifacts/**/.gitkeep
-!artifacts/v1_baseline/
-!artifacts/v1_baseline/**
+
 
 # Python build artifacts
 *.egg-info/

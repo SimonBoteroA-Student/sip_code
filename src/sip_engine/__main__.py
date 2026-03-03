@@ -84,7 +84,34 @@ def main() -> None:
         help="Run full feature pipeline (rcac → labels → features → iric) before training",
     )
 
-    subparsers.add_parser("run-pipeline", help="Run the full SIP pipeline end to end")
+    run_parser = subparsers.add_parser("run-pipeline", help="Run the full SIP pipeline end to end")
+    run_parser.add_argument(
+        "--model",
+        choices=["M1", "M2", "M3", "M4"],
+        help="Train and evaluate only this model (features are always built for all)",
+    )
+    run_parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Quick mode: reduced HP search (20 iters, 3-fold CV)",
+    )
+    run_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Rebuild all stages from scratch even if artifacts exist",
+    )
+    run_parser.add_argument(
+        "--n-iter",
+        type=int,
+        default=200,
+        help="HP search iterations per model (default: 200)",
+    )
+    run_parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=-1,
+        help="Parallelism level (default: -1 = all cores)",
+    )
 
     evaluate_parser = subparsers.add_parser("evaluate", help="Evaluate trained models")
     evaluate_parser.add_argument(
@@ -116,9 +143,10 @@ def main() -> None:
         choices=[
             "contratos", "procesos", "ofertas", "proponentes",
             "proveedores", "ejecucion", "adiciones", "suspensiones",
+            "rues",
         ],
         metavar="NAME",
-        help="Download specific dataset(s) only (default: all 8)",
+        help="Download specific dataset(s) only (default: all 9)",
     )
     dl_parser.add_argument(
         "--output-dir",
@@ -317,6 +345,63 @@ def main() -> None:
             sys.exit(1)
         except Exception as e:
             print(f"Error downloading data: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "run-pipeline":
+        import traceback
+        from sip_engine.data.rcac_builder import build_rcac
+        from sip_engine.data.label_builder import build_labels
+        from sip_engine.features.pipeline import build_features
+        from sip_engine.iric.pipeline import build_iric
+        from sip_engine.models.trainer import train_model, MODEL_IDS
+        from sip_engine.evaluation.evaluator import evaluate_all, evaluate_model
+
+        models_to_run = [args.model] if args.model else MODEL_IDS
+        force = args.force
+
+        try:
+            print("=" * 60)
+            print("SIP Pipeline — Full Run")
+            print("=" * 60)
+
+            print("\n[1/6] Building RCAC...")
+            build_rcac(force=force)
+
+            print("\n[2/6] Building labels...")
+            build_labels(force=force)
+
+            print("\n[3/6] Building features...")
+            build_features(force=force)
+
+            print("\n[4/6] Building IRIC scores...")
+            build_iric(force=force)
+
+            print("\n[5/6] Training models...")
+            for mid in models_to_run:
+                model_dir = train_model(
+                    model_id=mid,
+                    force=force,
+                    quick=args.quick,
+                    n_iter=args.n_iter,
+                    n_jobs=args.n_jobs,
+                )
+                print(f"  Model {mid} trained: {model_dir}")
+
+            print("\n[6/6] Evaluating models...")
+            if len(models_to_run) == 1:
+                report_path = evaluate_model(model_id=models_to_run[0])
+                print(f"  Evaluation complete: {report_path}")
+            else:
+                summary_path = evaluate_all()
+                print(f"  Evaluation complete: {summary_path}")
+
+            print("\n" + "=" * 60)
+            print("Pipeline complete.")
+            print("=" * 60)
+            sys.exit(0)
+        except Exception as e:
+            traceback.print_exc()
+            print(f"Pipeline error: {e}", file=sys.stderr)
             sys.exit(1)
 
     elif args.command == "compare-v1v2":

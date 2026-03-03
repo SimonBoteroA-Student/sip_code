@@ -12,6 +12,8 @@ That keeps changes deliberate and reviewable.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 
 # ============================================================
@@ -366,12 +368,213 @@ def clean_currency(series: pd.Series) -> pd.Series:
     return series.str.replace(r"[\$,]", "", regex=True).astype("Float64")
 
 
+# ============================================================
+# SODA API COLUMN RENAMES  (soda snake_case → original mixed-case)
+# ============================================================
+# The SODA endpoint returns lowercase/snake_case field names that differ
+# from the original portal export column names used throughout the codebase.
+# These mappings allow transparent loading of either format.
+
+CONTRATOS_SODA_RENAMES: dict[str, str] = {
+    "proceso_de_compra": "Proceso de Compra",
+    "id_contrato": "ID Contrato",
+    "referencia_del_contrato": "Referencia del Contrato",
+    "estado_contrato": "Estado Contrato",
+    "tipo_de_contrato": "Tipo de Contrato",
+    "modalidad_de_contratacion": "Modalidad de Contratacion",
+    "justificacion_modalidad_de": "Justificacion Modalidad de Contratacion",
+    "tipodocproveedor": "TipoDocProveedor",
+    "documento_proveedor": "Documento Proveedor",
+    "proveedor_adjudicado": "Proveedor Adjudicado",
+    "origen_de_los_recursos": "Origen de los Recursos",
+    "valor_del_contrato": "Valor del Contrato",
+    "nombre_entidad": "Nombre Entidad",
+    "nit_entidad": "Nit Entidad",
+    "departamento": "Departamento",
+    "codigo_de_categoria_principal": "Codigo de Categoria Principal",
+    "ciudad": "Ciudad",
+    "objeto_del_contrato": "Objeto del Contrato",
+    "fecha_de_firma": "Fecha de Firma",
+    "fecha_de_inicio_del_contrato": "Fecha de Inicio del Contrato",
+    "duraci_n_del_contrato": "Duración del contrato",
+    "dias_adicionados": "Dias adicionados",
+}
+
+PROCESOS_SODA_RENAMES: dict[str, str] = {
+    "id_del_proceso": "ID del Proceso",
+    "referencia_del_proceso": "Referencia del Proceso",
+    "nit_entidad": "Nit Entidad",
+    "entidad": "Entidad",
+    "codigo_pci": "PCI",
+    "departamento_entidad": "Departamento Entidad",
+    "ciudad_entidad": "Ciudad Entidad",
+    "precio_base": "Precio Base",
+    "modalidad_de_contratacion": "Modalidad de Contratacion",
+    "justificaci_n_modalidad_de": "Justificación Modalidad de Contratación",
+    "tipo_de_contrato": "Tipo de Contrato",
+    "fecha_de_publicacion_del": "Fecha de Publicacion del Proceso",
+    "fecha_de_ultima_publicaci": "Fecha de Ultima Publicación",
+    "estado_del_procedimiento": "Estado del Procedimiento",
+    "valor_total_adjudicacion": "Valor Total Adjudicacion",
+    "nit_del_proveedor_adjudicado": "NIT del Proveedor Adjudicado",
+    "nombre_del_proveedor": "Nombre del Proveedor Adjudicado",
+    "adjudicado": "Adjudicado",
+    "respuestas_al_procedimiento": "Respuestas al Procedimiento",
+    "proveedores_unicos_con": "Proveedores Unicos con Respuestas",
+    "id_del_portafolio": "ID del Portafolio",
+    "fecha_de_recepcion_de": "Fecha de Recepcion de Respuestas",
+    "fecha_adjudicacion": "Fecha Adjudicacion",
+}
+
+OFERTAS_SODA_RENAMES: dict[str, str] = {
+    "id_del_proceso_de_compra": "ID del Proceso de Compra",
+    "referencia_del_proceso": "Referencia del Proceso",
+    "nombre_proveedor": "Nombre Proveedor",
+    "nit_del_proveedor": "NIT del Proveedor",
+    "valor_de_la_oferta": "Valor de la Oferta",
+    "modalidad": "Modalidad",
+    "invitacion_directa": "Invitacion Directa",
+}
+
+PROPONENTES_SODA_RENAMES: dict[str, str] = {
+    "id_procedimiento": "ID Procedimiento",
+    "fecha_publicaci_n": "Fecha Publicación",
+    "nombre_procedimiento": "Nombre Procedimiento",
+    "nit_entidad": "NIT Entidad",
+    "codigo_entidad": "Codigo Entidad",
+    "entidad_compradora": "Entidad Compradora",
+    "proveedor": "Proveedor",
+    "nit_proveedor": "NIT Proveedor",
+    "codigo_proveedor": "Codigo Proveedor",
+}
+
+PROVEEDORES_SODA_RENAMES: dict[str, str] = {
+    "codigo": "Codigo",
+    "nombre": "Nombre",
+    "nit": "NIT",
+    "es_entidad": "Es Entidad",
+    "es_grupo": "Es grupo",
+    "esta_activa": "Esta Activa",
+    "fecha_creacion": "Fecha Creación",
+    "codigo_categoria_principal": "Codigo Categoria Principal",
+    "descripcion_categoria_principal": "Descripcion Categoria Principal",
+    "telefono": "Telefono",
+    "fax": "Fax",
+    "correo": "Correo",
+    "direccion": "Direccion",
+    "pais": "Pais",
+    "departamento": "Departamento",
+    "municipio": "Municipio",
+    "sitio_web": "Sitio web",
+    "tipo_empresa": "Tipo Empresa",
+    "nombre_representante_legal": "Nombre representante legal",
+    "tipo_doc_representante_legal": "Tipo doc representante legal",
+    "n_mero_doc_representante_legal": "Número doc representante legal",
+    "telefono_representante_legal": "Telefono representante legal",
+    "correo_representante_legal": "Correo representante legal",
+    "espyme": "EsPyme",
+    "ubicacion": "Ubicación",
+}
+
+EJECUCION_SODA_RENAMES: dict[str, str] = {
+    "identificadorcontrato": "Identificador del Contrato",
+    "tipoejecucion": "Tipo de Ejecucion",
+    "nombreplan": "Nombre del Plan",
+    "fechadeentregaesperada": "Fecha de Entrega Esperada",
+    "porcentajedeavanceesperado": "Porcentaje de Avance Esperado",
+    "fechadeentregareal": "Fecha de Entrega Real",
+    "porcentaje_de_avance_real": "Porcentaje de avance real",
+    "estado_del_contrato": "Estado del contrato",
+    "referencia_de_articulos": "Referencia de articulos",
+    "descripci_n": "Descripción",
+    "unidad": "Unidad",
+    "cantidad_adjudicada": "Cantidad adjudicada",
+    "cantidad_planeada": "Cantidad planeada",
+    "cantidadrecibida": "Cantidad Recibida",
+    "cantidadporrecibir": "Cantidad por Recibir",
+    "fechacreacion": "Fecha Creacion",
+}
+
+SUSPENSIONES_SODA_RENAMES: dict[str, str] = {
+    "id_contrato": "ID Contrato",
+    "tipo": "Tipo",
+    "fecha_de_creacion": "Fecha de Creacion",
+    "fecha_de_aprobacion": "Fecha de Aprobacion",
+    "proposito_de_la_modificacion": "Proposito de la modificacion",
+    "fecha_de_inicio_del_contrato": "Fecha de Inicio del Contrato",
+    "fecha_de_fin_del_contrato": "Fecha de Fin del Contrato",
+}
+
+# Lookup by filename for auto-detection in loaders/validators
+SODA_COLUMN_RENAMES: dict[str, dict[str, str]] = {
+    "contratos_SECOP.csv": CONTRATOS_SODA_RENAMES,
+    "procesos_SECOP.csv": PROCESOS_SODA_RENAMES,
+    "ofertas_proceso_SECOP.csv": OFERTAS_SODA_RENAMES,
+    "proponentes_proceso_SECOP.csv": PROPONENTES_SODA_RENAMES,
+    "proveedores_registrados.csv": PROVEEDORES_SODA_RENAMES,
+    "ejecucion_contratos.csv": EJECUCION_SODA_RENAMES,
+    "suspensiones_contratos.csv": SUSPENSIONES_SODA_RENAMES,
+}
+
+
+# ============================================================
+# VALIDATION & SODA-RESOLUTION UTILITIES
+# ============================================================
+
+def resolve_soda_columns(
+    path: str,
+    usecols: list[str] | list[int],
+    dtype: dict,
+    encoding: str = "utf-8",
+) -> tuple[list[str] | list[int], dict, dict[str, str]]:
+    """Auto-detect SODA headers and return adapted usecols/dtype + rename map.
+
+    If the file already has original headers, returns inputs unchanged.
+    If the file has SODA snake_case headers, returns SODA-mapped usecols/dtype
+    and a rename dict to apply after reading each chunk.
+
+    Returns:
+        (resolved_usecols, resolved_dtype, rename_map)
+        rename_map: {soda_name: original_name} — empty if no remapping needed.
+    """
+    if usecols and isinstance(usecols[0], int):
+        return usecols, dtype, {}
+
+    header = pd.read_csv(path, nrows=0, encoding=encoding, encoding_errors="replace")
+    actual = set(header.columns)
+
+    # Already in original format — no remapping needed
+    if all(c in actual for c in usecols):
+        return usecols, dtype, {}
+
+    # Look up SODA renames for this file
+    filename = Path(path).name
+    soda_map = SODA_COLUMN_RENAMES.get(filename, {})
+    if not soda_map:
+        return usecols, dtype, {}
+
+    # Build reverse: original_name → soda_name
+    reverse = {v: k for k, v in soda_map.items()}
+
+    resolved_usecols = [reverse.get(c, c) for c in usecols]
+    rename_map = {reverse[c]: c for c in usecols if c in reverse}
+
+    resolved_dtype = {}
+    for k, v in dtype.items():
+        resolved_dtype[reverse.get(k, k)] = v
+
+    return resolved_usecols, resolved_dtype, rename_map
+
+
 def validate_columns(path: str, expected: list[str] | list[int], encoding: str = "utf-8") -> None:
     """Read only the header row and check that all expected columns exist.
 
     Raises ValueError listing missing columns if any are absent.
     For headerless files (expected is a list of int), validation is skipped —
     integer usecols are positional and always valid.
+
+    Transparently accepts SODA API snake_case headers when a rename mapping
+    exists for the file.
 
     Args:
         path: Absolute or relative path to the CSV file.
@@ -388,8 +591,20 @@ def validate_columns(path: str, expected: list[str] | list[int], encoding: str =
 
     header = pd.read_csv(path, nrows=0, encoding=encoding, encoding_errors="replace")
     missing = [c for c in expected if c not in header.columns]
-    if missing:
-        raise ValueError(
-            f"Missing required columns in {path}: {missing}. "
-            f"Available columns: {list(header.columns)}"
-        )
+    if not missing:
+        return
+
+    # Check if SODA renames can resolve missing columns
+    filename = Path(path).name
+    soda_map = SODA_COLUMN_RENAMES.get(filename, {})
+    if soda_map:
+        reverse = {v: k for k, v in soda_map.items()}
+        still_missing = [c for c in missing if reverse.get(c, c) not in header.columns]
+        if not still_missing:
+            return  # SODA renames cover all missing columns
+        missing = still_missing
+
+    raise ValueError(
+        f"Missing required columns in {path}: {missing}. "
+        f"Available columns: {list(header.columns)}"
+    )

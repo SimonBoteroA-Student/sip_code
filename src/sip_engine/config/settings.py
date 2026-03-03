@@ -164,6 +164,7 @@ class Settings:
         self.ejecucion_path = self.secop_dir / "ejecucion_contratos.csv"
         self.adiciones_path = self.secop_dir / "adiciones.csv"
         self.suspensiones_path = self.secop_dir / "suspensiones_contratos.csv"
+        self.rues_path = self.secop_dir / "rues_personas.csv"
         self.boletines_path = self.secop_dir / "boletines.csv"
 
         # ---- Derive PACO CSV paths ----
