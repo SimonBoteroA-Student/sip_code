@@ -387,6 +387,9 @@ python -m sip_engine train [options]
 | `--n-iter N` | Number of HP search iterations (default: 200) |
 | `--n-jobs N` | Parallelism level (default: -1 = all cores) |
 | `--build-features` | Run the full feature pipeline (rcac → labels → features → iric) before training |
+| `--device {cpu,cuda,rocm}` | Force training device (default: auto-detect) |
+| `--disable-rocm` | Skip ROCm GPU even if detected |
+| `--no-interactive` | Skip interactive config screen, use defaults/CLI args |
 
 **What it does:**
 - Splits data 70/30 with stratified random sampling (seed=42)
@@ -418,6 +421,9 @@ python -m sip_engine train --build-features --force
 
 # Custom HP search with 500 iterations
 python -m sip_engine train --n-iter 500 --n-jobs 4
+
+# Force CUDA GPU training, skip interactive config
+python -m sip_engine train --device cuda --no-interactive
 ```
 
 ---
@@ -624,6 +630,20 @@ Weights must sum to 1.0. Risk threshold ranges must cover [0, 1] without gaps.
 
 - **Chunk size**: 50,000 rows per chunk for large CSV reading (configurable in `settings.py`)
 - **Encoding**: UTF-8 for all files (with `errors="replace"` fallback)
+
+---
+
+## Docker
+
+```bash
+# CPU-only (slim image)
+docker build -t sip-engine .
+docker run -v $(pwd)/secopDatabases:/app/secopDatabases -v $(pwd)/artifacts:/app/artifacts sip-engine run-pipeline --quick --no-interactive
+
+# CUDA GPU (requires nvidia-docker)
+docker build -f Dockerfile.cuda -t sip-engine-cuda .
+docker run --gpus all -v $(pwd)/secopDatabases:/app/secopDatabases -v $(pwd)/artifacts:/app/artifacts sip-engine-cuda train --device cuda --no-interactive
+```
 
 ---
 
