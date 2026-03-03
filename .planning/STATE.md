@@ -5,20 +5,26 @@
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 13 executing — Windows 10 compatibility (3 plans, 2 waves)
+**Current focus:** Phase 13 complete — Windows 10 compatibility (3 plans, all done)
 
 ## Current Position
 
 Milestone: v1.0 — **Shipped 2026-03-02**
 Phase 12: Cross-platform OS Compatibility & Training Optimization — **Complete 2026-03-03**
-Phase 13: Windows 10 Compatibility — **Executing 2026-03-03** (3 plans, 2 executed)
-Status: Plans 01 and 02 complete. Plan 03 (CI pipeline) next.
+Phase 13: Windows 10 Compatibility — **Complete 2026-03-03** (3 plans, 3 executed)
+Status: All plans complete. CI pipeline, pathlib audit, README docs, Docker verified.
 
-Progress: [█████████████░░░░░░░] Phase 13 Plan 2/3
+Progress: [████████████████████] Phase 13 Plan 3/3
 
 ## Accumulated Context
 
 ### Decisions
+
+Phase 13-03 decisions:
+- Matrix strategy with fail-fast: false — both OS jobs complete independently
+- uv for CI dependency management — consistent with local workflow
+- No macOS in matrix — not requested, saves CI minutes
+- Windows 10 section placed as subsection of Installation with ToC link
 
 Phase 13-01 decisions:
 - Centralized all platform-specific logic in compat.py — no scattered if sys.platform guards
@@ -58,6 +64,7 @@ Phase 12-03 decisions:
 
 ### Roadmap Evolution
 
+- Phase 13 Plan 03 complete: CI pipeline + pathlib audit + README Windows docs + Docker verification
 - Phase 13 Plan 01 complete: platform compatibility layer (compat.py) + consumer wiring
 - Phase 13 Plan 02 complete: hardware detection & benchmark Windows fixes
 - Phase 13 added: Windows 10 Compatibility
@@ -78,5 +85,5 @@ None — all prior blockers resolved.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 13-01-PLAN.md (platform compatibility layer + consumer wiring)
-Resume file: .planning/phases/13-windows-10-compatibility/13-03-PLAN.md
+Stopped at: Completed 13-03-PLAN.md (CI pipeline, pathlib audit, README docs, Docker verification)
+Resume file: N/A — Phase 13 complete
