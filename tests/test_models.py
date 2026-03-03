@@ -25,11 +25,12 @@ from sip_engine.models.trainer import (
     _compare_strategies,
     _cv_score_scale_pos_weight,
     _cv_score_upsampling,
-    _detect_xgb_device,
     _hp_search,
     _stratified_split,
+    _train_with_fallback,
     train_model,
 )
+from sip_engine.hardware import get_xgb_device_kwargs
 from sip_engine.features.pipeline import FEATURE_COLUMNS
 
 
@@ -62,26 +63,30 @@ _FAST_PARAMS: dict = {
 
 
 # =============================================================================
-# Test 1: Device detection
+# Test 1: Device kwargs from hardware module
 # =============================================================================
 
 
-def test_detect_xgb_device():
-    """_detect_xgb_device returns a valid dict with tree_method key.
+def test_get_xgb_device_kwargs():
+    """get_xgb_device_kwargs returns a valid dict with tree_method key for all device types.
 
-    On CI/dev machines without GPU (most environments), tree_method='hist'
-    and no 'device' key (or device='cpu').
-    On machines with CUDA GPU, device='cuda' and tree_method='hist'.
+    Tests the hardware module function that replaced the old _detect_xgb_device().
     """
-    result = _detect_xgb_device()
+    # CPU
+    cpu_result = get_xgb_device_kwargs("cpu")
+    assert isinstance(cpu_result, dict), "Should return a dict"
+    assert "tree_method" in cpu_result, "Should always have tree_method key"
+    assert cpu_result["tree_method"] == "hist", "tree_method should be 'hist'"
 
-    assert isinstance(result, dict), "Should return a dict"
-    assert "tree_method" in result, "Should always have tree_method key"
-    assert result["tree_method"] == "hist", "tree_method should be 'hist' for all platforms"
+    # CUDA
+    cuda_result = get_xgb_device_kwargs("cuda")
+    assert cuda_result["device"] == "cuda", "CUDA should set device='cuda'"
+    assert cuda_result["tree_method"] == "hist", "tree_method should be 'hist'"
 
-    # If CUDA GPU present: device='cuda'; otherwise device key absent
-    if "device" in result:
-        assert result["device"] in ("cuda", "cpu"), "device must be 'cuda' or 'cpu'"
+    # ROCm
+    rocm_result = get_xgb_device_kwargs("rocm")
+    assert rocm_result["device"] == "cuda:0", "ROCm should use device='cuda:0' (HIP API)"
+    assert rocm_result["tree_method"] == "hist", "tree_method should be 'hist'"
 
 
 # =============================================================================

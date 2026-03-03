@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import logging
-import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,8 +35,11 @@ import scipy.stats as stats
 from sklearn.model_selection import ParameterSampler, StratifiedKFold, train_test_split
 from sklearn.metrics import roc_auc_score
 from sklearn.utils import resample
-from tqdm import tqdm
 import xgboost as xgb
+
+from sip_engine.hardware import detect_hardware, get_xgb_device_kwargs, HardwareConfig
+from sip_engine.ui.config_screen import show_config_screen
+from sip_engine.ui.progress import TrainingProgressDisplay
 
 logger = logging.getLogger(__name__)
 
@@ -62,41 +64,6 @@ PARAM_DIST: dict[str, Any] = {
     "reg_alpha": [0, 0.1, 1.0],
     "reg_lambda": [0, 1, 5],
 }
-
-
-# =============================================================================
-# Device detection
-# =============================================================================
-
-
-def _detect_xgb_device() -> dict:
-    """Return XGBoost device kwargs appropriate for the current hardware.
-
-    XGBoost 3.x API:
-    - GPU: device='cuda' + tree_method='hist' (NOT 'gpu_hist' which is deprecated)
-    - CPU: tree_method='hist' (fastest CPU method; device='cpu' implied)
-
-    Apple Silicon (ARM64 Darwin): XGBoost has no MPS/Metal support — CPU only.
-
-    Returns:
-        Dict suitable for **unpacking into XGBClassifier kwargs, e.g.:
-            {'tree_method': 'hist'}  for CPU
-            {'device': 'cuda', 'tree_method': 'hist'}  for CUDA GPU
-    """
-    try:
-        result = subprocess.run(
-            ["nvidia-smi"],
-            capture_output=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            logger.info("CUDA GPU detected via nvidia-smi — using device='cuda'")
-            return {"device": "cuda", "tree_method": "hist"}
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-
-    logger.debug("No CUDA GPU detected — using CPU (tree_method='hist')")
-    return {"tree_method": "hist"}
 
 
 # =============================================================================
@@ -155,7 +122,7 @@ def _cv_score_scale_pos_weight(
         y: Binary label array shape (n_samples,).
         n_splits: Number of StratifiedKFold folds. Default 5.
         seed: Random seed for StratifiedKFold. Default 42.
-        device_kwargs: XGBoost device kwargs from _detect_xgb_device(). If None,
+        device_kwargs: XGBoost device kwargs from get_xgb_device_kwargs(). If None,
             uses CPU default {'tree_method': 'hist'}.
 
     Returns:
@@ -183,7 +150,23 @@ def _cv_score_scale_pos_weight(
             verbosity=0,
             random_state=seed,
         )
-        clf.fit(X_tr, y_tr)
+        try:
+            clf.fit(X_tr, y_tr)
+        except (RuntimeError, xgb.core.XGBoostError) as e:
+            if "device" in device_kwargs and device_kwargs.get("device", "").startswith("cuda"):
+                logger.warning("GPU error in CV fold: %s — retrying on CPU", e)
+                cpu_kw = {"tree_method": "hist"}
+                clf = xgb.XGBClassifier(
+                    **params,
+                    **cpu_kw,
+                    objective="binary:logistic",
+                    scale_pos_weight=scale_pos_weight,
+                    verbosity=0,
+                    random_state=seed,
+                )
+                clf.fit(X_tr, y_tr)
+            else:
+                raise
         proba = clf.predict_proba(X_val)[:, 1]
         score = roc_auc_score(y_val, proba)
         fold_scores.append(score)
@@ -221,7 +204,7 @@ def _cv_score_upsampling(
         y: Binary label array shape (n_samples,).
         n_splits: Number of StratifiedKFold folds. Default 5.
         seed: Random seed for StratifiedKFold and resample. Default 42.
-        device_kwargs: XGBoost device kwargs from _detect_xgb_device(). If None,
+        device_kwargs: XGBoost device kwargs from get_xgb_device_kwargs(). If None,
             uses CPU default {'tree_method': 'hist'}.
 
     Returns:
@@ -263,7 +246,22 @@ def _cv_score_upsampling(
             verbosity=0,
             random_state=seed,
         )
-        clf.fit(X_tr_up, y_tr_up)
+        try:
+            clf.fit(X_tr_up, y_tr_up)
+        except (RuntimeError, xgb.core.XGBoostError) as e:
+            if "device" in device_kwargs and device_kwargs.get("device", "").startswith("cuda"):
+                logger.warning("GPU error in CV fold (upsampling): %s — retrying on CPU", e)
+                cpu_kw = {"tree_method": "hist"}
+                clf = xgb.XGBClassifier(
+                    **params,
+                    **cpu_kw,
+                    objective="binary:logistic",
+                    verbosity=0,
+                    random_state=seed,
+                )
+                clf.fit(X_tr_up, y_tr_up)
+            else:
+                raise
 
         # Score on ORIGINAL validation fold (no upsampling)
         proba = clf.predict_proba(X_val)[:, 1]
@@ -337,6 +335,8 @@ def _hp_search(
     n_jobs: int = -1,
     device_kwargs: dict | None = None,
     progress: bool = True,
+    model_id: str = "",
+    device: str = "cpu",
 ) -> dict:
     """Randomized hyperparameter search with strategy comparison.
 
@@ -360,9 +360,11 @@ def _hp_search(
         n_splits: Number of StratifiedKFold folds per candidate. Default 5.
         seed: Random seed for ParameterSampler and CV. Default 42.
         n_jobs: Reserved for future parallel execution (currently unused).
-        device_kwargs: XGBoost device kwargs from _detect_xgb_device(). If None,
+        device_kwargs: XGBoost device kwargs from get_xgb_device_kwargs(). If None,
             uses CPU default {'tree_method': 'hist'}.
-        progress: If True, show tqdm progress bar. Default True.
+        progress: If True, show rich TrainingProgressDisplay. Default True.
+        model_id: Model identifier for display (e.g. 'M1'). Default ''.
+        device: Device type string for display (e.g. 'cpu', 'cuda'). Default 'cpu'.
 
     Returns:
         Dict with keys:
@@ -385,9 +387,14 @@ def _hp_search(
     best_cv_auc_std: float = 0.0
     all_results: list[dict] = []
 
-    iterator = tqdm(param_samples, desc="HP search", disable=not progress)
+    display: TrainingProgressDisplay | None = None
+    if progress:
+        display = TrainingProgressDisplay(
+            total_iterations=n_iter, model_id=model_id, device=device
+        )
+        display.start()
 
-    for params in iterator:
+    for i, params in enumerate(param_samples):
         comparison = _compare_strategies(
             params=params,
             X=X,
@@ -417,8 +424,11 @@ def _hp_search(
             best_params = dict(params)
             best_strategy = winner
 
-        if progress:
-            iterator.set_postfix(best_auc=f"{best_cv_auc_mean:.4f}")
+        if progress and display is not None:
+            display.update(iteration=i, best_score=best_cv_auc_mean)
+
+    if progress and display is not None:
+        display.stop()
 
     logger.info(
         "HP search complete: best_strategy=%s, best_cv_auc=%.4f±%.4f over %d iterations",
@@ -437,6 +447,36 @@ def _hp_search(
         "n_iter": n_iter,
         "n_splits": n_splits,
     }
+
+
+# =============================================================================
+# GPU fallback wrapper
+# =============================================================================
+
+
+def _train_with_fallback(
+    clf_kwargs: dict,
+    X_fit,
+    y_fit,
+    device_type: str,
+) -> tuple[xgb.XGBClassifier, str]:
+    """Train XGBClassifier with automatic CPU fallback on GPU failure.
+
+    Returns (fitted_classifier, actual_device_used).
+    """
+    try:
+        clf = xgb.XGBClassifier(**clf_kwargs)
+        clf.fit(X_fit, y_fit)
+        return clf, device_type
+    except (RuntimeError, xgb.core.XGBoostError) as e:
+        if device_type != "cpu":
+            logger.warning("GPU training failed: %s", e)
+            logger.warning("Falling back to CPU...")
+            # Remove GPU device kwargs, add CPU kwargs
+            cpu_kwargs = {k: v for k, v in clf_kwargs.items() if k != "device"}
+            cpu_kwargs["tree_method"] = "hist"
+            return _train_with_fallback(cpu_kwargs, X_fit, y_fit, "cpu")
+        raise
 
 
 # =============================================================================
@@ -525,6 +565,9 @@ def train_model(
     quick: bool = False,
     n_iter: int = 200,
     n_jobs: int = -1,
+    device: str | None = None,
+    disable_rocm: bool = False,
+    interactive: bool = True,
 ) -> Path:
     """Train a single XGBoost classifier and serialize all artifacts.
 
@@ -554,6 +597,9 @@ def train_model(
         quick: If True, use reduced iterations (~20) and 3-fold CV.
         n_iter: Number of HP search iterations. Default 200.
         n_jobs: Reserved for future parallel execution (currently unused).
+        device: Force training device ('cpu', 'cuda', 'rocm'). None = auto-detect.
+        disable_rocm: If True, skip ROCm detection and fall back to CPU.
+        interactive: If True, show interactive config screen before training.
 
     Returns:
         Path to the model directory containing all serialized artifacts.
@@ -594,6 +640,40 @@ def train_model(
 
     model_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Training model %s — artifacts will be saved to %s", model_id, model_dir)
+
+    # ------------------------------------------------------------------
+    # Step 2b: Hardware detection + config screen
+    # ------------------------------------------------------------------
+    hw_config = detect_hardware(disable_rocm=disable_rocm)
+    logger.info(
+        "Hardware detected: OS=%s, arch=%s, CPU=%d/%d cores, RAM=%.1fGB, GPU=%s",
+        hw_config.os_name, hw_config.arch,
+        hw_config.cpu_cores_physical, hw_config.cpu_cores_logical,
+        hw_config.ram_total_gb, hw_config.gpu_type,
+    )
+
+    # Device override from CLI
+    effective_device = device if device else hw_config.gpu_type
+
+    # Show interactive config screen (only if interactive)
+    if interactive:
+        user_config = show_config_screen(
+            hw_config,
+            defaults={
+                "n_jobs": n_jobs if n_jobs > 0 else hw_config.cpu_cores_physical,
+                "n_iter": n_iter,
+                "cv_folds": 5,
+                "device": effective_device,
+            },
+        )
+        n_iter = user_config["n_iter"]
+        n_jobs = user_config["n_jobs"]
+        effective_device = user_config["device"]
+    else:
+        if n_jobs == -1:
+            n_jobs = hw_config.cpu_cores_physical
+
+    device_kwargs = get_xgb_device_kwargs(effective_device)
 
     # ------------------------------------------------------------------
     # Step 3: Load features.parquet + labels.parquet
@@ -758,13 +838,12 @@ def train_model(
     # ------------------------------------------------------------------
     # Step 9: HP search
     # ------------------------------------------------------------------
-    device_kwargs = _detect_xgb_device()
     logger.info(
         "Starting HP search for model %s: n_iter=%d, n_splits=%d, device=%s",
         model_id,
         n_iter,
         n_splits,
-        device_kwargs,
+        effective_device,
     )
 
     search_result = _hp_search(
@@ -776,6 +855,8 @@ def train_model(
         n_jobs=n_jobs,
         device_kwargs=device_kwargs,
         progress=True,
+        model_id=model_id,
+        device=effective_device,
     )
 
     best_params = search_result["best_params"]
@@ -803,8 +884,6 @@ def train_model(
     if best_strategy == "scale_pos_weight":
         clf_kwargs["scale_pos_weight"] = scale_pos_weight_value
 
-    clf = xgb.XGBClassifier(**clf_kwargs)
-
     if best_strategy == "upsampling_25pct":
         # Upsample minority on full training set before final fit
         X_train_arr = X_train.values
@@ -824,10 +903,13 @@ def train_model(
             X_fit_arr, y_fit_arr = X_train_arr, y_train_arr
         # Wrap in DataFrame with column names so feature_names_in_ is set
         X_fit_df = pd.DataFrame(X_fit_arr, columns=FEATURE_COLUMNS)
-        clf.fit(X_fit_df, y_fit_arr)
+        clf, actual_device = _train_with_fallback(clf_kwargs, X_fit_df, y_fit_arr, effective_device)
     else:
         # scale_pos_weight strategy — fit on training DataFrame directly
-        clf.fit(X_train[FEATURE_COLUMNS], y_train)
+        clf, actual_device = _train_with_fallback(clf_kwargs, X_train[FEATURE_COLUMNS], y_train, effective_device)
+
+    if actual_device != effective_device:
+        logger.warning("Training completed on %s (fell back from %s)", actual_device, effective_device)
 
     logger.info("Final model refitted on full training set (%d samples)", len(y_train))
 

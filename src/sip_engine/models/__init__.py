@@ -7,9 +7,9 @@ from sip_engine.models.trainer import (
     _compare_strategies,
     _cv_score_scale_pos_weight,
     _cv_score_upsampling,
-    _detect_xgb_device,
     _hp_search,
     _stratified_split,
+    _train_with_fallback,
     train_model,
 )
 
@@ -20,8 +20,8 @@ __all__ = [
     "_compare_strategies",
     "_cv_score_scale_pos_weight",
     "_cv_score_upsampling",
-    "_detect_xgb_device",
     "_hp_search",
     "_stratified_split",
+    "_train_with_fallback",
     "train_model",
 ]
