@@ -40,3 +40,17 @@
 | 9. Explainability, CRI, Testing | v1.0 | 2/2 | Complete | 2026-03-02 |
 | 10. Data Leakage Fix | v1.0 | 2/2 | Complete | 2026-03-02 |
 | 11. Bug Fixes and Test Cleanup | v1.0 | 1/1 | Complete | 2026-03-02 |
+| 12. Cross-platform OS Compatibility & Training Optimization | — | 4 | Planned | — |
+
+### Phase 12: Cross-platform OS Compatibility and Training Optimization
+
+**Goal:** Full cross-platform OS compatibility (macOS/Linux/Windows/Docker) with auto-hardware detection, interactive TUI config, GPU acceleration with fallback, and rich training progress
+**Depends on:** Phase 11
+**Requirements:** [PLAT-01, PLAT-02, PLAT-03, PLAT-04, PLAT-05, PLAT-06, PLAT-07, PLAT-08]
+**Plans:** 4 plans
+
+Plans:
+- [ ] 12-01-PLAN.md — Hardware detection foundation (OS, CPU, RAM, GPU detection + benchmark)
+- [ ] 12-02-PLAN.md — Interactive TUI components (config screen + training progress)
+- [ ] 12-03-PLAN.md — Training pipeline integration (wire hardware + TUI + GPU fallback + CLI flags)
+- [ ] 12-04-PLAN.md — Cross-platform curl fallback + Docker support
