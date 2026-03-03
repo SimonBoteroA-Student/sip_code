@@ -52,5 +52,5 @@
 Plans:
 - [x] 12-01-PLAN.md — Hardware detection foundation (OS, CPU, RAM, GPU detection + benchmark) ✓ 2026-03-03
 - [x] 12-02-PLAN.md — Interactive TUI components (config screen + training progress) ✓ 2026-03-03
-- [ ] 12-03-PLAN.md — Training pipeline integration (wire hardware + TUI + GPU fallback + CLI flags)
+- [x] 12-03-PLAN.md — Training pipeline integration (wire hardware + TUI + GPU fallback + CLI flags)
 - [x] 12-04-PLAN.md — Cross-platform curl fallback + Docker support ✓ 2026-03-03

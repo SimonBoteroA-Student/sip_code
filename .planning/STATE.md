@@ -11,10 +11,10 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 
 Milestone: v1.0 — **Shipped 2026-03-02**
 Phase 12: Cross-platform OS Compatibility & Training Optimization
-Current Plan: 3/4 (Plans 01, 02, and 04 complete)
-Status: Plan 12-02 (TUI config screen + progress display) complete. Next: 12-03 training pipeline integration.
+Current Plan: 4/4 (All plans complete)
+Status: Plan 12-03 (training pipeline integration) complete. Phase 12 fully complete.
 
-Progress: [███████████████░░░░░] Phase 12 Plan 3/4
+Progress: [████████████████████] Phase 12 Plan 4/4
 
 ## Accumulated Context
 
@@ -40,12 +40,19 @@ Phase 12-02 decisions:
 - psutil.cpu_percent(interval=None) for non-blocking CPU reads during training
 - Rich Live at 4 refreshes/second for smooth updates without overhead
 
+Phase 12-03 decisions:
+- Config screen shown only once for batch training (first model), settings reused for remaining
+- GPU fallback uses recursive _train_with_fallback() — strips device kwarg and retries on CPU
+- CV scoring functions have inline GPU fallback to prevent mid-HP-search failures
+- Non-interactive mode auto-detects CPU cores from hardware config when n_jobs=-1
+
 ### Roadmap Evolution
 
 - Phase 12 added: Cross-platform OS compatibility and training optimization
 - Phase 12 Plan 04 complete: requests fallback + Docker support
 - Phase 12 Plan 01 complete: hardware detection foundation
 - Phase 12 Plan 02 complete: interactive TUI config screen + progress display
+- Phase 12 Plan 03 complete: training pipeline integration with hardware/TUI/GPU fallback
 
 ### Pending Todos
 
@@ -58,4 +65,4 @@ None — all prior blockers resolved.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 12-02-PLAN.md (TUI config screen + progress display). Next: 12-03 training pipeline integration.
+Stopped at: Completed 12-03-PLAN.md (training pipeline integration). Phase 12 fully complete — all 4 plans done.
