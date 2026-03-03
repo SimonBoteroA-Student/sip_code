@@ -54,3 +54,12 @@ Plans:
 - [x] 12-02-PLAN.md — Interactive TUI components (config screen + training progress) ✓ 2026-03-03
 - [x] 12-03-PLAN.md — Training pipeline integration (wire hardware + TUI + GPU fallback + CLI flags) ✓ 2026-03-03
 - [x] 12-04-PLAN.md — Cross-platform curl fallback + Docker support ✓ 2026-03-03
+
+### Phase 13: Windows 10 Compatibility
+
+**Goal:** [To be planned]
+**Depends on:** Phase 12
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 13 to break down)
