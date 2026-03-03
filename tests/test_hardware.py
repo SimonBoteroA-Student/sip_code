@@ -3,19 +3,20 @@
 All tests use tiny in-memory fixtures (no disk I/O, no real data).
 Tests must complete in under 15 seconds total.
 
-Covers PLAT-01, PLAT-02, PLAT-03 requirements.
+Covers PLAT-01, PLAT-02, PLAT-03, WIN-04, WIN-08, WIN-09 requirements.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import subprocess
 from typing import get_type_hints
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
 from sip_engine.hardware import HardwareConfig, detect_hardware, benchmark_device
-from sip_engine.hardware.detector import _get_available_ram_gb
+from sip_engine.hardware.detector import _get_available_ram_gb, _has_cuda, _has_rocm, _get_gpu_name
 from sip_engine.hardware.device import get_xgb_device_kwargs
 
 
@@ -205,3 +206,76 @@ def test_get_available_ram_returns_positive():
     ram = _get_available_ram_gb()
     assert isinstance(ram, float)
     assert ram > 0
+
+
+# ---------------------------------------------------------------------------
+# 13. Windows nvidia-smi fallback for _has_cuda()
+# ---------------------------------------------------------------------------
+
+
+def test_has_cuda_windows_fallback_path():
+    """On Windows, _has_cuda should fall back to System32 path when nvidia-smi not in PATH."""
+    call_count = 0
+
+    def mock_subprocess_run(args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        cmd = args[0]
+        if cmd == "nvidia-smi":
+            raise FileNotFoundError("nvidia-smi not found")
+        elif r"System32" in cmd or "nvidia-smi.exe" in cmd:
+            result = MagicMock()
+            result.returncode = 0
+            return result
+        raise FileNotFoundError(f"Unknown command: {cmd}")
+
+    with patch("sip_engine.hardware.detector.sys") as mock_sys, \
+         patch("sip_engine.hardware.detector.subprocess.run", side_effect=mock_subprocess_run):
+        mock_sys.platform = "win32"
+        result = _has_cuda()
+    assert result is True
+    assert call_count == 2  # First call fails, second (System32) succeeds
+
+
+# ---------------------------------------------------------------------------
+# 14. ROCm skipped on Windows
+# ---------------------------------------------------------------------------
+
+
+def test_has_rocm_skips_on_windows():
+    """On Windows, _has_rocm should return False without checking filesystem."""
+    with patch("sip_engine.hardware.detector.sys") as mock_sys:
+        mock_sys.platform = "win32"
+        result = _has_rocm()
+    assert result is False
+
+
+# ---------------------------------------------------------------------------
+# 15. GPU name Windows fallback
+# ---------------------------------------------------------------------------
+
+
+def test_get_gpu_name_windows_fallback():
+    """On Windows, _get_gpu_name should fall back to System32 nvidia-smi path."""
+    call_count = 0
+
+    def mock_subprocess_run(args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        cmd = args[0]
+        if cmd == "nvidia-smi":
+            raise FileNotFoundError("nvidia-smi not found")
+        elif r"System32" in cmd or "nvidia-smi.exe" in cmd:
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = "NVIDIA GeForce RTX 3080\n"
+            return result
+        raise FileNotFoundError(f"Unknown command: {cmd}")
+
+    with patch("sip_engine.hardware.detector.sys") as mock_sys, \
+         patch("sip_engine.hardware.detector.subprocess.run", side_effect=mock_subprocess_run):
+        mock_sys.platform = "win32"
+        # Also mock pynvml to fail so it falls through to subprocess
+        with patch.dict("sys.modules", {"pynvml": None}):
+            name = _get_gpu_name()
+    assert name == "NVIDIA GeForce RTX 3080"

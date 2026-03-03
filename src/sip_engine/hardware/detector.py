@@ -10,6 +10,7 @@ import logging
 import os
 import platform
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -85,16 +86,22 @@ def _get_available_ram_gb() -> float:
 
 
 def _has_cuda() -> bool:
-    """Check for CUDA GPU via nvidia-smi."""
-    try:
-        result = subprocess.run(
-            ["nvidia-smi"],
-            capture_output=True,
-            timeout=5,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
+    """Check for CUDA GPU via nvidia-smi with Windows path fallback."""
+    nvidia_smi_cmds = ["nvidia-smi"]
+    if sys.platform == "win32":
+        nvidia_smi_cmds.append(r"C:\Windows\System32\nvidia-smi.exe")
+    for cmd in nvidia_smi_cmds:
+        try:
+            result = subprocess.run(
+                [cmd],
+                capture_output=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                return True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+    return False
 
 
 def _has_metal() -> bool:
@@ -103,7 +110,9 @@ def _has_metal() -> bool:
 
 
 def _has_rocm() -> bool:
-    """Check for AMD ROCm availability."""
+    """Check for AMD ROCm availability (not supported on Windows)."""
+    if sys.platform == "win32":
+        return False
     if os.environ.get("ROCM_HOME"):
         return True
     return Path("/opt/rocm").is_dir()
@@ -123,18 +132,22 @@ def _get_gpu_name() -> str | None:
     except Exception:
         pass
 
-    # Fallback: parse nvidia-smi output
-    try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip().split("\n")[0]
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    # Fallback: parse nvidia-smi output (with Windows path fallback)
+    nvidia_smi_cmds = ["nvidia-smi"]
+    if sys.platform == "win32":
+        nvidia_smi_cmds.append(r"C:\Windows\System32\nvidia-smi.exe")
+    for cmd in nvidia_smi_cmds:
+        try:
+            result = subprocess.run(
+                [cmd, "--query-gpu=name", "--format=csv,noheader"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip().split("\n")[0]
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
     return None
 
 
