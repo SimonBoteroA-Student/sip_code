@@ -11,10 +11,10 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 
 Milestone: v1.0 — **Shipped 2026-03-02**
 Phase 12: Cross-platform OS Compatibility & Training Optimization
-Current Plan: 2/4 (Plans 01 and 04 complete)
-Status: Plan 12-01 (hardware detection) and 12-04 (requests fallback + Docker) complete. Next: 12-02 TUI.
+Current Plan: 3/4 (Plans 01, 02, and 04 complete)
+Status: Plan 12-02 (TUI config screen + progress display) complete. Next: 12-03 training pipeline integration.
 
-Progress: [██████████░░░░░░░░░░] Phase 12 Plan 2/4
+Progress: [███████████████░░░░░] Phase 12 Plan 3/4
 
 ## Accumulated Context
 
@@ -34,11 +34,18 @@ Phase 12-01 decisions:
 - ROCm uses CUDA HIP API in XGBoost (device='cuda:0')
 - Container RAM detection checks cgroup v2 then v1 before psutil fallback
 
+Phase 12-02 decisions:
+- Block-style Unicode sliders (█/░) with arrow key navigation and direct number entry
+- Non-interactive fallback returns full defaults when stdin is not a TTY (CI/piped)
+- psutil.cpu_percent(interval=None) for non-blocking CPU reads during training
+- Rich Live at 4 refreshes/second for smooth updates without overhead
+
 ### Roadmap Evolution
 
 - Phase 12 added: Cross-platform OS compatibility and training optimization
 - Phase 12 Plan 04 complete: requests fallback + Docker support
 - Phase 12 Plan 01 complete: hardware detection foundation
+- Phase 12 Plan 02 complete: interactive TUI config screen + progress display
 
 ### Pending Todos
 
@@ -51,4 +58,4 @@ None — all prior blockers resolved.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 12-01-PLAN.md (hardware detection foundation). Next: 12-02 TUI components.
+Stopped at: Completed 12-02-PLAN.md (TUI config screen + progress display). Next: 12-03 training pipeline integration.
