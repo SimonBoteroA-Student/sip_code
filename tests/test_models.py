@@ -508,7 +508,7 @@ def test_feature_registry_column_order(tmp_path, monkeypatch):
 
 
 # =============================================================================
-# Test 17: CLI train --help shows all 5 flags
+# Test 17: CLI train --help shows all flags including new Phase 12 flags
 # =============================================================================
 
 
@@ -521,5 +521,67 @@ def test_cli_train_help():
     )
     assert result.returncode == 0, f"train --help should exit 0, got {result.returncode}"
     output = result.stdout
-    for flag in ("--model", "--force", "--quick", "--n-iter", "--n-jobs"):
+    for flag in ("--model", "--force", "--quick", "--n-iter", "--n-jobs",
+                 "--device", "--disable-rocm", "--no-interactive"):
         assert flag in output, f"train --help output must contain '{flag}'"
+
+
+# =============================================================================
+# Test 18: CLI run-pipeline --help shows new Phase 12 flags
+# =============================================================================
+
+
+def test_cli_run_pipeline_help():
+    """python -m sip_engine run-pipeline --help shows device/rocm/interactive flags."""
+    result = subprocess.run(
+        [sys.executable, "-m", "sip_engine", "run-pipeline", "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"run-pipeline --help should exit 0, got {result.returncode}"
+    output = result.stdout
+    for flag in ("--device", "--disable-rocm", "--no-interactive"):
+        assert flag in output, f"run-pipeline --help output must contain '{flag}'"
+
+
+# =============================================================================
+# Test 19: train_model accepts new params without error
+# =============================================================================
+
+
+def test_train_model_accepts_new_params():
+    """train_model signature accepts device, disable_rocm, interactive kwargs."""
+    import inspect
+    sig = inspect.signature(train_model)
+    param_names = list(sig.parameters.keys())
+    assert "device" in param_names, "train_model must accept 'device' param"
+    assert "disable_rocm" in param_names, "train_model must accept 'disable_rocm' param"
+    assert "interactive" in param_names, "train_model must accept 'interactive' param"
+
+    # Verify defaults are backward-compatible
+    assert sig.parameters["device"].default is None, "device default must be None"
+    assert sig.parameters["disable_rocm"].default is False, "disable_rocm default must be False"
+    assert sig.parameters["interactive"].default is True, "interactive default must be True"
+
+
+# =============================================================================
+# Test 20: _train_with_fallback on CPU works
+# =============================================================================
+
+
+def test_train_with_fallback_cpu():
+    """_train_with_fallback trains successfully on CPU and returns correct device."""
+    import xgboost as xgb
+
+    clf_kwargs = {
+        "n_estimators": 10,
+        "max_depth": 3,
+        "learning_rate": 0.1,
+        "tree_method": "hist",
+        "objective": "binary:logistic",
+        "verbosity": 0,
+        "random_state": 42,
+    }
+    clf, actual_device = _train_with_fallback(clf_kwargs, tiny_X, tiny_y, "cpu")
+    assert isinstance(clf, xgb.XGBClassifier), "Should return an XGBClassifier"
+    assert actual_device == "cpu", "Should report 'cpu' as actual device"

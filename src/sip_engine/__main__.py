@@ -83,6 +83,22 @@ def main() -> None:
         action="store_true",
         help="Run full feature pipeline (rcac → labels → features → iric) before training",
     )
+    train_parser.add_argument(
+        "--device",
+        choices=["cpu", "cuda", "rocm"],
+        default=None,
+        help="Force training device (default: auto-detect best available)",
+    )
+    train_parser.add_argument(
+        "--disable-rocm",
+        action="store_true",
+        help="Skip ROCm GPU even if detected (use when ROCm is unstable)",
+    )
+    train_parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        help="Skip interactive config screen, use defaults/CLI args directly",
+    )
 
     run_parser = subparsers.add_parser("run-pipeline", help="Run the full SIP pipeline end to end")
     run_parser.add_argument(
@@ -111,6 +127,22 @@ def main() -> None:
         type=int,
         default=-1,
         help="Parallelism level (default: -1 = all cores)",
+    )
+    run_parser.add_argument(
+        "--device",
+        choices=["cpu", "cuda", "rocm"],
+        default=None,
+        help="Force training device (default: auto-detect best available)",
+    )
+    run_parser.add_argument(
+        "--disable-rocm",
+        action="store_true",
+        help="Skip ROCm GPU even if detected (use when ROCm is unstable)",
+    )
+    run_parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        help="Skip interactive config screen, use defaults/CLI args directly",
     )
 
     evaluate_parser = subparsers.add_parser("evaluate", help="Evaluate trained models")
@@ -255,13 +287,16 @@ def main() -> None:
                 build_features(force=args.force)
                 print("Building IRIC scores...")
                 build_iric(force=args.force)
-            for mid in models_to_train:
+            for i, mid in enumerate(models_to_train):
                 model_dir = train_model(
                     model_id=mid,
                     force=args.force,
                     quick=args.quick,
                     n_iter=args.n_iter,
                     n_jobs=args.n_jobs,
+                    device=args.device,
+                    disable_rocm=args.disable_rocm,
+                    interactive=(not args.no_interactive and i == 0),
                 )
                 print(f"Model {mid} trained: {model_dir}")
             sys.exit(0)
@@ -377,13 +412,16 @@ def main() -> None:
             build_iric(force=force)
 
             print("\n[5/6] Training models...")
-            for mid in models_to_run:
+            for i, mid in enumerate(models_to_run):
                 model_dir = train_model(
                     model_id=mid,
                     force=force,
                     quick=args.quick,
                     n_iter=args.n_iter,
                     n_jobs=args.n_jobs,
+                    device=args.device,
+                    disable_rocm=args.disable_rocm,
+                    interactive=(not args.no_interactive and i == 0),
                 )
                 print(f"  Model {mid} trained: {model_dir}")
 
