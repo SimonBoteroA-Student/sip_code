@@ -1,0 +1,44 @@
+# SIP Engine — CUDA-enabled Docker image
+# Build: docker build -f Dockerfile.cuda -t sip-engine-cuda .
+# Run:   docker run --gpus all -v $(pwd)/secopDatabases:/app/secopDatabases -v $(pwd)/artifacts:/app/artifacts sip-engine-cuda train --device cuda
+
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+
+# Install Python 3.12 and curl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+    python3.12 \
+    python3.12-dev \
+    python3.12-venv \
+    python3-pip \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Make python3.12 the default python
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+
+WORKDIR /app
+
+# Copy and install
+COPY pyproject.toml ./
+COPY src/ ./src/
+
+RUN python -m pip install --no-cache-dir --break-system-packages .
+
+# Create directories
+RUN mkdir -p secopDatabases artifacts Data/Propia/PACO
+
+# Verify XGBoost loads
+RUN python -c "import xgboost as xgb; print(f'XGBoost {xgb.__version__}')"
+
+# Create non-root user
+RUN useradd -m -u 1000 sip && chown -R sip:sip /app
+USER sip
+
+ENTRYPOINT ["python", "-m", "sip_engine"]
+CMD ["--help"]

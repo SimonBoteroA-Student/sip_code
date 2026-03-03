@@ -1,0 +1,27 @@
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.eggs
+
+# Data (mount at runtime, don't bake into image)
+secopDatabases/
+artifacts/
+Data/
+
+# Dev/IDE
+.git
+.venv
+.env
+*.swp
+.DS_Store
+.planning/
+.claude/
+.agents/
+ignore/
+tests/
+
+# Docs
+*.md
+!README.md
