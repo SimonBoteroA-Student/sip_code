@@ -12,6 +12,7 @@ A Python machine learning pipeline that detects corruption risk in Colombian pub
 - [Technical Architecture](#technical-architecture)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
+  - [Windows 10 Support](#windows-10-support)
 - [Data Setup](#data-setup)
 - [CLI Commands Reference](#cli-commands-reference)
   - [download-data](#0-download-data)
@@ -126,6 +127,38 @@ pip install -e ".[dev]"
 # 6. Verify core imports
 python -c "import xgboost; import shap; print('OK')"
 ```
+
+### Windows 10 Support
+
+SIP is fully supported on Windows 10 with Windows Terminal + PowerShell 7.
+
+**Installation:**
+
+```bash
+# Install uv (if not already installed)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Clone and install
+git clone <repo-url> "SIP Code"
+cd "SIP Code"
+uv sync --dev
+```
+
+**Running:**
+
+```bash
+# All commands use uv run
+uv run sip-engine --help
+uv run sip-engine train --quick
+uv run sip-engine run-pipeline --quick
+uv run sip-engine download-data --dry-run
+```
+
+**Notes:**
+- UTF-8 console encoding is configured automatically at startup
+- Unicode block characters degrade to ASCII in terminals without UTF-8 support
+- CUDA GPU acceleration works with NVIDIA drivers installed
+- All tests: `uv run pytest tests/ -v`
 
 ---
 
