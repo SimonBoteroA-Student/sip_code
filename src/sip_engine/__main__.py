@@ -5,9 +5,13 @@ import sys
 import traceback
 from pathlib import Path
 
+from sip_engine.compat import ensure_utf8_console
+
 
 def main() -> None:
     """SIP -- Sistema Inteligente de Prediccion CLI."""
+    ensure_utf8_console()
+
     parser = argparse.ArgumentParser(
         prog="python -m sip_engine",
         description="SIP -- Sistema Inteligente de Prediccion",

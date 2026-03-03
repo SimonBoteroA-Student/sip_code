@@ -19,6 +19,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from sip_engine.hardware import HardwareConfig
+from sip_engine.compat import supports_unicode_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +27,20 @@ logger = logging.getLogger(__name__)
 # Slider widget
 # ---------------------------------------------------------------------------
 
-_FILLED = "█"
-_EMPTY = "░"
+# Unicode block chars and ASCII fallbacks for slider rendering
+_FILLED_UNICODE = "█"
+_EMPTY_UNICODE = "░"
+_FILLED_ASCII = "#"
+_EMPTY_ASCII = "."
+
+
+def _get_bar_chars() -> tuple[str, str]:
+    """Return (filled, empty) bar characters based on terminal support."""
+    if supports_unicode_blocks():
+        return _FILLED_UNICODE, _EMPTY_UNICODE
+    return _FILLED_ASCII, _EMPTY_ASCII
+
+
 _BAR_WIDTH = 20
 
 
@@ -49,6 +62,8 @@ class _SliderWidget:
         self.step = step
         # Buffer for direct-number entry
         self._number_buf: str = ""
+        # Resolve bar characters once at creation time
+        self._filled, self._empty = _get_bar_chars()
 
     # -- value helpers -------------------------------------------------------
 
@@ -82,7 +97,7 @@ class _SliderWidget:
         )
         filled = int(ratio * _BAR_WIDTH)
         empty = _BAR_WIDTH - filled
-        bar = f"[{_FILLED * filled}{_EMPTY * empty}]"
+        bar = f"[{self._filled * filled}{self._empty * empty}]"
         label = f"  {self.name + ':':<16s} {bar} {self.current} / {self.max_val}"
         style = "bold cyan" if selected else ""
         prefix = "▸ " if selected else "  "

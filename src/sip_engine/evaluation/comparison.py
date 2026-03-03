@@ -62,7 +62,7 @@ def _load_json_safe(path: Path) -> dict | None:
     """Load a JSON file, returning None if missing."""
     if not path.exists():
         return None
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -176,7 +176,7 @@ def generate_comparison_report(
         "generated_at": generated_at,
     }
     json_path = output_dir / "comparison.json"
-    with open(json_path, "w") as f:
+    with open(json_path, "w", encoding="utf-8") as f:
         json.dump(comparison_data, f, indent=2)
     logger.info("Comparison JSON written: %s", json_path)
 

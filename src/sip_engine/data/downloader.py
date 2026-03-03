@@ -37,6 +37,7 @@ from typing import Sequence
 
 import requests  # Fallback when curl is not available
 
+from sip_engine.compat import safe_rename
 from sip_engine.config import get_settings
 
 # ── Dataset registry ─────────────────────────────────────────────────────────
@@ -169,7 +170,11 @@ def _term_width() -> int:
 
 
 def _clear_lines(n: int) -> None:
-    """Move cursor up n lines and clear them."""
+    """Move cursor up n lines and clear them.
+
+    Uses ANSI VT100 escape sequences — works in Windows Terminal;
+    the requests fallback path (primary on Windows) does not use this.
+    """
     for _ in range(n):
         sys.stdout.write("\033[A\033[2K")
     sys.stdout.flush()
@@ -217,7 +222,7 @@ def _download_with_requests(
                         if downloaded % (10 * 1024 * 1024) < 65536:
                             print(f"\r    {_fmt_size(downloaded)}", end="", flush=True)
             print(f"\r  ✓  {ds.key:<16} {_fmt_size(downloaded)}")
-            tmp.rename(target)
+            safe_rename(tmp, target)
             succeeded.append(target)
         except KeyboardInterrupt:
             print(f"\n  ⚠  Download interrupted. Partial file preserved: {tmp}")
@@ -528,7 +533,7 @@ def download_datasets(
                 size = 0.0
                 if ok and slot.tmp.exists():
                     size = slot.tmp.stat().st_size
-                    slot.tmp.rename(slot.target)
+                    safe_rename(slot.tmp, slot.target)
                     succeeded.append(slot.target)
                 elif not ok:
                     stderr_msg = ""

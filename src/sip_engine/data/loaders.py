@@ -20,7 +20,6 @@ POST-EXECUTION NOTE: load_ejecucion() is for RCAC use only (FEAT-08 exclusion).
 from __future__ import annotations
 
 import logging
-import subprocess
 import time
 from collections.abc import Generator
 
@@ -28,6 +27,7 @@ import pandas as pd
 import tqdm
 
 from sip_engine.config import get_settings
+from sip_engine.compat import count_lines
 from sip_engine.data.schemas import (
     ADICIONES_DTYPE,
     ADICIONES_USECOLS,
@@ -73,21 +73,6 @@ logger = logging.getLogger(__name__)
 # Private helpers
 # ============================================================
 
-def _count_lines(path) -> int:
-    """Count lines in a file using wc -l. Returns 0 on failure (tqdm shows spinner)."""
-    try:
-        result = subprocess.run(
-            ["wc", "-l", str(path)],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode == 0:
-            return int(result.stdout.strip().split()[0])
-    except (subprocess.TimeoutExpired, ValueError, IndexError, OSError):
-        pass
-    return 0
-
 
 def _total_chunks(path, chunk_size: int, has_header: bool = True) -> int:
     """Estimate number of chunks for the tqdm total parameter.
@@ -100,7 +85,7 @@ def _total_chunks(path, chunk_size: int, has_header: bool = True) -> int:
     Returns:
         Estimated chunk count, or 0 if line count is unavailable.
     """
-    line_count = _count_lines(path)
+    line_count = count_lines(path)
     if line_count == 0:
         return 0
     data_rows = line_count - 1 if has_header else line_count
