@@ -41,7 +41,7 @@
 | 10. Data Leakage Fix | v1.0 | 2/2 | Complete | 2026-03-02 |
 | 11. Bug Fixes and Test Cleanup | v1.0 | 1/1 | Complete | 2026-03-02 |
 | 12. Cross-platform OS Compatibility & Training Optimization | — | 4/4 | Complete | 2026-03-03 |
-| 13. Windows 10 Compatibility | — | 0/3 | Planned | — |
+| 13. Windows 10 Compatibility | 2/3 | In Progress|  | — |
 
 ### Phase 12: Cross-platform OS Compatibility and Training Optimization
 
@@ -61,7 +61,7 @@ Plans:
 **Goal:** Make SIP pipeline fully first-class on Windows 10 — fix all runtime issues (file rename, encoding, GPU detection, Unicode TUI, line counting), add GitHub Actions CI with Windows matrix, and document Windows installation
 **Depends on:** Phase 12
 **Requirements:** [WIN-01, WIN-02, WIN-03, WIN-04, WIN-05, WIN-06, WIN-07, WIN-08, WIN-09, WIN-10, WIN-11, WIN-12, WIN-13]
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 13-01-PLAN.md — Platform compat layer + consumer integration (UTF-8, safe_rename, count_lines, Unicode degradation)
