@@ -57,9 +57,12 @@ Plans:
 
 ### Phase 13: Windows 10 Compatibility
 
-**Goal:** [To be planned]
+**Goal:** Make SIP pipeline fully first-class on Windows 10 — fix all runtime issues (file rename, encoding, GPU detection, Unicode TUI, line counting), add GitHub Actions CI with Windows matrix, and document Windows installation
 **Depends on:** Phase 12
-**Plans:** 0 plans
+**Requirements:** [WIN-01, WIN-02, WIN-03, WIN-04, WIN-05, WIN-06, WIN-07, WIN-08, WIN-09, WIN-10, WIN-11, WIN-12, WIN-13]
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 13 to break down)
+- [ ] 13-01-PLAN.md — Platform compat layer + consumer integration (UTF-8, safe_rename, count_lines, Unicode degradation)
+- [ ] 13-02-PLAN.md — Hardware detection + benchmark Windows fixes (nvidia-smi path, ROCm guard, ThreadPoolExecutor timeout)
+- [ ] 13-03-PLAN.md — GitHub Actions CI with Windows matrix + pathlib audit + README docs
