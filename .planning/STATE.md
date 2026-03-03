@@ -11,14 +11,19 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 
 Milestone: v1.0 — **Shipped 2026-03-02**
 Phase 12: Cross-platform OS Compatibility & Training Optimization — **Complete 2026-03-03**
-Phase 13: Windows 10 Compatibility — **Executing 2026-03-03** (3 plans, 1 executed)
-Status: Plan 02 complete. Plan 03 next.
+Phase 13: Windows 10 Compatibility — **Executing 2026-03-03** (3 plans, 2 executed)
+Status: Plans 01 and 02 complete. Plan 03 (CI pipeline) next.
 
-Progress: [██████░░░░░░░░░░░░░░] Phase 13 Plan 2/3
+Progress: [█████████████░░░░░░░] Phase 13 Plan 2/3
 
 ## Accumulated Context
 
 ### Decisions
+
+Phase 13-01 decisions:
+- Centralized all platform-specific logic in compat.py — no scattered if sys.platform guards
+- Slider bar chars resolved once at widget creation time to avoid repeated detection checks
+- Removed unused subprocess import from loaders.py after line-count migration
 
 Phase 13-02 decisions:
 - Loop over candidate nvidia-smi paths instead of if/else for clean extensibility
@@ -53,6 +58,7 @@ Phase 12-03 decisions:
 
 ### Roadmap Evolution
 
+- Phase 13 Plan 01 complete: platform compatibility layer (compat.py) + consumer wiring
 - Phase 13 Plan 02 complete: hardware detection & benchmark Windows fixes
 - Phase 13 added: Windows 10 Compatibility
 - Phase 12 added: Cross-platform OS compatibility and training optimization
@@ -72,5 +78,5 @@ None — all prior blockers resolved.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 13-02-PLAN.md (hardware detection & benchmark Windows fixes)
+Stopped at: Completed 13-01-PLAN.md (platform compatibility layer + consumer wiring)
 Resume file: .planning/phases/13-windows-10-compatibility/13-03-PLAN.md
