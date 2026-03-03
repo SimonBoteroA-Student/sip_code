@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 import platform
 import signal
-import threading
 import time
 
 import numpy as np
@@ -63,13 +62,21 @@ def benchmark_device(device_type: str, timeout_sec: int = 10) -> float | None:
                 signal.alarm(0)
                 signal.signal(signal.SIGALRM, old_handler)
         else:
-            # Windows: threading.Timer approach
-            timer = threading.Timer(timeout_sec, lambda: None)
-            timer.start()
-            start = time.perf_counter()
-            model.fit(X, y)
-            elapsed = time.perf_counter() - start
-            timer.cancel()
+            # Windows: use ThreadPoolExecutor with timeout
+            # (threading.Timer was a no-op — it never interrupted model.fit)
+            from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+
+            def _run_fit():
+                model.fit(X, y)
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                start = time.perf_counter()
+                future = executor.submit(_run_fit)
+                try:
+                    future.result(timeout=timeout_sec)
+                    elapsed = time.perf_counter() - start
+                except FuturesTimeoutError:
+                    raise _BenchmarkTimeout
 
         logger.info("Benchmark %s: %.3f seconds", device_type, elapsed)
         return elapsed

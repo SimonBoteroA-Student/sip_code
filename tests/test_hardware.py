@@ -279,3 +279,35 @@ def test_get_gpu_name_windows_fallback():
         with patch.dict("sys.modules", {"pynvml": None}):
             name = _get_gpu_name()
     assert name == "NVIDIA GeForce RTX 3080"
+
+
+# ---------------------------------------------------------------------------
+# 16. Benchmark Windows timeout path (ThreadPoolExecutor)
+# ---------------------------------------------------------------------------
+
+
+def test_benchmark_windows_timeout_path():
+    """On Windows, benchmark_device should complete via ThreadPoolExecutor path."""
+    with patch("sip_engine.hardware.benchmark.platform.system", return_value="Windows"):
+        elapsed = benchmark_device("cpu", timeout_sec=60)
+    assert elapsed is not None
+    assert isinstance(elapsed, float)
+    assert 0 < elapsed < 60
+
+
+# ---------------------------------------------------------------------------
+# 17. Benchmark Windows timeout triggers
+# ---------------------------------------------------------------------------
+
+
+def test_benchmark_windows_timeout_triggers():
+    """On Windows, benchmark_device should return None when timeout fires."""
+    import time as _time
+
+    def slow_fit(self, X, y, **kwargs):
+        _time.sleep(5)
+
+    with patch("sip_engine.hardware.benchmark.platform.system", return_value="Windows"), \
+         patch("xgboost.XGBClassifier.fit", side_effect=slow_fit):
+        result = benchmark_device("cpu", timeout_sec=1)
+    assert result is None
