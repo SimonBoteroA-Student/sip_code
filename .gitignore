@@ -54,4 +54,4 @@ build/
 *.parquet
 
 # Whitelist models
-!/artifacts/models/**/*.parquet
+!/artifacts/models/**/*.pkl
