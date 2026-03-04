@@ -45,15 +45,15 @@ from sip_engine.config import get_settings
 # Approximate sizes in bytes (used for ETA estimation and sorting).
 # Updated periodically — not used for correctness, only UX.
 _APPROX_SIZES: dict[str, int] = {
-    "contratos": 570_000_000,
-    "procesos": 5_300_000_000,
-    "ofertas": 3_400_000_000,
-    "proponentes": 842_000_000,
-    "proveedores": 564_000_000,
-    "ejecucion": 682_000_000,
+    "contratos": 9_400_000_000,
+    "procesos": 9_800_000_000,
+    "ofertas": 7_500_000_000,
+    "proponentes": 586_000_000,
+    "proveedores": 585_000_000,
+    "ejecucion": 926_000_000,
     "adiciones": 3_900_000_000,
-    "suspensiones": 87_000_000,
-    "rues": 2_000_000_000,
+    "suspensiones": 114_000_000,
+    "rues": 197_000_000,
 }
 
 

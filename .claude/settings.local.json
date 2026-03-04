@@ -10,7 +10,9 @@
       "Bash(python:*)",
       "WebSearch",
       "Skill(gsd:progress)",
-      "Skill(gsd:verify-work)"
+      "Skill(gsd:verify-work)",
+      "Bash(sort -k2)",
+      "Bash(read f:*)"
     ]
   }
 }

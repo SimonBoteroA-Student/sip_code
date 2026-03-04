@@ -63,7 +63,7 @@ The CRI is a weighted average of these 5 scores, producing a final value between
 ┌─────────────────── OFFLINE PIPELINE (run once) ───────────────────┐
 │                                                                    │
 │  CSV Data   →  RCAC Builder  →  Label Builder  →  Feature Pipeline │
-│  (12 GB)       (6 sources)      (M1-M4 labels)   (34 features)    │
+│  (33 GB)       (6 sources)      (M1-M4 labels)   (34 features)    │
 │                                                                    │
 │              →  IRIC Calibration  →  Model Training  →  Evaluation │
 │                 (thresholds.json)    (4 XGBoost)       (metrics)   │
@@ -98,7 +98,7 @@ The CRI is a weighted average of these 5 scores, producing a final value between
 | **pyenv** | Any | Recommended for managing Python 3.12 |
 | **libomp** | Any | Required for XGBoost on macOS ARM (`brew install libomp`) |
 | **RAM** | ≥16 GB | Large CSV files processed via chunked reading |
-| **Disk** | ~15 GB | ~12 GB data + ~3 GB for artifacts |
+| **Disk** | ~50 GB | ~33 GB SECOP data + ~3 GB RCAC sources + ~14 GB for artifacts |
 
 ---
 
@@ -178,16 +178,16 @@ Or place them manually in the `secopDatabases/` directory at the project root:
 
 | File | Description | Approx. Size |
 |------|-------------|-------------|
-| `contratos_SECOP.csv` | Main contracts table (341K rows, 87 cols) | 570 MB |
-| `procesos_SECOP.csv` | Procurement processes (5.1M rows) | 5.3 GB |
-| `ofertas_proceso_SECOP.csv` | Bids per process (6.5M rows) | 3.4 GB |
-| `proponentes_proceso_SECOP.csv` | Bidders (3.3M rows) | 841 MB |
-| `proveedores_registrados.csv` | Provider registry (1.6M rows) | 564 MB |
-| `ejecucion_contratos.csv` | Execution data (4.2M rows) | 682 MB |
-| `adiciones.csv` | Amendments (for M1/M2 labels) | ~4 GB |
-| `suspensiones_contratos.csv` | Suspended contracts | 91 MB |
-| `rues_personas.csv` | RUES – Personas Naturales, Jurídicas y ESADL (CONFECAMARAS, ~9.2M rows) | ~2 GB |
-| `boletines.csv` | Comptroller bulletins (10.8K rows) | 1.3 MB |
+| `contratos_SECOP.csv` | Main contracts table | 9.4 GB |
+| `procesos_SECOP.csv` | Procurement processes | 9.8 GB |
+| `ofertas_proceso_SECOP.csv` | Bids per process | 7.5 GB |
+| `proponentes_proceso_SECOP.csv` | Bidders | 586 MB |
+| `proveedores_registrados.csv` | Provider registry | 585 MB |
+| `ejecucion_contratos.csv` | Execution data | 926 MB |
+| `adiciones.csv` | Amendments (for M1/M2 labels) | 3.9 GB |
+| `suspensiones_contratos.csv` | Suspended contracts | 114 MB |
+| `rues_personas.csv` | RUES – Personas Naturales, Jurídicas y ESADL (CONFECAMARAS) | 197 MB |
+| `boletines.csv` | Comptroller bulletins | 1.3 MB |
 
 ### RCAC Sources (`Data/Propia/PACO/`)
 
@@ -247,7 +247,7 @@ python -m sip_engine download-data [options]
 | `--validate-only` | Only validate existing CSVs against expected column schemas |
 
 **What it does:**
-- Downloads 9 SECOP II CSV datasets via the datos.gov.co full export API (total ~17 GB)
+- Downloads 9 SECOP II CSV datasets via the datos.gov.co full export API (total ~33 GB)
 - Runs up to 4 parallel curl processes, scheduling largest files first
 - Shows live progress with per-file speed, percentage, and ETA
 - Uses HTTP/2, compression, and TCP keepalive for throughput
@@ -260,15 +260,15 @@ python -m sip_engine download-data [options]
 
 | Dataset | API ID | Approx. Size |
 |---------|--------|-------------|
-| `contratos` | `jbjy-vk9h` | 570 MB |
-| `procesos` | `p6dx-8zbt` | 5.3 GB |
-| `ofertas` | `wi7w-2nvm` | 3.4 GB |
-| `proponentes` | `hgi6-6wh3` | 842 MB |
-| `proveedores` | `qmzu-gj57` | 564 MB |
-| `ejecucion` | `mfmm-jqmq` | 682 MB |
+| `contratos` | `jbjy-vk9h` | 9.4 GB |
+| `procesos` | `p6dx-8zbt` | 9.8 GB |
+| `ofertas` | `wi7w-2nvm` | 7.5 GB |
+| `proponentes` | `hgi6-6wh3` | 586 MB |
+| `proveedores` | `qmzu-gj57` | 585 MB |
+| `ejecucion` | `mfmm-jqmq` | 926 MB |
 | `adiciones` | `cb9c-h8sn` | 3.9 GB |
-| `suspensiones` | `u99c-7mfm` | 87 MB |
-| `rues` | `c82u-588k` | ~2 GB |
+| `suspensiones` | `u99c-7mfm` | 114 MB |
+| `rues` | `c82u-588k` | 197 MB |
 
 > **Note:** `boletines.csv` (Comptroller fiscal responsibility bulletins) is not available via the datos.gov.co API — it is manually curated from quarterly PDF bulletins in the `Boletines/` directory.
 
