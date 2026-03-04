@@ -6,10 +6,10 @@ A Python offline ML pipeline that detects corruption risk in Colombian public pr
 
 ## Current State
 
-**Version:** v1.0 shipped 2026-03-02
-**Codebase:** 8,868 LOC source + 7,025 LOC tests (Python 3.12)
+**Version:** v1.1 shipped 2026-03-03
+**Codebase:** 8,946 LOC source + 7,038 LOC tests (Python 3.12)
 **Test suite:** 375 passed, 0 failures
-**Tech stack:** XGBoost 3.2, SHAP 0.50, scikit-learn 1.8, pandas 3.0
+**Tech stack:** XGBoost 3.2, SHAP 0.50, scikit-learn 1.8, pandas 3.0, Rich 13.9, psutil 6.0
 
 ## Core Value
 
@@ -17,7 +17,7 @@ Given any Colombian public contract, reliably flag corruption risk using multipl
 
 ## Requirements
 
-### Validated (v1.0)
+### Validated (v1.0 & v1.1)
 
 - ✓ RCAC from 6 sources with normalized document lookups and O(1) access — v1.0
 - ✓ 14 chunked CSV loaders handling files up to 5.3 GB — v1.0
@@ -30,6 +30,17 @@ Given any Colombian public contract, reliably flag corruption risk using multipl
 - ✓ Deterministic JSON output (IPFS-ready) — v1.0
 - ✓ Shared batch/online feature pipeline (same code path) — v1.0
 - ✓ Data leakage fix (duration from pre-amendment source, M2 labels from Dias adicionados) — v1.0
+- ✓ Auto-hardware detection (OS/CPU/RAM/GPU) with container support — v1.1
+- ✓ GPU benchmarking and auto-selection (CUDA→Metal→ROCm→CPU) — v1.1
+- ✓ Interactive TUI config screen with live resource monitoring — v1.1
+- ✓ GPU→CPU automatic fallback in training and CV scoring — v1.1
+- ✓ Docker CPU and NVIDIA CUDA image support — v1.1
+- ✓ Requests fallback for data downloads (curl-less systems) — v1.1
+- ✓ UTF-8 console initialization and Windows compatibility — v1.1
+- ✓ Safe atomic file operations and pure-Python line counting — v1.1
+- ✓ Windows 10 CUDA detection and ThreadPoolExecutor timeout — v1.1
+- ✓ GitHub Actions CI with Windows Server 2022 matrix — v1.1
+- ✓ Windows 10 installation documentation and pathlib audit — v1.1
 
 ### Active (v2 candidates)
 
@@ -96,8 +107,15 @@ Based on three key academic works:
 | Stratified random split (not temporal) | User decision — enables balanced class representation | ✓ Validated v1.0 |
 | Duration from "Duración del contrato" text | Avoids post-amendment leakage from "Fecha de Fin" | ✓ Fixed v1.0 (Phase 10) |
 | M2 labels from Dias adicionados OR EXTENSION | Union of both sources — 39K+ positives vs 19 from EXTENSION alone | ✓ Fixed v1.0 (Phase 10) |
-| Cloud-ready but not cloud-deployed | Design for portability without premature infrastructure | — Pending |
+| Cloud-ready but not cloud-deployed | Design for portability without premature infrastructure | ✓ Enabled v1.1 (Docker, CI/CD) |
 | IPFS + Ethereum as future step | Immutability/provenance — architecture does not block this | — Pending |
+| Centralized platform compat (compat.py) | No scattered if sys.platform guards — single source of truth | ✓ Shipped v1.1 |
+| Slider chars resolved at widget creation | Avoid repeated detection checks at render time | ✓ Shipped v1.1 |
+| ThreadPoolExecutor for Windows timeout | Cross-platform timeout without threading.Timer no-ops | ✓ Shipped v1.1 |
+| Hardware auto-selection via GPU priority chain | CUDA→Metal→ROCm→CPU enables best-device detection | ✓ Shipped v1.1 |
+| Docker non-root execution (sip:1000) | Security isolation and permission model compatibility | ✓ Shipped v1.1 |
+| CI matrix fail-fast: false | Both OS jobs complete independently for parallel insights | ✓ Shipped v1.1 |
+| No macOS in Windows-focused CI | Not requested, focuses effort on Windows validation | ✓ Shipped v1.1 |
 
 ---
-*Last updated: 2026-03-02 after v1.0 milestone completion*
+*Last updated: 2026-03-03 after v1.1 milestone completion*

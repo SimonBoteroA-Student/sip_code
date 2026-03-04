@@ -27,3 +27,27 @@
 
 ---
 
+## v1.1 Cross-Platform OS Compatibility & Windows Support (Shipped: 2026-03-03)
+
+**Phases completed:** 2 phases, 7 plans
+**Codebase:** 8,946 LOC source + 7,038 LOC tests (Python 3.12)
+**Timeline:** 2026-03-02 → 2026-03-03 (1 day, 41 commits)
+**Test suite:** 375 passed, 0 failures, 1 skipped
+
+**Key accomplishments:**
+1. Hardware auto-detection (OS/CPU/RAM/GPU) with Intel/NVIDIA/AMD and container support
+2. Interactive TUI config screen with live CPU/RAM/GPU monitoring and GPU benchmarking
+3. GPU→CPU automatic fallback for training failures with cross-platform support
+4. Windows 10 first-class support (UTF-8, safe file ops, Unicode TUI, line counting)
+5. Docker CPU and NVIDIA CUDA images with multi-stage builds and non-root execution
+6. GitHub Actions CI matrix with Windows Server 2022 + Ubuntu 22.04 cross-platform validation
+7. Complete Windows 10 documentation and pathlib audit (confirmed zero os.path usage)
+
+**Tech debt accepted:**
+- Windows SMB path encoding edge cases not covered (rare in practice)
+- ROCm on Windows not tested (Windows GPU support via CUDA only)
+
+**Archives:** `milestones/v1.1-ROADMAP.md`, `milestones/v1.1-REQUIREMENTS.md`
+
+---
+

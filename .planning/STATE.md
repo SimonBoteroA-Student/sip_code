@@ -2,19 +2,19 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-02)
+See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 13 complete — Windows 10 compatibility (3 plans, all done)
+**Current focus:** Milestone v1.1 complete — Cross-platform OS compatibility and Windows 10 support (Phases 12-13, 7 plans, all done)
 
 ## Current Position
 
-Milestone: v1.0 — **Shipped 2026-03-02**
+Milestone: v1.1 — **Shipped 2026-03-03**
 Phase 12: Cross-platform OS Compatibility & Training Optimization — **Complete 2026-03-03**
 Phase 13: Windows 10 Compatibility — **Complete 2026-03-03** (3 plans, 3 executed)
 Status: All plans complete. CI pipeline, pathlib audit, README docs, Docker verified.
 
-Progress: [████████████████████] Phase 13 Plan 3/3
+Progress: [████████████████████] v1.1 Complete
 
 ## Accumulated Context
 

@@ -3,6 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 Academic Deliverable** — Phases 1–11 (shipped 2026-03-02)
+- ✅ **v1.1 Cross-Platform OS Compatibility & Windows Support** — Phases 12–13 (shipped 2026-03-03)
 
 ## Phases
 
@@ -40,30 +41,22 @@
 | 9. Explainability, CRI, Testing | v1.0 | 2/2 | Complete | 2026-03-02 |
 | 10. Data Leakage Fix | v1.0 | 2/2 | Complete | 2026-03-02 |
 | 11. Bug Fixes and Test Cleanup | v1.0 | 1/1 | Complete | 2026-03-02 |
-| 12. Cross-platform OS Compatibility & Training Optimization | — | 4/4 | Complete | 2026-03-03 |
-| 13. Windows 10 Compatibility | 3/3 | Complete    | 2026-03-03 | — |
+| 12. Cross-platform OS Compatibility & Training Optimization | v1.1 | 4/4 | Complete | 2026-03-03 |
+| 13. Windows 10 Compatibility | v1.1 | 3/3 | Complete | 2026-03-03 |
 
-### Phase 12: Cross-platform OS Compatibility and Training Optimization
+<details>
+<summary>✅ v1.1 Cross-Platform OS Compatibility & Windows Support (Phases 12–13) — SHIPPED 2026-03-03</summary>
 
-**Goal:** Full cross-platform OS compatibility (macOS/Linux/Windows/Docker) with auto-hardware detection, interactive TUI config, GPU acceleration with fallback, and rich training progress
-**Depends on:** Phase 11
-**Requirements:** [PLAT-01, PLAT-02, PLAT-03, PLAT-04, PLAT-05, PLAT-06, PLAT-07, PLAT-08]
-**Plans:** 4 plans
+- [x] Phase 12: Cross-platform OS Compatibility and Training Optimization (4/4 plans) — completed 2026-03-03
+  - [x] 12-01: Hardware detection foundation (OS, CPU, RAM, GPU detection + benchmark)
+  - [x] 12-02: Interactive TUI components (config screen + training progress)
+  - [x] 12-03: Training pipeline integration (wire hardware + TUI + GPU fallback + CLI flags)
+  - [x] 12-04: Cross-platform curl fallback + Docker support
+- [x] Phase 13: Windows 10 Compatibility (3/3 plans) — completed 2026-03-03
+  - [x] 13-01: Platform compat layer + consumer integration (UTF-8, safe_rename, count_lines, Unicode degradation)
+  - [x] 13-02: Hardware detection + benchmark Windows fixes (nvidia-smi path, ROCm guard, ThreadPoolExecutor timeout)
+  - [x] 13-03: GitHub Actions CI with Windows matrix + pathlib audit + README docs
 
-Plans:
-- [x] 12-01-PLAN.md — Hardware detection foundation (OS, CPU, RAM, GPU detection + benchmark) ✓ 2026-03-03
-- [x] 12-02-PLAN.md — Interactive TUI components (config screen + training progress) ✓ 2026-03-03
-- [x] 12-03-PLAN.md — Training pipeline integration (wire hardware + TUI + GPU fallback + CLI flags) ✓ 2026-03-03
-- [x] 12-04-PLAN.md — Cross-platform curl fallback + Docker support ✓ 2026-03-03
+**Full details:** `milestones/v1.1-ROADMAP.md`
 
-### Phase 13: Windows 10 Compatibility
-
-**Goal:** Make SIP pipeline fully first-class on Windows 10 — fix all runtime issues (file rename, encoding, GPU detection, Unicode TUI, line counting), add GitHub Actions CI with Windows matrix, and document Windows installation
-**Depends on:** Phase 12
-**Requirements:** [WIN-01, WIN-02, WIN-03, WIN-04, WIN-05, WIN-06, WIN-07, WIN-08, WIN-09, WIN-10, WIN-11, WIN-12, WIN-13]
-**Plans:** 3/3 plans complete
-
-Plans:
-- [ ] 13-01-PLAN.md — Platform compat layer + consumer integration (UTF-8, safe_rename, count_lines, Unicode degradation)
-- [ ] 13-02-PLAN.md — Hardware detection + benchmark Windows fixes (nvidia-smi path, ROCm guard, ThreadPoolExecutor timeout)
-- [ ] 13-03-PLAN.md — GitHub Actions CI with Windows matrix + pathlib audit + README docs
+</details>
