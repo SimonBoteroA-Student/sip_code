@@ -50,8 +50,10 @@ THRESHOLDS: list[float] = [round(t, 2) for t in np.arange(0.05, 1.0, 0.05)]  # 1
 
 K_VALUES: list[int] = [100, 500, 1000]
 
+RECALL_K_VALUES: list[int] = [10, 50, 100, 500, 1000]
+
 # =============================================================================
-# Public metric function (exposed for testability)
+# Public metric functions (exposed for testability)
 # =============================================================================
 
 
@@ -85,6 +87,124 @@ def map_at_k(y_true: np.ndarray, y_scores: np.ndarray, k: int) -> float:
             precisions.append(num_positives / (i + 1))
 
     return float(np.mean(precisions)) if precisions else 0.0
+
+
+def recall_at_k(y_true: np.ndarray, y_scores: np.ndarray, k: int) -> float:
+    """Compute Recall@K.
+
+    Sorts predictions by score descending and counts what fraction of all
+    real positives appear in the top-K results.
+
+    Formula: Recall@K = positives_in_top_K / total_positives
+
+    Args:
+        y_true: Binary ground truth labels (0/1), shape (n,).
+        y_scores: Predicted probabilities or scores, shape (n,).
+        k: Cutoff rank. Clamped to len(y_true) if k > n.
+
+    Returns:
+        Recall@K in [0.0, 1.0]. Returns 0.0 if no positives in dataset.
+    """
+    if len(y_true) != len(y_scores):
+        raise ValueError(
+            f"y_true and y_scores must have the same length, "
+            f"got {len(y_true)} and {len(y_scores)}"
+        )
+    k = min(k, len(y_true))
+    total_positives = int(y_true.sum())
+    if total_positives == 0:
+        return 0.0
+    sorted_indices = np.argsort(y_scores)[::-1]
+    positives_in_topk = int(y_true[sorted_indices][:k].sum())
+    return positives_in_topk / total_positives
+
+
+def precision_at_k(y_true: np.ndarray, y_scores: np.ndarray, k: int) -> float:
+    """Compute Precision@K.
+
+    Sorts predictions by score descending and counts what fraction of the
+    top-K results are real positives.
+
+    Formula: Precision@K = positives_in_top_K / K
+
+    Args:
+        y_true: Binary ground truth labels (0/1), shape (n,).
+        y_scores: Predicted probabilities or scores, shape (n,).
+        k: Cutoff rank. Clamped to len(y_true) if k > n.
+
+    Returns:
+        Precision@K in [0.0, 1.0].
+    """
+    if len(y_true) != len(y_scores):
+        raise ValueError(
+            f"y_true and y_scores must have the same length, "
+            f"got {len(y_true)} and {len(y_scores)}"
+        )
+    k = min(k, len(y_true))
+    if k == 0:
+        return 0.0
+    sorted_indices = np.argsort(y_scores)[::-1]
+    positives_in_topk = int(y_true[sorted_indices][:k].sum())
+    return positives_in_topk / k
+
+
+def recall_precision_at_k(
+    y_true: np.ndarray,
+    y_scores: np.ndarray,
+    k_values: list[int],
+) -> dict:
+    """Compute Recall@K and Precision@K for multiple cutoffs.
+
+    Sorts predictions by score descending once, then iterates through all
+    K values efficiently.
+
+    Args:
+        y_true: Binary ground truth labels (0/1), shape (n,). Must be numpy array.
+        y_scores: Predicted probabilities or scores, shape (n,). Must be numpy array.
+        k_values: List of K cutoffs to evaluate (e.g. [10, 50, 100, 500, 1000]).
+
+    Returns:
+        Dict with "recall" and "precision" sub-dicts keyed by K value::
+
+            {
+              "recall":    {10: 0.08, 50: 0.35, 100: 0.62, ...},
+              "precision": {10: 0.40, 50: 0.28, 100: 0.17, ...},
+            }
+
+    Raises:
+        ValueError: If y_true and y_scores have different lengths or invalid types.
+
+    Example::
+
+        result = recall_precision_at_k(y_true, y_scores, [10, 100, 1000])
+        print(result["recall"][100])    # fraction of positives in top-100
+        print(result["precision"][100]) # fraction of top-100 that are positive
+    """
+    y_true = np.asarray(y_true)
+    y_scores = np.asarray(y_scores)
+    if y_true.ndim != 1 or y_scores.ndim != 1:
+        raise ValueError("y_true and y_scores must be 1-D arrays.")
+    if len(y_true) != len(y_scores):
+        raise ValueError(
+            f"y_true and y_scores must have the same length, "
+            f"got {len(y_true)} and {len(y_scores)}"
+        )
+
+    n = len(y_true)
+    total_positives = int(y_true.sum())
+    sorted_indices = np.argsort(y_scores)[::-1]
+    y_sorted = y_true[sorted_indices]
+
+    recall_dict: dict[int, float] = {}
+    precision_dict: dict[int, float] = {}
+
+    for k in k_values:
+        k_eff = min(k, n)
+        positives_in_topk = int(y_sorted[:k_eff].sum())
+        recall_dict[k] = positives_in_topk / total_positives if total_positives > 0 else 0.0
+        precision_dict[k] = positives_in_topk / k_eff if k_eff > 0 else 0.0
+
+    return {"recall": recall_dict, "precision": precision_dict}
 
 
 # =============================================================================
@@ -174,6 +294,22 @@ def _compute_ranking_metrics(
         result[f"ndcg_{k}"] = float(
             ndcg_score(y_true.reshape(1, -1), y_scores.reshape(1, -1), k=k)
         )
+    return result
+
+
+def _compute_recall_precision_at_k(
+    y_true: np.ndarray, y_scores: np.ndarray
+) -> dict:
+    """Compute Recall@K and Precision@K for K in RECALL_K_VALUES.
+
+    Returns:
+        Dict with keys recall_10, recall_50, ..., precision_10, precision_50, ...
+    """
+    rp = recall_precision_at_k(y_true, y_scores, RECALL_K_VALUES)
+    result: dict[str, float] = {}
+    for k in RECALL_K_VALUES:
+        result[f"recall_{k}"] = rp["recall"][k]
+        result[f"precision_{k}"] = rp["precision"][k]
     return result
 
 
@@ -358,6 +494,7 @@ def _write_csv_report(eval_dict: dict, output_path: Path) -> None:
     ranking = eval_dict.get("ranking", {})
     calib = eval_dict.get("calibration", {})
     opt = eval_dict.get("optimal_threshold", {})
+    rp = eval_dict.get("recall_precision_at_k", {})
 
     with output_path.open("w", newline="") as f:
         writer = csv.writer(f)
@@ -396,6 +533,9 @@ def _write_csv_report(eval_dict: dict, output_path: Path) -> None:
             ("optimal_threshold_precision", opt.get("precision", "")),
             ("optimal_threshold_recall", opt.get("recall", "")),
         ]
+        for k in RECALL_K_VALUES:
+            scalar_metrics.append((f"recall_{k}", rp.get(f"recall_{k}", "")))
+            scalar_metrics.append((f"precision_at_{k}", rp.get(f"precision_{k}", "")))
         for name, value in scalar_metrics:
             writer.writerow(["summary", "", name, "", "", value, "", "", "", ""])
 
@@ -421,6 +561,7 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
     ta = eval_dict.get("threshold_analysis", {})
     opt = eval_dict.get("optimal_threshold", {})
     ctx = eval_dict.get("training_context", {})
+    rp = eval_dict.get("recall_precision_at_k", {})
 
     # Image paths relative to the Markdown file (sibling images/ dir)
     img = "images"
@@ -532,6 +673,24 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
         f"| NDCG@1000 | {ranking.get('ndcg_1000', 0):.4f} |",
         "",
         f"![Ranking Metrics]({img}/ranking_metrics{ms}.png)",
+        "",
+        "---",
+        "",
+        "## 5b. Recall@K and Precision@K",
+        "",
+        "> Recall@K = fraction of all positives captured in top-K.  "
+        "Precision@K = fraction of top-K results that are positive.",
+        "",
+        "| K | Recall@K | Precision@K |",
+        "|--:|--------:|------------:|",
+    ]
+    for k in RECALL_K_VALUES:
+        lines.append(
+            f"| {k} | {rp.get(f'recall_{k}', 0):.4f} | {rp.get(f'precision_{k}', 0):.4f} |"
+        )
+    lines += [
+        "",
+        f"![Recall & Precision @K]({img}/recall_precision_at_k{ms}.png)",
         "",
         "---",
         "",
@@ -711,6 +870,13 @@ def evaluate_model(
         f"(optimal: {opt['value']:.2f}, F1={opt['f1']:.4f})"
     )
 
+    recall_precision = _compute_recall_precision_at_k(y_test, y_scores)
+    print(
+        f"  ✓ Recall@100: {recall_precision['recall_100']:.4f}, "
+        f"Recall@500: {recall_precision['recall_500']:.4f}, "
+        f"Recall@1000: {recall_precision['recall_1000']:.4f}"
+    )
+
     # Step 4: Assemble eval dict
     eval_dict: dict = {
         "model_id": model_id,
@@ -723,6 +889,7 @@ def evaluate_model(
         },
         "discrimination": discrimination,
         "ranking": ranking,
+        "recall_precision_at_k": recall_precision,
         "calibration": calibration,
         "threshold_analysis": threshold_analysis,
         "optimal_threshold": opt,
@@ -829,6 +996,7 @@ def evaluate_all(
             rank = report["ranking"]
             calib = report["calibration"]
             opt = report["optimal_threshold"]
+            rp = report.get("recall_precision_at_k", {})
 
             summary[model_id] = {
                 "auc_roc": disc["auc_roc"],
@@ -839,6 +1007,12 @@ def evaluate_all(
                 "ndcg_100": rank["ndcg_100"],
                 "ndcg_500": rank["ndcg_500"],
                 "ndcg_1000": rank["ndcg_1000"],
+                "recall_100": rp.get("recall_100", 0.0),
+                "recall_500": rp.get("recall_500", 0.0),
+                "recall_1000": rp.get("recall_1000", 0.0),
+                "precision_at_100": rp.get("precision_100", 0.0),
+                "precision_at_500": rp.get("precision_500", 0.0),
+                "precision_at_1000": rp.get("precision_1000", 0.0),
                 "optimal_threshold": opt["value"],
                 "precision_at_optimal": opt["precision"],
                 "recall_at_optimal": opt["recall"],
@@ -883,7 +1057,7 @@ def _print_summary_table(summary: dict[str, dict]) -> None:
     if not summary:
         return
 
-    headers = ["Model", "AUC-ROC", "Brier", "MAP@100", "MAP@1000", "NDCG@100", "Opt.Thresh", "P@Opt", "R@Opt"]
+    headers = ["Model", "AUC-ROC", "Brier", "MAP@100", "MAP@1000", "Recall@100", "Recall@1000", "P@K100", "Opt.Thresh", "R@Opt"]
     rows = []
     for mid, m in summary.items():
         rows.append([
@@ -892,9 +1066,10 @@ def _print_summary_table(summary: dict[str, dict]) -> None:
             f"{m['brier_score']:.4f}",
             f"{m['map_100']:.4f}",
             f"{m['map_1000']:.4f}",
-            f"{m['ndcg_100']:.4f}",
+            f"{m.get('recall_100', 0):.4f}",
+            f"{m.get('recall_1000', 0):.4f}",
+            f"{m.get('precision_at_100', 0):.4f}",
             f"{m['optimal_threshold']:.2f}",
-            f"{m['precision_at_optimal']:.4f}",
             f"{m['recall_at_optimal']:.4f}",
         ])
 

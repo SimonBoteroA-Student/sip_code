@@ -5,6 +5,7 @@ Generates publication-quality charts for model evaluation metrics:
 - ROC curve with AUC annotation
 - Precision / Recall / F1 vs. decision threshold
 - Ranking metrics bar chart (MAP@k, NDCG@k)
+- Recall@K and Precision@K line chart
 - Score distribution histogram (positive vs. negative class)
 - Calibration summary bar chart (Brier score vs. baseline)
 - SHAP feature importance horizontal bar chart (top-N by mean |SHAP|)
@@ -259,6 +260,62 @@ def plot_ranking_metrics(
     return path
 
 
+def plot_recall_precision_at_k(
+    eval_dict: dict,
+    output_dir: Path,
+    filename: str = "recall_precision_at_k.png",
+) -> Path:
+    """Plot Recall@K and Precision@K as a function of K.
+
+    Shows dual lines: Recall@K (typically rises with K) and Precision@K
+    (typically falls with K), illustrating the recall-precision trade-off
+    as the ranked cutoff increases.
+
+    Args:
+        eval_dict: Full evaluation dictionary from evaluator (must contain
+            "recall_precision_at_k" sub-dict).
+        output_dir: Directory to save the image.
+        filename: Output filename.
+
+    Returns:
+        Path to the saved image.
+    """
+    _apply_style()
+    model_id = eval_dict.get("model_id", "?")
+    rp = eval_dict.get("recall_precision_at_k", {})
+
+    from sip_engine.evaluation.evaluator import RECALL_K_VALUES
+
+    k_vals = RECALL_K_VALUES
+    recall_vals = [rp.get(f"recall_{k}", 0.0) for k in k_vals]
+    prec_vals = [rp.get(f"precision_{k}", 0.0) for k in k_vals]
+
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    ax.plot(k_vals, recall_vals, marker="o", color=_COLORS["tertiary"], label="Recall@K", linewidth=2)
+    ax.plot(k_vals, prec_vals, marker="s", color=_COLORS["secondary"], label="Precision@K", linewidth=2)
+
+    # Annotate each point
+    for k, r, p in zip(k_vals, recall_vals, prec_vals):
+        ax.annotate(f"{r:.3f}", (k, r), textcoords="offset points", xytext=(0, 6), fontsize=8, ha="center", color=_COLORS["tertiary"])
+        ax.annotate(f"{p:.3f}", (k, p), textcoords="offset points", xytext=(0, -14), fontsize=8, ha="center", color=_COLORS["secondary"])
+
+    ax.set_xlabel("K (rank cutoff)")
+    ax.set_ylabel("Score")
+    ax.set_title(f"{model_id} — Recall@K and Precision@K")
+    ax.set_xscale("log")
+    ax.set_xticks(k_vals)
+    ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
+    ax.set_ylim([0.0, 1.1])
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / filename
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
 def plot_score_distribution(
     y_true: np.ndarray,
     y_scores: np.ndarray,
@@ -439,6 +496,7 @@ def generate_all_charts(
     paths.append(plot_roc_curve(eval_dict, output_dir, filename=f"roc_curve{model_suffix}.png"))
     paths.append(plot_precision_recall_f1(eval_dict, output_dir, filename=f"precision_recall_f1{model_suffix}.png"))
     paths.append(plot_ranking_metrics(eval_dict, output_dir, filename=f"ranking_metrics{model_suffix}.png"))
+    paths.append(plot_recall_precision_at_k(eval_dict, output_dir, filename=f"recall_precision_at_k{model_suffix}.png"))
     paths.append(plot_score_distribution(y_true, y_scores, eval_dict, output_dir, filename=f"score_distribution{model_suffix}.png"))
     paths.append(plot_calibration_summary(eval_dict, output_dir, filename=f"calibration_summary{model_suffix}.png"))
 

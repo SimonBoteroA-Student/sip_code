@@ -13,21 +13,47 @@ from typing import Any
 
 import psutil
 from rich.console import Console, Group
-from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     Progress,
+    ProgressColumn,
     SpinnerColumn,
     TextColumn,
-    TimeRemainingColumn,
+    TimeElapsedColumn,
 )
 from rich.text import Text
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Custom ETA column
+# ---------------------------------------------------------------------------
+
+
+class _ETAColumn(ProgressColumn):
+    """ETA column using elapsed/progress linear interpolation.
+
+    More stable than speed-based ETA because it uses total elapsed time
+    divided by fraction done to project remaining time.
+    """
+
+    def render(self, task: Any) -> Text:  # type: ignore[override]
+        completed = task.completed
+        total = task.total
+        elapsed: float = task.elapsed or 0.0
+        if elapsed <= 0.0 or completed <= 0 or total is None or total <= 0:
+            return Text("eta: --:--", style="progress.remaining")
+        pct = completed / total
+        if pct >= 1.0:
+            return Text("eta: 0:00", style="progress.remaining")
+        eta_sec = int((elapsed / pct) * (1.0 - pct))
+        h, rem = divmod(eta_sec, 3600)
+        m, s = divmod(rem, 60)
+        if h > 0:
+            return Text(f"eta: {h}:{m:02d}:{s:02d}", style="progress.remaining")
+        return Text(f"eta: {m}:{s:02d}", style="progress.remaining")
 # GPU utilization helper
 # ---------------------------------------------------------------------------
 
@@ -81,16 +107,35 @@ class TrainingProgressDisplay:
         model_id: str = "",
         device: str = "cpu",
         console: Console | None = None,
+        show_stats: bool = False,
     ) -> None:
         self.total = total_iterations
         self.model_id = model_id
         self.device = device
+        self.show_stats = show_stats
 
         self._best_score: float | None = None
         self._best_iter: int = 0
         self._score_history: list[float] = []
         self._current_iter = 0
         self._start_time: float | None = None
+
+        self._best_score_std: float | None = None
+
+        # Extra test-set stats (show_stats mode)
+        self._stats_map100: float | None = None
+        self._stats_map500: float | None = None
+        self._stats_brier: float | None = None
+        self._stats_precision: float | None = None
+        self._stats_recall: float | None = None
+        self._stats_f1: float | None = None
+        self._stats_threshold: float | None = None
+        self._stats_fpr: list[float] | None = None
+        self._stats_tpr: list[float] | None = None
+        self._stats_recall100: float | None = None
+        self._stats_recall500: float | None = None
+        self._stats_prec100: float | None = None
+        self._stats_prec500: float | None = None
 
         # Rich components
         self._console = console or Console()
@@ -99,7 +144,9 @@ class TrainingProgressDisplay:
             TextColumn("[bold blue]HP Search"),
             BarColumn(bar_width=30),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeRemainingColumn(),
+            TextColumn("elapsed:"),
+            TimeElapsedColumn(),
+            _ETAColumn(),
             console=self._console,
         )
         self._task_id = self._progress.add_task("search", total=total_iterations)
@@ -146,6 +193,7 @@ class TrainingProgressDisplay:
         self,
         iteration: int,
         best_score: float | None = None,
+        best_score_std: float | None = None,
     ) -> None:
         """Update progress and resource stats.
 
@@ -162,6 +210,7 @@ class TrainingProgressDisplay:
             if self._best_score is None or best_score > self._best_score:
                 self._best_score = best_score
                 self._best_iter = self._current_iter
+                self._best_score_std = best_score_std
 
         if self._live is not None:
             self._live.update(self._build_display())
@@ -174,6 +223,41 @@ class TrainingProgressDisplay:
 
     def __exit__(self, *args: Any) -> None:
         self.stop()
+
+    # -- Extra stats update (show_stats mode) --------------------------------
+
+    def update_stats(
+        self,
+        map100: float,
+        map500: float,
+        brier: float,
+        precision: float,
+        recall: float,
+        f1: float,
+        threshold: float,
+        fpr: list[float],
+        tpr: list[float],
+        recall100: float = 0.0,
+        recall500: float = 0.0,
+        prec100: float = 0.0,
+        prec500: float = 0.0,
+    ) -> None:
+        """Update live test-set evaluation stats (only used when show_stats=True)."""
+        self._stats_map100 = map100
+        self._stats_map500 = map500
+        self._stats_brier = brier
+        self._stats_precision = precision
+        self._stats_recall = recall
+        self._stats_f1 = f1
+        self._stats_threshold = threshold
+        self._stats_fpr = fpr
+        self._stats_tpr = tpr
+        self._stats_recall100 = recall100
+        self._stats_recall500 = recall500
+        self._stats_prec100 = prec100
+        self._stats_prec500 = prec500
+        if self._live is not None:
+            self._live.update(self._build_display())
 
     # -- Trend calculation ---------------------------------------------------
 
@@ -189,6 +273,76 @@ class TrainingProgressDisplay:
             elif diff < -0.001:
                 return f"↓ declining ({diff:.4f} last {len(recent)} iters)"
         return "→ stable"
+
+    # -- AUC quality helpers -------------------------------------------------
+
+    @staticmethod
+    def _auc_color(auc: float) -> str:
+        """Return Rich color for AUC quality band."""
+        if auc >= 0.92:
+            return "bold bright_green"
+        elif auc >= 0.83:
+            return "green"
+        elif auc >= 0.7:
+            return "dark_orange"
+        return "red"
+
+    @staticmethod
+    def _auc_label(auc: float) -> str:
+        """Return quality label for AUC band."""
+        if auc >= 0.85:
+            return "Excellent"
+        elif auc >= 0.75:
+            return "Good"
+        elif auc >= 0.65:
+            return "Fair"
+        return "Poor"
+
+    @staticmethod
+    def _brier_label(brier: float) -> str:
+        """Return quality label for Brier score band (lower is better)."""
+        if brier < 0.05:
+            return "Excellent"
+        elif brier < 0.1:
+            return "Good"
+        return "Poor"
+
+    @staticmethod
+    def _sparkline(values: list[float], width: int = 30) -> str:
+        """Build a Unicode sparkline from a list of float values."""
+        blocks = "▁▂▃▄▅▆▇█"
+        if not values:
+            return ""
+        sample = values[-width:] if len(values) > width else values
+        lo, hi = min(sample), max(sample)
+        span = hi - lo or 1e-9
+        return "".join(blocks[min(7, int((v - lo) / span * 8))] for v in sample)
+
+    @staticmethod
+    def _render_ascii_roc(
+        fpr_list: list[float],
+        tpr_list: list[float],
+        width: int = 36,
+        height: int = 7,
+    ) -> str:
+        """Render a compact ASCII ROC curve. Returns a multi-line string."""
+        grid: list[list[str]] = [[" "] * width for _ in range(height)]
+        # Downsample so we don't draw too many overlapping dots
+        step = max(1, len(fpr_list) // (width * height))
+        for f, t in zip(fpr_list[::step], tpr_list[::step]):
+            col = min(width - 1, round(f * (width - 1)))
+            row = height - 1 - min(height - 1, round(t * (height - 1)))
+            grid[row][col] = "●"
+        lines: list[str] = []
+        for i, row in enumerate(grid):
+            tpr_val = 1.0 - i / max(height - 1, 1)
+            lines.append(f"  {tpr_val:.1f}│{''.join(row)}")
+        lines.append("     └" + "─" * width)
+        mid = width // 2 - 1
+        lines.append(
+            f"      0.0{' ' * (mid - 3)}0.5{' ' * (width - mid - 4)}1.0 FPR"
+        )
+        return "\n".join(lines)
 
     # -- Display building ----------------------------------------------------
 
@@ -219,17 +373,129 @@ class TrainingProgressDisplay:
 
         # Best score panel
         if self._best_score is not None:
+            auc = self._best_score
+            color = self._auc_color(auc)
+            label = self._auc_label(auc)
             trend = self._calculate_trend()
-            score_text = (
-                f"  Best AUC-ROC: {self._best_score:.4f}  (iter {self._best_iter}/{self.total})"
-            )
+
+            score_line = Text()
+            score_line.append("  Best AUC-ROC: ", style="bold")
+            score_line.append(f"{auc:.4f}", style=color)
+            score_line.append(f"  ({label})", style=color)
+            score_line.append(f"  iter {self._best_iter}/{self.total}", style="dim")
+
+            content = Text.assemble(score_line)
+
+            if self._best_score_std is not None:
+                std_color = self._auc_color(max(0, auc - self._best_score_std))
+                std_line = Text()
+                std_line.append("  ±Std Dev:     ", style="bold")
+                std_line.append(f"{self._best_score_std:.4f}", style=std_color)
+                std_line.append("  (lower = more stable)", style="dim")
+                content = Text.assemble(content, "\n", std_line)
+
+            # CV range line
+            if self._best_score_std is not None:
+                lo = max(0.0, auc - self._best_score_std)
+                hi = min(1.0, auc + self._best_score_std)
+                range_line = Text()
+                range_line.append("  CV Range:     ", style="bold")
+                range_line.append(f"{lo:.4f}", style=self._auc_color(lo))
+                range_line.append(" – ")
+                range_line.append(f"{hi:.4f}", style=self._auc_color(hi))
+                content = Text.assemble(content, "\n", range_line)
+
             if trend:
-                score_text += f"\n  Trend: {trend}"
+                content = Text.assemble(content, f"\n  Trend: {trend}")
+
+            # Sparkline
+            spark = self._sparkline(self._score_history)
+            if spark:
+                spark_line = Text()
+                spark_line.append("  History: ", style="bold")
+                spark_line.append(spark, style=color)
+                content = Text.assemble(content, "\n", spark_line)
+
+            # Extra test-set stats (show_stats mode)
+            if self.show_stats and self._stats_map100 is not None:
+                sep = "\n  " + "─" * 38
+                header = Text("\n  Test Set Metrics (best HP so far)", style="bold cyan")
+                content = Text.assemble(content, sep, header)
+
+                map100_color = self._auc_color(self._stats_map100)
+                map100_label = self._auc_label(self._stats_map100)
+                map500_color = self._auc_color(self._stats_map500)
+                map500_label = self._auc_label(self._stats_map500)
+                map_line = Text()
+                map_line.append("\n  MAP@100:     ", style="bold")
+                map_line.append(f"{self._stats_map100:.4f}", style=map100_color)
+                map_line.append(f"  ({map100_label})", style=map100_color)
+                map_line.append("   MAP@500:  ", style="bold")
+                map_line.append(f"{self._stats_map500:.4f}", style=map500_color)
+                map_line.append(f"  ({map500_label})", style=map500_color)
+                content = Text.assemble(content, map_line)
+
+                brier_color = (
+                    "green" if (self._stats_brier or 1) < 0.05
+                    else ("dark_orange" if (self._stats_brier or 1) < 0.1 else "red")
+                )
+                brier_label = self._brier_label(self._stats_brier or 1)
+                brier_line = Text()
+                brier_line.append("\n  Brier Score: ", style="bold")
+                brier_line.append(f"{self._stats_brier:.4f}", style=brier_color)
+                brier_line.append(f"  ({brier_label})", style=brier_color)
+                content = Text.assemble(content, brier_line)
+
+                prec_color = self._auc_color(self._stats_precision)
+                prec_label = self._auc_label(self._stats_precision)
+                recall_color = self._auc_color(self._stats_recall)
+                recall_label = self._auc_label(self._stats_recall)
+                f1_color = self._auc_color(self._stats_f1)
+                f1_label = self._auc_label(self._stats_f1)
+                prf_line = Text()
+                prf_line.append(
+                    f"\n  P/R/F1 @{self._stats_threshold:.2f}: ", style="bold"
+                )
+                prf_line.append(f"{self._stats_precision:.3f}", style=prec_color)
+                prf_line.append(f" ({prec_label})", style=prec_color)
+                prf_line.append(" / ", style="dim")
+                prf_line.append(f"{self._stats_recall:.3f}", style=recall_color)
+                prf_line.append(f" ({recall_label})", style=recall_color)
+                prf_line.append(" / ", style="dim")
+                prf_line.append(f"{self._stats_f1:.3f}", style=f1_color)
+                prf_line.append(f" ({f1_label})", style=f1_color)
+                content = Text.assemble(content, prf_line)
+
+                if self._stats_recall100 is not None:
+                    r100_color = self._auc_color(self._stats_recall100)
+                    r500_color = self._auc_color(self._stats_recall500)
+                    p100_color = self._auc_color(self._stats_prec100)
+                    p500_color = self._auc_color(self._stats_prec500)
+                    rk_line = Text()
+                    rk_line.append("\n  Recall@100:  ", style="bold")
+                    rk_line.append(f"{self._stats_recall100:.4f}", style=r100_color)
+                    rk_line.append(f"  ({self._auc_label(self._stats_recall100)})", style=r100_color)
+                    rk_line.append("   Recall@500: ", style="bold")
+                    rk_line.append(f"{self._stats_recall500:.4f}", style=r500_color)
+                    rk_line.append(f"  ({self._auc_label(self._stats_recall500)})", style=r500_color)
+                    pk_line = Text()
+                    pk_line.append("\n  Prec@100:    ", style="bold")
+                    pk_line.append(f"{self._stats_prec100:.4f}", style=p100_color)
+                    pk_line.append(f"  ({self._auc_label(self._stats_prec100)})", style=p100_color)
+                    pk_line.append("   Prec@500:   ", style="bold")
+                    pk_line.append(f"{self._stats_prec500:.4f}", style=p500_color)
+                    pk_line.append(f"  ({self._auc_label(self._stats_prec500)})", style=p500_color)
+                    content = Text.assemble(content, rk_line, pk_line)
+
+                if self._stats_fpr and self._stats_tpr:
+                    roc_header = Text("\n\n  ROC Curve:", style="bold")
+                    roc_art = self._render_ascii_roc(self._stats_fpr, self._stats_tpr)
+                    content = Text.assemble(content, roc_header, f"\n{roc_art}")
         else:
-            score_text = "  Awaiting first score..."
+            content = "  Awaiting first score..."
 
         score_panel = Panel(
-            score_text, title="Best Score", border_style="magenta"
+            content, title="Best Score", border_style="magenta"
         )
 
         return Group(progress_panel, resource_panel, score_panel)

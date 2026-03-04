@@ -33,7 +33,14 @@ import pandas as pd
 import pyarrow.parquet as pq
 import scipy.stats as stats
 from sklearn.model_selection import ParameterSampler, StratifiedKFold, train_test_split
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import (
+    brier_score_loss,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+    roc_curve,
+)
 from sklearn.utils import resample
 import xgboost as xgb
 
@@ -322,6 +329,125 @@ def _compare_strategies(
 
 
 # =============================================================================
+# Test-set stats helper (used by _hp_search in show_stats mode)
+# =============================================================================
+
+
+def _fit_and_compute_test_stats(
+    params: dict,
+    strategy: str,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+    device_kwargs: dict,
+    seed: int,
+) -> dict | None:
+    """Fit a model with the given params and compute held-out test-set stats.
+
+    Used to populate the live display when --show-stats is active.  Called
+    only when the best CV AUC improves, so overhead is minimal.
+
+    Returns a dict with map100, map500, brier, precision, recall, f1,
+    threshold, fpr, tpr — or None if fitting fails.
+    """
+    clf_kwargs: dict = {
+        **params,
+        **device_kwargs,
+        "objective": "binary:logistic",
+        "verbosity": 0,
+        "random_state": seed,
+    }
+    X_fit, y_fit = X_train, y_train
+
+    if strategy == "scale_pos_weight":
+        n_neg = int((y_train == 0).sum())
+        n_pos = int((y_train == 1).sum())
+        clf_kwargs["scale_pos_weight"] = n_neg / max(n_pos, 1)
+    elif strategy == "upsampling_25pct":
+        maj_mask = y_train == 0
+        X_maj, y_maj = X_train[maj_mask], y_train[maj_mask]
+        X_min = X_train[y_train == 1]
+        n_target = int(len(X_maj) * 0.25 / 0.75)
+        if len(X_min) > 0 and n_target > 0:
+            X_min_up = resample(
+                X_min, n_samples=max(n_target, 1), replace=True, random_state=seed
+            )
+            y_min_up = np.ones(len(X_min_up), dtype=y_train.dtype)
+            X_fit = np.vstack([X_maj, X_min_up])
+            y_fit = np.concatenate([y_maj, y_min_up])
+
+    try:
+        clf = xgb.XGBClassifier(**clf_kwargs)
+        clf.fit(X_fit, y_fit)
+        proba = clf.predict_proba(X_test)[:, 1]
+    except Exception:
+        return None
+
+    # MAP@k (inline — avoids importing evaluator and its heavy chart deps)
+    def _map_at_k(yt: np.ndarray, ys: np.ndarray, k: int) -> float:
+        k = min(k, len(yt))
+        idxs = np.argsort(ys)[::-1]
+        yt_k = yt[idxs][:k]
+        precs, n_pos = [], 0
+        for i, lbl in enumerate(yt_k):
+            if lbl == 1:
+                n_pos += 1
+                precs.append(n_pos / (i + 1))
+        return float(np.mean(precs)) if precs else 0.0
+
+    def _recall_at_k(yt: np.ndarray, ys: np.ndarray, k: int) -> float:
+        k = min(k, len(yt))
+        total_pos = int(yt.sum())
+        if total_pos == 0:
+            return 0.0
+        idxs = np.argsort(ys)[::-1]
+        return int(yt[idxs][:k].sum()) / total_pos
+
+    def _precision_at_k_fn(yt: np.ndarray, ys: np.ndarray, k: int) -> float:
+        k = min(k, len(yt))
+        if k == 0:
+            return 0.0
+        idxs = np.argsort(ys)[::-1]
+        return int(yt[idxs][:k].sum()) / k
+
+    map100 = _map_at_k(y_test, proba, 100)
+    map500 = _map_at_k(y_test, proba, 500)
+    brier = float(brier_score_loss(y_test, proba))
+    recall100 = _recall_at_k(y_test, proba, 100)
+    recall500 = _recall_at_k(y_test, proba, 500)
+    prec100 = _precision_at_k_fn(y_test, proba, 100)
+    prec500 = _precision_at_k_fn(y_test, proba, 500)
+
+    # Optimal threshold (F1-maximizing over 19 thresholds)
+    best_f1, best_p, best_r, best_thresh = 0.0, 0.0, 0.0, 0.5
+    for t in [round(v, 2) for v in np.arange(0.05, 1.0, 0.05)]:
+        y_pred = (proba >= t).astype(int)
+        p = float(precision_score(y_test, y_pred, zero_division=0))
+        r = float(recall_score(y_test, y_pred, zero_division=0))
+        f = float(f1_score(y_test, y_pred, zero_division=0))
+        if f > best_f1:
+            best_f1, best_p, best_r, best_thresh = f, p, r, t
+
+    fpr_arr, tpr_arr, _ = roc_curve(y_test, proba)
+    return {
+        "map100": map100,
+        "map500": map500,
+        "brier": brier,
+        "recall100": recall100,
+        "recall500": recall500,
+        "prec100": prec100,
+        "prec500": prec500,
+        "precision": best_p,
+        "recall": best_r,
+        "f1": best_f1,
+        "threshold": best_thresh,
+        "fpr": fpr_arr.tolist(),
+        "tpr": tpr_arr.tolist(),
+    }
+
+
+# =============================================================================
 # Hyperparameter search
 # =============================================================================
 
@@ -337,6 +463,9 @@ def _hp_search(
     progress: bool = True,
     model_id: str = "",
     device: str = "cpu",
+    show_stats: bool = False,
+    X_test_arr: np.ndarray | None = None,
+    y_test_arr: np.ndarray | None = None,
 ) -> dict:
     """Randomized hyperparameter search with strategy comparison.
 
@@ -365,6 +494,10 @@ def _hp_search(
         progress: If True, show rich TrainingProgressDisplay. Default True.
         model_id: Model identifier for display (e.g. 'M1'). Default ''.
         device: Device type string for display (e.g. 'cpu', 'cuda'). Default 'cpu'.
+        show_stats: If True, compute held-out test-set metrics when best improves and
+            show them in the live display. Requires X_test_arr and y_test_arr.
+        X_test_arr: Held-out test features (numpy). Required when show_stats=True.
+        y_test_arr: Held-out test labels (numpy). Required when show_stats=True.
 
     Returns:
         Dict with keys:
@@ -387,10 +520,19 @@ def _hp_search(
     best_cv_auc_std: float = 0.0
     all_results: list[dict] = []
 
+    _can_show_stats = (
+        show_stats
+        and X_test_arr is not None
+        and y_test_arr is not None
+    )
+
     display: TrainingProgressDisplay | None = None
     if progress:
         display = TrainingProgressDisplay(
-            total_iterations=n_iter, model_id=model_id, device=device
+            total_iterations=n_iter,
+            model_id=model_id,
+            device=device,
+            show_stats=_can_show_stats,
         )
         display.start()
 
@@ -424,8 +566,26 @@ def _hp_search(
             best_params = dict(params)
             best_strategy = winner
 
+            # Compute test-set stats and update display when best improves
+            if _can_show_stats and progress and display is not None:
+                try:
+                    stats = _fit_and_compute_test_stats(
+                        params=dict(params),
+                        strategy=winner,
+                        X_train=X,
+                        y_train=y,
+                        X_test=X_test_arr,  # type: ignore[arg-type]
+                        y_test=y_test_arr,  # type: ignore[arg-type]
+                        device_kwargs=device_kwargs,
+                        seed=seed,
+                    )
+                    if stats is not None:
+                        display.update_stats(**stats)
+                except Exception as exc:
+                    logger.debug("show_stats update failed (non-fatal): %s", exc)
+
         if progress and display is not None:
-            display.update(iteration=i, best_score=best_cv_auc_mean)
+            display.update(iteration=i, best_score=best_cv_auc_mean, best_score_std=best_cv_auc_std)
 
     if progress and display is not None:
         display.stop()
@@ -568,6 +728,7 @@ def train_model(
     device: str | None = None,
     disable_rocm: bool = False,
     interactive: bool = True,
+    show_stats: bool = False,
 ) -> Path:
     """Train a single XGBoost classifier and serialize all artifacts.
 
@@ -857,6 +1018,9 @@ def train_model(
         progress=True,
         model_id=model_id,
         device=effective_device,
+        show_stats=show_stats,
+        X_test_arr=X_test.values if show_stats else None,
+        y_test_arr=y_test.values if show_stats else None,
     )
 
     best_params = search_result["best_params"]

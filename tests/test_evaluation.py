@@ -66,11 +66,13 @@ def perfect_ranking_data():
 @pytest.fixture
 def minimal_eval_dict(synthetic_data):
     """A minimal eval_dict assembled from real computations on synthetic_data."""
+    from sip_engine.evaluation.evaluator import _compute_recall_precision_at_k
     y_true, y_scores = synthetic_data
     disc = _compute_discrimination_metrics(y_true, y_scores)
     ranking = _compute_ranking_metrics(y_true, y_scores)
     calib = _compute_calibration_metrics(y_true, y_scores)
     ta = _compute_threshold_analysis(y_true, y_scores)
+    rp = _compute_recall_precision_at_k(y_true, y_scores)
     opt = ta["optimal_threshold"]
     n = len(y_true)
     positive_rate = float(y_true.mean())
@@ -85,6 +87,7 @@ def minimal_eval_dict(synthetic_data):
         },
         "discrimination": disc,
         "ranking": ranking,
+        "recall_precision_at_k": rp,
         "calibration": calib,
         "threshold_analysis": ta,
         "optimal_threshold": opt,
@@ -579,11 +582,11 @@ def test_plot_calibration_summary(minimal_eval_dict, tmp_path):
 
 
 def test_generate_all_charts(synthetic_data, minimal_eval_dict, tmp_path):
-    """generate_all_charts creates all 6 chart files."""
+    """generate_all_charts creates all 7 chart files."""
     y_true, y_scores = synthetic_data
     img_dir = tmp_path / "images"
     paths = generate_all_charts(minimal_eval_dict, y_true, y_scores, img_dir)
-    assert len(paths) == 6, f"Expected 6 charts, got {len(paths)}"
+    assert len(paths) == 7, f"Expected 7 charts, got {len(paths)}"
     for p in paths:
         assert p.exists(), f"Chart file missing: {p.name}"
         assert p.stat().st_size > 1000, f"Chart file too small: {p.name}"

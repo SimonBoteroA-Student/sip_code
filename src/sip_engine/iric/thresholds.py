@@ -131,6 +131,16 @@ def calibrate_iric_thresholds(
 
             values = group_df[var].values.astype(float)
 
+            # Skip all-NaN groups so get_threshold() can fall back to Otro/VigIA defaults.
+            # Storing NaN thresholds would silently poison comparisons (value > NaN == False).
+            if np.all(np.isnan(values)):
+                logger.warning(
+                    "All-NaN values for variable '%s' in group '%s' — skipping (will use fallback)",
+                    var,
+                    group_name,
+                )
+                continue
+
             # Use nanpercentile to handle NaN values gracefully
             p1 = float(np.nanpercentile(values, 1))
             p5 = float(np.nanpercentile(values, 5))

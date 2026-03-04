@@ -103,6 +103,11 @@ def main() -> None:
         action="store_true",
         help="Skip interactive config screen, use defaults/CLI args directly",
     )
+    train_parser.add_argument(
+        "--show-stats",
+        action="store_true",
+        help="Show live test-set metrics (MAP@k, Brier, P/R/F1, ROC curve) in the training display",
+    )
 
     run_parser = subparsers.add_parser("run-pipeline", help="Run the full SIP pipeline end to end")
     run_parser.add_argument(
@@ -147,6 +152,11 @@ def main() -> None:
         "--no-interactive",
         action="store_true",
         help="Skip interactive config screen, use defaults/CLI args directly",
+    )
+    run_parser.add_argument(
+        "--show-stats",
+        action="store_true",
+        help="Show live test-set metrics (MAP@k, Brier, P/R/F1, ROC curve) in the training display",
     )
 
     evaluate_parser = subparsers.add_parser("evaluate", help="Evaluate trained models")
@@ -301,6 +311,7 @@ def main() -> None:
                     device=args.device,
                     disable_rocm=args.disable_rocm,
                     interactive=(not args.no_interactive and i == 0),
+                    show_stats=args.show_stats,
                 )
                 print(f"Model {mid} trained: {model_dir}")
             sys.exit(0)
@@ -426,6 +437,7 @@ def main() -> None:
                     device=args.device,
                     disable_rocm=args.disable_rocm,
                     interactive=(not args.no_interactive and i == 0),
+                    show_stats=args.show_stats,
                 )
                 print(f"  Model {mid} trained: {model_dir}")
 
