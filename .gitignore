@@ -52,6 +52,11 @@ build/
 # Large binary/data files
 *.pkl
 *.parquet
+artifacts/features/features.parquet
+artifacts/iric/iric_scores.parquet
+/models/M1/test_data.parquet
+artifacts/labels/labels.parquet
+artifacts/features/provider_history_index.pkl
 
 # Whitelist models
 !/artifacts/models/**/*.pkl
