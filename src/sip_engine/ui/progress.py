@@ -33,23 +33,34 @@ logger = logging.getLogger(__name__)
 
 
 class _ETAColumn(ProgressColumn):
-    """ETA column using elapsed/progress linear interpolation.
+    """ETA column that freezes between iterations to avoid misleading increases.
 
-    More stable than speed-based ETA because it uses total elapsed time
-    divided by fraction done to project remaining time.
+    Recalculates only when a new iteration completes: avg_time_per_iter * remaining.
+    Between iterations the last computed value is held constant.
     """
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._last_completed: int = -1
+        self._frozen_eta_sec: int | None = None
+
     def render(self, task: Any) -> Text:  # type: ignore[override]
-        completed = task.completed
+        completed = int(task.completed)
         total = task.total
-        elapsed: float = task.elapsed or 0.0
-        if elapsed <= 0.0 or completed <= 0 or total is None or total <= 0:
+        if total is None or total <= 0 or completed <= 0:
             return Text("eta: --:--", style="progress.remaining")
-        pct = completed / total
-        if pct >= 1.0:
+        if completed >= total:
             return Text("eta: 0:00", style="progress.remaining")
-        eta_sec = int((elapsed / pct) * (1.0 - pct))
-        h, rem = divmod(eta_sec, 3600)
+        # Only recompute when a new iteration finishes
+        if completed != self._last_completed:
+            elapsed: float = task.elapsed or 0.0
+            if elapsed > 0:
+                avg_sec = elapsed / completed
+                self._frozen_eta_sec = int(avg_sec * (total - completed))
+            self._last_completed = completed
+        if self._frozen_eta_sec is None:
+            return Text("eta: --:--", style="progress.remaining")
+        h, rem = divmod(self._frozen_eta_sec, 3600)
         m, s = divmod(rem, 60)
         if h > 0:
             return Text(f"eta: {h}:{m:02d}:{s:02d}", style="progress.remaining")
@@ -121,6 +132,7 @@ class TrainingProgressDisplay:
         self._start_time: float | None = None
 
         self._best_score_std: float | None = None
+        self._iter_start_time: float = time.monotonic()
 
         # Extra test-set stats (show_stats mode)
         self._stats_map100: float | None = None
@@ -212,6 +224,7 @@ class TrainingProgressDisplay:
                 self._best_iter = self._current_iter
                 self._best_score_std = best_score_std
 
+        self._iter_start_time = time.monotonic()
         if self._live is not None:
             self._live.update(self._build_display())
 
@@ -348,9 +361,15 @@ class TrainingProgressDisplay:
 
     def _build_display(self) -> Group:
         """Build the complete live display layout."""
-        # Progress panel
+        # Progress panel — include current-iteration elapsed (trivial cost)
+        iter_elapsed = time.monotonic() - self._iter_start_time
+        iter_mins, iter_secs = divmod(int(iter_elapsed), 60)
+        iter_time_str = f"{iter_mins}:{iter_secs:02d}" if iter_mins else f"{iter_secs}s"
+        from rich.console import Group as RGroup
+        from rich.text import Text as RText
+        iter_line = RText(f"  Current iter: {iter_time_str} elapsed", style="dim")
         progress_panel = Panel(
-            self._progress,
+            RGroup(self._progress, iter_line),
             title="HP Search Progress",
             border_style="blue",
         )

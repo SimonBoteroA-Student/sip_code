@@ -245,11 +245,13 @@ def show_config_screen(
     default_device = hw_config.gpu_type if hw_config.gpu_available else "cpu"
 
     # Merge with caller-supplied defaults
+    ram_max_gb = max(1, int(hw_config.ram_available_gb))
     d = {
         "n_jobs": hw_config.cpu_cores_physical,
         "n_iter": 200,
         "cv_folds": 5,
         "device": default_device,
+        "max_ram_gb": ram_max_gb,
     }
     if defaults:
         d.update(defaults)
@@ -262,6 +264,7 @@ def show_config_screen(
             "n_iter": d["n_iter"],
             "cv_folds": d["cv_folds"],
             "device": d["device"],
+            "max_ram_gb": d["max_ram_gb"],
         }
 
     # Build widgets
@@ -269,6 +272,7 @@ def show_config_screen(
         _SliderWidget("CPU cores", 1, hw_config.cpu_cores_logical, d["n_jobs"]),
         _SliderWidget("HP iterations", 20, 500, d["n_iter"], step=10),
         _SliderWidget("CV folds", 3, 10, d["cv_folds"]),
+        _SliderWidget("RAM limit (GB)", 1, max(1, int(hw_config.ram_total_gb)), d["max_ram_gb"]),
         _DeviceSelector(available_devices, d["device"]),
     ]
 
@@ -300,7 +304,7 @@ def show_config_screen(
         layout = Layout()
         layout.split_column(
             Layout(hw_panel, name="hardware", size=8),
-            Layout(config_panel, name="config", size=12),
+            Layout(config_panel, name="config", size=13),
         )
         return layout
 
@@ -342,11 +346,13 @@ def show_config_screen(
     cores_slider: _SliderWidget = sliders[0]  # type: ignore[assignment]
     iter_slider: _SliderWidget = sliders[1]  # type: ignore[assignment]
     cv_slider: _SliderWidget = sliders[2]  # type: ignore[assignment]
-    device_sel: _DeviceSelector = sliders[3]  # type: ignore[assignment]
+    ram_slider: _SliderWidget = sliders[3]  # type: ignore[assignment]
+    device_sel: _DeviceSelector = sliders[4]  # type: ignore[assignment]
 
     return {
         "n_jobs": cores_slider.current,
         "n_iter": iter_slider.current,
         "cv_folds": cv_slider.current,
+        "max_ram_gb": ram_slider.current,
         "device": device_sel.current,
     }

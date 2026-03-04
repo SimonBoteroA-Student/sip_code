@@ -40,7 +40,6 @@ newSecopDatabases/**
 !.claude/**
 
 
-
 # Python build artifacts
 *.egg-info/
 dist/
@@ -49,3 +48,7 @@ build/
 # Environment files
 .env
 .env.*
+
+# Large binary/data files
+**.pkl
+**.parquet
