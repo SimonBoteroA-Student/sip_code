@@ -50,5 +50,8 @@ build/
 .env.*
 
 # Large binary/data files
-**.pkl
-**.parquet
+*.pkl
+*.parquet
+
+# Whitelist models
+!/artifacts/models/**/*.parquet
