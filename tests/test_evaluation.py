@@ -6,7 +6,7 @@ All tests complete in under 15 seconds total.
 
 from __future__ import annotations
 
-import csv
+import sys
 import json
 import subprocess
 from pathlib import Path
@@ -514,12 +514,12 @@ def test_evaluate_all_summary_files(tmp_path):
 def test_cli_evaluate_help():
     """CLI 'python -m sip_engine evaluate --help' exits 0 and shows all flags."""
     result = subprocess.run(
-        [".venv/bin/python", "-m", "sip_engine", "evaluate", "--help"],
+        [sys.executable, "-m", "sip_engine", "evaluate", "--help"],
         capture_output=True,
         text=True,
-        cwd="/Users/simonb/SIP Code",
+        cwd=Path(__file__).resolve().parents[1],
     )
-    assert result.returncode == 0, f"evaluate --help exit code: {result.returncode}"
+    assert result.returncode == 0, f"evaluate --help exit code: {result.returncode}\nSTDERR:\n{result.stderr}"
     assert "--model" in result.stdout, "--model flag missing from help output"
     assert "--models-dir" in result.stdout, "--models-dir flag missing from help output"
     assert "--output-dir" in result.stdout, "--output-dir flag missing from help output"

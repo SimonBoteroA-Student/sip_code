@@ -786,7 +786,7 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
         "",
     ]
 
-    output_path.write_text("\n".join(lines))
+    output_path.write_text("\n".join(lines), encoding="utf-8")
 
 
 # =============================================================================
