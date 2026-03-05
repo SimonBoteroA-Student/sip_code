@@ -7,6 +7,7 @@ All tests complete in under 15 seconds total.
 from __future__ import annotations
 
 import sys
+import csv
 import json
 import subprocess
 from pathlib import Path
@@ -308,7 +309,7 @@ def test_markdown_report_generated(minimal_eval_dict, tmp_path):
     _write_markdown_report(minimal_eval_dict, output_path)
 
     assert output_path.exists(), "Markdown report file should exist"
-    content = output_path.read_text()
+    content = output_path.read_text(encoding='utf-8')
 
     assert content.startswith("# Evaluation Report"), (
         f"Markdown should start with '# Evaluation Report', got: {content[:50]!r}"
@@ -597,7 +598,7 @@ def test_markdown_report_contains_images(minimal_eval_dict, tmp_path):
     output_path = tmp_path / "M1_eval.md"
     _write_markdown_report(minimal_eval_dict, output_path)
 
-    content = output_path.read_text()
+    content = output_path.read_text(encoding='utf-8')
     assert "![ROC Curve]" in content, "Markdown should embed ROC curve image"
     assert "![Confusion Matrix]" in content, "Markdown should embed confusion matrix image"
     assert "![Precision-Recall-F1]" in content, "Markdown should embed P/R/F1 image"
