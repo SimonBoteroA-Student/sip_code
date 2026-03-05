@@ -18,7 +18,7 @@ def clear_settings_cache():
     when loaders call get_settings() — without this, the cached singleton
     would return the first Settings() instance regardless of env overrides.
     """
-    from sip_engine.config import get_settings
+    from sip_engine.shared.config import get_settings
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -132,7 +132,7 @@ def bad_byte_csv(tmp_path):
     Returns:
         pathlib.Path: Path to the temp CSV file (written as raw bytes).
     """
-    from sip_engine.data.schemas import CONTRATOS_USECOLS
+    from sip_engine.shared.data.schemas import CONTRATOS_USECOLS
 
     # Write a valid header + one row with an invalid byte injected
     header = ",".join(CONTRATOS_USECOLS) + "\n"
@@ -160,7 +160,7 @@ def missing_column_csv(tmp_path):
     Returns:
         pathlib.Path: Path to the temp CSV file.
     """
-    from sip_engine.data.schemas import CONTRATOS_USECOLS
+    from sip_engine.shared.data.schemas import CONTRATOS_USECOLS
 
     # Drop the last column from the usecols list
     present_cols = CONTRATOS_USECOLS[:-1]  # all except "Dias adicionados"

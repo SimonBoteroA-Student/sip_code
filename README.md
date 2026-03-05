@@ -595,7 +595,7 @@ After training, you can analyze individual contracts programmatically:
 
 ```python
 import datetime
-from sip_engine.explainability.analyzer import analyze_contract, serialize_to_json
+from sip_engine.classifiers.explainability.analyzer import analyze_contract, serialize_to_json
 
 result = analyze_contract(
     contract_row={
@@ -724,49 +724,65 @@ python -m ruff check src/ tests/ --fix
 
 ```
 SIP Code/
-├── src/sip_engine/             # Main package
-│   ├── __main__.py             # CLI entry point
-│   ├── config/
-│   │   ├── settings.py         # Centralized path/encoding configuration
-│   │   └── model_weights.json  # CRI weights & risk thresholds
-│   ├── data/
-│   │   ├── schemas.py          # Column schemas for all 14 CSV files
-│   │   ├── loaders.py          # Chunked CSV loading (14 generators)
-│   │   ├── downloader.py       # datos.gov.co parallel download with resume
-│   │   ├── rcac_builder.py     # RCAC construction & normalization
-│   │   ├── rcac_lookup.py      # O(1) RCAC lookup by (tipo, numero)
-│   │   └── label_builder.py    # M1/M2/M3/M4 label construction
-│   ├── features/
-│   │   ├── pipeline.py         # Feature pipeline (batch + per-contract)
-│   │   ├── category_a.py       # Contract features
-│   │   ├── category_b.py       # Temporal features
-│   │   ├── category_c.py       # Provider/competition features
-│   │   └── provider_history.py # As-of-date provider history index
-│   ├── iric/
-│   │   ├── calculator.py       # 11 IRIC components + scores
-│   │   ├── bid_stats.py        # Kurtosis & DRN anomaly measures
-│   │   └── pipeline.py         # IRIC calibration & pipeline integration
-│   ├── models/
-│   │   └── trainer.py          # XGBoost training, HP search, strategy comparison
-│   ├── evaluation/
-│   │   └── evaluator.py        # Full metrics suite + report generation
-│   └── explainability/
-│       ├── shap_explainer.py   # TreeSHAP value extraction
-│       ├── cri.py              # Composite Risk Index computation
-│       └── analyzer.py         # Per-contract analysis entry point
-├── tests/                      # 349 unit/integration tests
-├── artifacts/                  # Generated artifacts (gitignored contents)
-│   ├── rcac/                   # rcac.pkl, rcac_bad_rows.csv
-│   ├── labels/                 # labels.parquet
-│   ├── features/               # features.parquet, provider_history_index.pkl
-│   ├── iric/                   # iric_scores.parquet, iric_thresholds.json
-│   ├── models/                 # M1-M4 model.pkl + feature_registry.json
-│   ├── evaluation/             # Per-model eval reports (JSON/CSV/MD)
-│   └── shap/                   # SHAP output artifacts
-├── secopDatabases/             # SECOP II CSV data (not committed)
-├── data/                       # RCAC source CSVs and reference data
-├── pyproject.toml              # Project metadata & dependencies
-└── .planning/                  # GSD planning artifacts
+├── src/sip_engine/                    # Main package
+│   ├── __main__.py                    # CLI entry point
+│   ├── compat.py                      # UTF-8 / cross-platform utilities
+│   ├── shared/                        # Shared infrastructure (used by all modules)
+│   │   ├── config/
+│   │   │   ├── settings.py            # Centralized path/encoding configuration
+│   │   │   └── model_weights.json     # CRI weights & risk thresholds
+│   │   ├── data/
+│   │   │   ├── schemas.py             # Column schemas for all 14 CSV files
+│   │   │   ├── loaders.py             # Chunked CSV loading (14 generators)
+│   │   │   ├── downloader.py          # datos.gov.co parallel download with resume
+│   │   │   ├── rcac_builder.py        # RCAC construction & normalization
+│   │   │   ├── rcac_lookup.py         # O(1) RCAC lookup by (tipo, numero)
+│   │   │   └── label_builder.py       # M1/M2/M3/M4 label construction
+│   │   └── hardware/
+│   │       ├── detector.py            # GPU/CPU hardware detection
+│   │       ├── benchmark.py           # Device benchmarking
+│   │       └── device.py              # XGBoost device configuration
+│   └── classifiers/                   # XGBoost-based classification models
+│       ├── features/
+│       │   ├── pipeline.py            # Feature pipeline (batch + per-contract)
+│       │   ├── category_a.py          # Contract features
+│       │   ├── category_b.py          # Temporal features
+│       │   ├── category_c.py          # Provider/competition features
+│       │   ├── encoding.py            # Categorical encoding
+│       │   └── provider_history.py    # As-of-date provider history index
+│       ├── iric/
+│       │   ├── calculator.py          # 11 IRIC components + scores
+│       │   ├── bid_stats.py           # Kurtosis & DRN anomaly measures
+│       │   ├── thresholds.py          # IRIC threshold calibration
+│       │   └── pipeline.py            # IRIC calibration & pipeline integration
+│       ├── models/
+│       │   └── trainer.py             # XGBoost training, HP search, strategy comparison
+│       ├── evaluation/
+│       │   ├── evaluator.py           # Full metrics suite + report generation
+│       │   ├── visualizer.py          # Chart generation (confusion matrix, ROC, etc.)
+│       │   └── comparison.py          # V1 vs V2 comparison reports
+│       ├── explainability/
+│       │   ├── shap_explainer.py      # TreeSHAP value extraction
+│       │   ├── cri.py                 # Composite Risk Index computation
+│       │   └── analyzer.py            # Per-contract analysis entry point
+│       └── ui/
+│           ├── config_screen.py       # Interactive training configuration
+│           └── progress.py            # Training progress display
+├── tests/                             # 433 unit/integration tests
+│   ├── classifiers/                   # XGBoost-specific tests
+│   └── shared/                        # Shared infrastructure tests
+├── artifacts/                         # Generated artifacts (gitignored contents)
+│   ├── rcac/                          # rcac.pkl, rcac_bad_rows.csv
+│   ├── labels/                        # labels.parquet
+│   ├── features/                      # features.parquet, provider_history_index.pkl
+│   ├── iric/                          # iric_scores.parquet, iric_thresholds.json
+│   ├── models/                        # M1-M4 model.pkl + feature_registry.json
+│   ├── evaluation/                    # Per-model eval reports (JSON/CSV/MD)
+│   └── shap/                          # SHAP output artifacts
+├── secopDatabases/                    # SECOP II CSV data (not committed)
+├── data/                              # RCAC source CSVs and reference data
+├── pyproject.toml                     # Project metadata & dependencies
+└── .planning/                         # GSD planning artifacts
 ```
 
 ---

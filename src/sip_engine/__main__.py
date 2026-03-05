@@ -245,7 +245,7 @@ def main() -> None:
         sys.exit(0)
 
     if args.command == "build-rcac":
-        from sip_engine.data.rcac_builder import build_rcac
+        from sip_engine.shared.data.rcac_builder import build_rcac
         try:
             path = build_rcac(force=args.force)
             print(f"RCAC built: {path}")
@@ -255,7 +255,7 @@ def main() -> None:
             sys.exit(1)
 
     elif args.command == "build-labels":
-        from sip_engine.data.label_builder import build_labels
+        from sip_engine.shared.data.label_builder import build_labels
         try:
             path = build_labels(force=args.force)
             print(f"Labels built: {path}")
@@ -265,7 +265,7 @@ def main() -> None:
             sys.exit(1)
 
     elif args.command == "build-features":
-        from sip_engine.features.pipeline import build_features
+        from sip_engine.classifiers.features.pipeline import build_features
         try:
             path = build_features(force=args.force)
             print(f"Features built: {path}")
@@ -275,7 +275,7 @@ def main() -> None:
             sys.exit(1)
 
     elif args.command == "build-iric":
-        from sip_engine.iric.pipeline import build_iric
+        from sip_engine.classifiers.iric.pipeline import build_iric
         try:
             path = build_iric(force=args.force)
             print(f"IRIC scores built: {path}")
@@ -285,14 +285,14 @@ def main() -> None:
             sys.exit(1)
 
     elif args.command == "train":
-        from sip_engine.models.trainer import train_model, MODEL_IDS
+        from sip_engine.classifiers.models.trainer import train_model, MODEL_IDS
         models_to_train = [args.model] if args.model else MODEL_IDS
         try:
             if args.build_features:
-                from sip_engine.data.rcac_builder import build_rcac
-                from sip_engine.data.label_builder import build_labels
-                from sip_engine.features.pipeline import build_features
-                from sip_engine.iric.pipeline import build_iric
+                from sip_engine.shared.data.rcac_builder import build_rcac
+                from sip_engine.shared.data.label_builder import build_labels
+                from sip_engine.classifiers.features.pipeline import build_features
+                from sip_engine.classifiers.iric.pipeline import build_iric
                 print("Building RCAC...")
                 build_rcac(force=args.force)
                 print("Building labels...")
@@ -324,7 +324,7 @@ def main() -> None:
             sys.exit(1)
 
     elif args.command == "evaluate":
-        from sip_engine.evaluation.evaluator import evaluate_all, evaluate_model, MODEL_IDS
+        from sip_engine.classifiers.evaluation.evaluator import evaluate_all, evaluate_model, MODEL_IDS
 
         models_to_eval = [args.model] if args.model else MODEL_IDS
         try:
@@ -350,7 +350,7 @@ def main() -> None:
             sys.exit(1)
 
     elif args.command == "backup-v1":
-        from sip_engine.evaluation.comparison import backup_v1_artifacts
+        from sip_engine.classifiers.evaluation.comparison import backup_v1_artifacts
         try:
             path = backup_v1_artifacts()
             print(f"V1 baseline backed up: {path}")
@@ -363,7 +363,7 @@ def main() -> None:
             sys.exit(1)
 
     elif args.command == "download-data":
-        from sip_engine.data.downloader import (
+        from sip_engine.shared.data.downloader import (
             DATASET_BY_KEY,
             download_datasets,
             validate_downloads,
@@ -399,12 +399,12 @@ def main() -> None:
 
     elif args.command == "run-pipeline":
         import traceback
-        from sip_engine.data.rcac_builder import build_rcac
-        from sip_engine.data.label_builder import build_labels
-        from sip_engine.features.pipeline import build_features
-        from sip_engine.iric.pipeline import build_iric
-        from sip_engine.models.trainer import train_model, MODEL_IDS
-        from sip_engine.evaluation.evaluator import evaluate_all, evaluate_model
+        from sip_engine.shared.data.rcac_builder import build_rcac
+        from sip_engine.shared.data.label_builder import build_labels
+        from sip_engine.classifiers.features.pipeline import build_features
+        from sip_engine.classifiers.iric.pipeline import build_iric
+        from sip_engine.classifiers.models.trainer import train_model, MODEL_IDS
+        from sip_engine.classifiers.evaluation.evaluator import evaluate_all, evaluate_model
 
         models_to_run = [args.model] if args.model else MODEL_IDS
         force = args.force
@@ -459,7 +459,7 @@ def main() -> None:
             sys.exit(1)
 
     elif args.command == "compare-v1v2":
-        from sip_engine.evaluation.comparison import generate_comparison_report
+        from sip_engine.classifiers.evaluation.comparison import generate_comparison_report
         try:
             md_path, json_path = generate_comparison_report(
                 v1_dir=getattr(args, 'v1_dir', None),
