@@ -44,6 +44,28 @@ def main() -> None:
         action="store_true",
         help="Force rebuild even if features.parquet exists",
     )
+    build_features_parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        help="Skip interactive config screen, use defaults/CLI args directly",
+    )
+    build_features_parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=-1,
+        help="CPU cores to use (default: -1 = auto-detect physical cores)",
+    )
+    build_features_parser.add_argument(
+        "--device",
+        choices=["cpu", "cuda", "rocm"],
+        default=None,
+        help="Device (default: auto-detect)",
+    )
+    build_features_parser.add_argument(
+        "--disable-rocm",
+        action="store_true",
+        help="Skip ROCm GPU even if detected",
+    )
 
     build_iric_parser = subparsers.add_parser(
         "build-iric", help="Build IRIC irregularity risk index scores"
@@ -104,9 +126,10 @@ def main() -> None:
         help="Skip interactive config screen, use defaults/CLI args directly",
     )
     train_parser.add_argument(
-        "--show-stats",
+        "--no-stats",
         action="store_true",
-        help="Show live test-set metrics (MAP@k, Brier, P/R/F1, ROC curve) in the training display",
+        dest="no_stats",
+        help="Disable live test-set metrics in the training display (metrics are shown by default)",
     )
 
     run_parser = subparsers.add_parser("run-pipeline", help="Run the full SIP pipeline end to end")
@@ -154,9 +177,16 @@ def main() -> None:
         help="Skip interactive config screen, use defaults/CLI args directly",
     )
     run_parser.add_argument(
-        "--show-stats",
+        "--no-stats",
         action="store_true",
-        help="Show live test-set metrics (MAP@k, Brier, P/R/F1, ROC curve) in the training display",
+        dest="no_stats",
+        help="Disable live test-set metrics in the training display (metrics are shown by default)",
+    )
+    run_parser.add_argument(
+        "--start-from",
+        choices=["rcac", "labels", "features", "iric", "train", "evaluate"],
+        default=None,
+        help="Resume pipeline from this step (e.g. --start-from train)",
     )
 
     evaluate_parser = subparsers.add_parser("evaluate", help="Evaluate trained models")
@@ -245,9 +275,10 @@ def main() -> None:
         sys.exit(0)
 
     if args.command == "build-rcac":
-        from sip_engine.shared.data.rcac_builder import build_rcac
+        from sip_engine.pipeline import PipelineConfig, run_rcac
         try:
-            path = build_rcac(force=args.force)
+            cfg = PipelineConfig(n_jobs=1, n_iter=0, cv_folds=0, max_ram_gb=0, device="cpu", force=args.force)
+            path = run_rcac(cfg)
             print(f"RCAC built: {path}")
             sys.exit(0)
         except Exception as e:
@@ -255,9 +286,10 @@ def main() -> None:
             sys.exit(1)
 
     elif args.command == "build-labels":
-        from sip_engine.shared.data.label_builder import build_labels
+        from sip_engine.pipeline import PipelineConfig, run_labels
         try:
-            path = build_labels(force=args.force)
+            cfg = PipelineConfig(n_jobs=1, n_iter=0, cv_folds=0, max_ram_gb=0, device="cpu", force=args.force)
+            path = run_labels(cfg)
             print(f"Labels built: {path}")
             sys.exit(0)
         except Exception as e:
@@ -266,18 +298,40 @@ def main() -> None:
 
     elif args.command == "build-features":
         from sip_engine.classifiers.features.pipeline import build_features
+        from sip_engine.shared.hardware import detect_hardware
         try:
-            path = build_features(force=args.force)
+            interactive = not args.no_interactive
+            n_jobs = args.n_jobs
+            device = args.device
+            if not interactive:
+                # Non-interactive: resolve n_jobs from hardware if -1
+                if n_jobs == -1:
+                    hw = detect_hardware(disable_rocm=getattr(args, "disable_rocm", False))
+                    n_jobs = hw.cpu_cores_physical
+                if device is None:
+                    hw = detect_hardware(disable_rocm=getattr(args, "disable_rocm", False))
+                    device = hw.gpu_type if hw.gpu_available else "cpu"
+            path = build_features(
+                force=args.force,
+                n_jobs=n_jobs if n_jobs > 0 else 1,
+                device=device or "cpu",
+                interactive=interactive,
+                show_progress=True,
+            )
             print(f"Features built: {path}")
             sys.exit(0)
+        except KeyboardInterrupt:
+            print("\nCancelled.")
+            sys.exit(1)
         except Exception as e:
             print(f"Error building features: {e}", file=sys.stderr)
             sys.exit(1)
 
     elif args.command == "build-iric":
-        from sip_engine.classifiers.iric.pipeline import build_iric
+        from sip_engine.pipeline import PipelineConfig, run_iric
         try:
-            path = build_iric(force=args.force)
+            cfg = PipelineConfig(n_jobs=1, n_iter=0, cv_folds=0, max_ram_gb=0, device="cpu", force=args.force)
+            path = run_iric(cfg)
             print(f"IRIC scores built: {path}")
             sys.exit(0)
         except Exception as e:
@@ -298,7 +352,7 @@ def main() -> None:
                 print("Building labels...")
                 build_labels(force=args.force)
                 print("Building features...")
-                build_features(force=args.force)
+                build_features(force=args.force, show_progress=True)
                 print("Building IRIC scores...")
                 build_iric(force=args.force)
             for i, mid in enumerate(models_to_train):
@@ -311,7 +365,7 @@ def main() -> None:
                     device=args.device,
                     disable_rocm=args.disable_rocm,
                     interactive=(not args.no_interactive and i == 0),
-                    show_stats=args.show_stats,
+                    show_stats=not args.no_stats,
                 )
                 print(f"Model {mid} trained: {model_dir}")
             sys.exit(0)
@@ -398,61 +452,66 @@ def main() -> None:
             sys.exit(1)
 
     elif args.command == "run-pipeline":
-        import traceback
-        from sip_engine.shared.data.rcac_builder import build_rcac
-        from sip_engine.shared.data.label_builder import build_labels
-        from sip_engine.classifiers.features.pipeline import build_features
-        from sip_engine.classifiers.iric.pipeline import build_iric
-        from sip_engine.classifiers.models.trainer import train_model, MODEL_IDS
-        from sip_engine.classifiers.evaluation.evaluator import evaluate_all, evaluate_model
+        from sip_engine.pipeline import PipelineConfig, run_pipeline
+        from sip_engine.shared.hardware import detect_hardware
+        from rich.console import Console as _Console
+        from rich.panel import Panel as _Panel
 
-        models_to_run = [args.model] if args.model else MODEL_IDS
-        force = args.force
+        _con = _Console()
 
         try:
-            print("=" * 60)
-            print("SIP Pipeline — Full Run")
-            print("=" * 60)
+            # ------------------------------------------------------------------
+            # Single upfront hardware config — shared by features AND trainer
+            # ------------------------------------------------------------------
+            hw = detect_hardware(disable_rocm=args.disable_rocm)
+            pipeline_cfg: dict = {
+                "n_jobs": args.n_jobs if args.n_jobs > 0 else hw.cpu_cores_physical,
+                "n_iter": args.n_iter,
+                "cv_folds": 5,
+                "max_ram_gb": max(1, int(hw.ram_available_gb)),
+                "device": args.device if args.device else (hw.gpu_type if hw.gpu_available else "cpu"),
+            }
 
-            print("\n[1/6] Building RCAC...")
-            build_rcac(force=force)
-
-            print("\n[2/6] Building labels...")
-            build_labels(force=force)
-
-            print("\n[3/6] Building features...")
-            build_features(force=force)
-
-            print("\n[4/6] Building IRIC scores...")
-            build_iric(force=force)
-
-            print("\n[5/6] Training models...")
-            for i, mid in enumerate(models_to_run):
-                model_dir = train_model(
-                    model_id=mid,
-                    force=force,
-                    quick=args.quick,
-                    n_iter=args.n_iter,
-                    n_jobs=args.n_jobs,
-                    device=args.device,
-                    disable_rocm=args.disable_rocm,
-                    interactive=(not args.no_interactive and i == 0),
-                    show_stats=args.show_stats,
+            if not args.no_interactive:
+                from sip_engine.classifiers.ui.config_screen import show_pipeline_config_screen
+                pipeline_cfg = show_pipeline_config_screen(
+                    hw,
+                    defaults={
+                        "n_jobs": pipeline_cfg["n_jobs"],
+                        "n_iter": pipeline_cfg["n_iter"],
+                        "cv_folds": pipeline_cfg["cv_folds"],
+                        "max_ram_gb": pipeline_cfg["max_ram_gb"],
+                        "device": pipeline_cfg["device"],
+                    },
+                    header="Builds RCAC → labels → features → IRIC → trains models → evaluates",
                 )
-                print(f"  Model {mid} trained: {model_dir}")
-
-            print("\n[6/6] Evaluating models...")
-            if len(models_to_run) == 1:
-                report_path = evaluate_model(model_id=models_to_run[0])
-                print(f"  Evaluation complete: {report_path}")
             else:
-                summary_path = evaluate_all()
-                print(f"  Evaluation complete: {summary_path}")
+                _con.print()
+                _con.print(
+                    _Panel(
+                        "  Builds RCAC → labels → features → IRIC → trains models → evaluates",
+                        title="[bold cyan]SIP Pipeline — Full Run",
+                        border_style="cyan",
+                    )
+                )
 
-            print("\n" + "=" * 60)
-            print("Pipeline complete.")
-            print("=" * 60)
+            cfg = PipelineConfig(
+                n_jobs=pipeline_cfg["n_jobs"],
+                n_iter=pipeline_cfg["n_iter"],
+                cv_folds=pipeline_cfg["cv_folds"],
+                max_ram_gb=pipeline_cfg["max_ram_gb"],
+                device=pipeline_cfg["device"],
+                force=args.force,
+                model=args.model,
+                quick=args.quick,
+                disable_rocm=args.disable_rocm,
+                show_stats=not args.no_stats,
+            )
+            run_pipeline(cfg, start_from=args.start_from)
             sys.exit(0)
+        except KeyboardInterrupt:
+            _con.print("\n[yellow]Pipeline cancelled.[/yellow]")
+            sys.exit(1)
         except Exception as e:
             traceback.print_exc()
             print(f"Pipeline error: {e}", file=sys.stderr)
