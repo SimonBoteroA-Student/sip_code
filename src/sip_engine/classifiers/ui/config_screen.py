@@ -12,7 +12,7 @@ import platform
 import sys
 from typing import Any
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
@@ -219,6 +219,27 @@ def _build_hardware_panel(hw: HardwareConfig) -> Panel:
 
 
 # ---------------------------------------------------------------------------
+# Shared screen layout builder
+# ---------------------------------------------------------------------------
+
+def _make_screen_layout(
+    hw_panel: Panel,
+    config_panel: Panel,
+    header_panel: Panel | None = None,
+) -> Layout:
+    """Build a full-screen Layout for Live(screen=True) rendering."""
+    layout = Layout()
+    parts: list[Layout] = []
+    if header_panel is not None:
+        parts.append(Layout(header_panel, name="header", size=5))
+    # Hardware panel: 5 data lines + 2 border lines = 7, + 1 safety = 8
+    parts.append(Layout(hw_panel, name="hardware", size=8))
+    parts.append(Layout(config_panel, name="config"))
+    layout.split_column(*parts)
+    return layout
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -254,7 +275,7 @@ def show_config_screen(
         "max_ram_gb": ram_max_gb,
     }
     if defaults:
-        d.update(defaults)
+        d.update({k: v for k, v in defaults.items() if v is not None})
 
     # Non-interactive fallback (piped stdin / CI)
     if not sys.stdin.isatty():
@@ -284,32 +305,22 @@ def show_config_screen(
 
         lines: list[Text] = []
         header = Text(
-            "  Training Configuration (↑↓ select, ←→ adjust, type number, Enter to confirm)\n",
+            "  Training Configuration (↑↓ select, ←→ adjust, type number, Enter to confirm)",
             style="bold",
         )
         lines.append(header)
         for i, widget in enumerate(sliders):
             lines.append(widget.render(selected=i == selected))
 
-        footer = Text("\n  [Enter] Start training    [q] Quit")
+        footer = Text("  [Enter] Start training    [q] Quit")
         lines.append(footer)
 
-        config_group = Text()
-        for ln in lines:
-            config_group.append_text(ln)
-            config_group.append("\n")
+        config_panel = Panel(Group(*lines), title="Training Settings", border_style="blue")
 
-        config_panel = Panel(config_group, title="Training Settings", border_style="blue")
-
-        layout = Layout()
-        layout.split_column(
-            Layout(hw_panel, name="hardware", size=8),
-            Layout(config_panel, name="config", size=13),
-        )
-        return layout
+        return _make_screen_layout(hw_panel, config_panel)
 
     try:
-        with Live(_make_layout(), console=console, refresh_per_second=10, screen=False) as live:
+        with Live(_make_layout(), console=console, refresh_per_second=10, screen=True) as live:
             while True:
                 key = _read_key()
                 if key == _KEY_ENTER:
@@ -343,6 +354,245 @@ def show_config_screen(
         raise
 
     # Collect results
+    cores_slider: _SliderWidget = sliders[0]  # type: ignore[assignment]
+    iter_slider: _SliderWidget = sliders[1]  # type: ignore[assignment]
+    cv_slider: _SliderWidget = sliders[2]  # type: ignore[assignment]
+    ram_slider: _SliderWidget = sliders[3]  # type: ignore[assignment]
+    device_sel: _DeviceSelector = sliders[4]  # type: ignore[assignment]
+
+    return {
+        "n_jobs": cores_slider.current,
+        "n_iter": iter_slider.current,
+        "cv_folds": cv_slider.current,
+        "max_ram_gb": ram_slider.current,
+        "device": device_sel.current,
+    }
+
+
+def show_features_config_screen(
+    hw_config: HardwareConfig,
+    defaults: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Display interactive pre-features-build configuration screen.
+
+    Shows detected hardware and presents sliders for CPU cores, RAM limit,
+    and device selection. Falls back to defaults in non-interactive environments.
+
+    Args:
+        hw_config: Detected hardware configuration.
+        defaults: Optional overrides for default slider values.
+
+    Returns:
+        Dict with keys ``n_jobs``, ``max_ram_gb``, ``device``.
+    """
+    available_devices: list[str] = ["cpu"]
+    if hw_config.gpu_type == "cuda":
+        available_devices.append("cuda")
+    if hw_config.gpu_type == "rocm":
+        available_devices.append("rocm")
+
+    default_device = hw_config.gpu_type if hw_config.gpu_available else "cpu"
+    ram_max_gb = max(1, int(hw_config.ram_available_gb))
+
+    d = {
+        "n_jobs": hw_config.cpu_cores_physical,
+        "max_ram_gb": ram_max_gb,
+        "device": default_device,
+    }
+    if defaults:
+        d.update({k: v for k, v in defaults.items() if v is not None})
+
+    if not sys.stdin.isatty():
+        logger.info("Non-interactive terminal — using default feature build settings")
+        return {"n_jobs": d["n_jobs"], "max_ram_gb": d["max_ram_gb"], "device": d["device"]}
+
+    sliders: list[_SliderWidget | _DeviceSelector] = [
+        _SliderWidget("CPU cores", 1, hw_config.cpu_cores_logical, d["n_jobs"]),
+        _SliderWidget("RAM limit (GB)", 1, max(1, int(hw_config.ram_total_gb)), d["max_ram_gb"]),
+        _DeviceSelector(available_devices, d["device"]),
+    ]
+
+    selected = 0
+    console = Console()
+
+    def _make_layout() -> Layout:
+        hw_panel = _build_hardware_panel(hw_config)
+
+        lines: list[Text] = []
+        header = Text(
+            "  Feature Build Configuration (↑↓ select, ←→ adjust, type number, Enter to confirm)",
+            style="bold",
+        )
+        lines.append(header)
+        for i, widget in enumerate(sliders):
+            lines.append(widget.render(selected=i == selected))
+
+        footer = Text("  [Enter] Start build    [q] Quit")
+        lines.append(footer)
+
+        config_panel = Panel(Group(*lines), title="Feature Build Settings", border_style="cyan")
+        return _make_screen_layout(hw_panel, config_panel)
+
+    try:
+        with Live(_make_layout(), console=console, refresh_per_second=10, screen=True) as live:
+            while True:
+                key = _read_key()
+                if key == _KEY_ENTER:
+                    break
+                if key == _KEY_QUIT:
+                    raise KeyboardInterrupt("User quit config screen")
+                if key == _KEY_UP:
+                    selected = max(0, selected - 1)
+                elif key == _KEY_DOWN:
+                    selected = min(len(sliders) - 1, selected + 1)
+                elif key == _KEY_RIGHT:
+                    w = sliders[selected]
+                    if isinstance(w, _SliderWidget):
+                        w.increment()
+                    else:
+                        w.next_option()
+                elif key == _KEY_LEFT:
+                    w = sliders[selected]
+                    if isinstance(w, _SliderWidget):
+                        w.decrement()
+                    else:
+                        w.prev_option()
+                elif key.isdigit():
+                    w = sliders[selected]
+                    if isinstance(w, _SliderWidget):
+                        w.add_digit(key)
+                live.update(_make_layout())
+    except KeyboardInterrupt:
+        console.print("[yellow]Feature build cancelled.[/yellow]")
+        raise
+
+    cores_slider: _SliderWidget = sliders[0]  # type: ignore[assignment]
+    ram_slider: _SliderWidget = sliders[1]  # type: ignore[assignment]
+    device_sel: _DeviceSelector = sliders[2]  # type: ignore[assignment]
+
+    return {
+        "n_jobs": cores_slider.current,
+        "max_ram_gb": ram_slider.current,
+        "device": device_sel.current,
+    }
+
+
+def show_pipeline_config_screen(
+    hw_config: HardwareConfig,
+    defaults: dict[str, Any] | None = None,
+    header: str | None = None,
+) -> dict[str, Any]:
+    """Display interactive full-pipeline configuration screen.
+
+    Shows all configurable parameters for a complete pipeline run (features +
+    training): CPU cores, HP iterations, CV folds, RAM limit, and device.
+    Falls back to defaults in non-interactive environments.
+
+    Args:
+        hw_config: Detected hardware configuration.
+        defaults: Optional overrides for default slider values.
+
+    Returns:
+        Dict with keys ``n_jobs``, ``n_iter``, ``cv_folds``, ``max_ram_gb``, ``device``.
+    """
+    available_devices: list[str] = ["cpu"]
+    if hw_config.gpu_type == "cuda":
+        available_devices.append("cuda")
+    if hw_config.gpu_type == "rocm":
+        available_devices.append("rocm")
+
+    default_device = hw_config.gpu_type if hw_config.gpu_available else "cpu"
+    ram_max_gb = max(1, int(hw_config.ram_available_gb))
+
+    d = {
+        "n_jobs": hw_config.cpu_cores_physical,
+        "n_iter": 200,
+        "cv_folds": 5,
+        "max_ram_gb": ram_max_gb,
+        "device": default_device,
+    }
+    if defaults:
+        d.update({k: v for k, v in defaults.items() if v is not None})
+
+    if not sys.stdin.isatty():
+        logger.info("Non-interactive terminal — using default pipeline settings")
+        return {
+            "n_jobs": d["n_jobs"],
+            "n_iter": d["n_iter"],
+            "cv_folds": d["cv_folds"],
+            "max_ram_gb": d["max_ram_gb"],
+            "device": d["device"],
+        }
+
+    sliders: list[_SliderWidget | _DeviceSelector] = [
+        _SliderWidget("CPU cores", 1, hw_config.cpu_cores_logical, d["n_jobs"]),
+        _SliderWidget("HP iterations", 20, 500, d["n_iter"], step=10),
+        _SliderWidget("CV folds", 3, 10, d["cv_folds"]),
+        _SliderWidget("RAM limit (GB)", 1, max(1, int(hw_config.ram_total_gb)), d["max_ram_gb"]),
+        _DeviceSelector(available_devices, d["device"]),
+    ]
+
+    selected = 0
+    console = Console()
+
+    def _make_layout() -> Layout:
+        hw_panel = _build_hardware_panel(hw_config)
+
+        lines: list[Text] = []
+        hint = Text(
+            "  Pipeline Configuration (↑↓ select, ←→ adjust, type number, Enter to confirm)",
+            style="bold",
+        )
+        lines.append(hint)
+        for i, widget in enumerate(sliders):
+            lines.append(widget.render(selected=i == selected))
+
+        footer = Text("  [Enter] Start pipeline    [q] Quit")
+        lines.append(footer)
+
+        config_panel = Panel(Group(*lines), title="Full Pipeline Settings", border_style="blue")
+        header_panel = None
+        if header:
+            header_panel = Panel(
+                f"  {header}",
+                title="[bold cyan]SIP Pipeline — Full Run",
+                border_style="cyan",
+            )
+        return _make_screen_layout(hw_panel, config_panel, header_panel=header_panel)
+
+    try:
+        with Live(_make_layout(), console=console, refresh_per_second=10, screen=True) as live:
+            while True:
+                key = _read_key()
+                if key == _KEY_ENTER:
+                    break
+                if key == _KEY_QUIT:
+                    raise KeyboardInterrupt("User quit config screen")
+                if key == _KEY_UP:
+                    selected = max(0, selected - 1)
+                elif key == _KEY_DOWN:
+                    selected = min(len(sliders) - 1, selected + 1)
+                elif key == _KEY_RIGHT:
+                    w = sliders[selected]
+                    if isinstance(w, _SliderWidget):
+                        w.increment()
+                    else:
+                        w.next_option()
+                elif key == _KEY_LEFT:
+                    w = sliders[selected]
+                    if isinstance(w, _SliderWidget):
+                        w.decrement()
+                    else:
+                        w.prev_option()
+                elif key.isdigit():
+                    w = sliders[selected]
+                    if isinstance(w, _SliderWidget):
+                        w.add_digit(key)
+                live.update(_make_layout())
+    except KeyboardInterrupt:
+        console.print("[yellow]Pipeline cancelled.[/yellow]")
+        raise
+
     cores_slider: _SliderWidget = sliders[0]  # type: ignore[assignment]
     iter_slider: _SliderWidget = sliders[1]  # type: ignore[assignment]
     cv_slider: _SliderWidget = sliders[2]  # type: ignore[assignment]
