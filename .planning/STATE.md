@@ -10,14 +10,19 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Milestone: v1.2 — CLI & TUI Polish
-Phase 14: CLI & TUI Fixes — Command Pipeline Refactor — **Plan 2/2 Executed (14-01 pending)**
-Status: Plan 14-02 complete. Plan 14-01 (TUI rendering bugs) pending.
+Phase 14: CLI & TUI Fixes — Command Pipeline Refactor — **Plan 2/2 Complete**
+Status: All plans complete. Phase 14 done. v1.2 milestone complete.
 
-Progress: [██████████░░░░░░░░░░] v1.2 In Progress
+Progress: [████████████████████] v1.2 Complete
 
 ## Accumulated Context
 
 ### Decisions
+
+Phase 14-01 decisions:
+- Layout with explicit size hints replaces Group at screen level — Rich needs dimension negotiation for Live(screen=True) alternate buffer
+- Group(*lines) kept inside Panel bodies — correct for content within a fixed-size region
+- Shared _make_screen_layout() helper DRYs three identical layout patterns
 
 Phase 14-02 decisions:
 - Dynamic function resolution via getattr + _STEP_FN_NAMES dict for mockability — cached dicts break unittest.mock.patch
@@ -68,6 +73,7 @@ Phase 12-03 decisions:
 
 ### Roadmap Evolution
 
+- Phase 14 Plan 01 complete: TUI rendering fix — Layout replaces Group at screen level in all 3 config screens
 - Phase 14 Plan 02 complete: pipeline.py coordinator + CLI refactor + --start-from support
 - Phase 14 added: CLI & TUI Fixes — Command Pipeline Refactor (chart edge clipping, hardware config display, command pipeline refactor)
 - Phase 13 Plan 03 complete: CI pipeline + pathlib audit + README Windows docs + Docker verification
@@ -90,6 +96,6 @@ None — all prior blockers resolved.
 
 ## Session Continuity
 
-Last session: 2026-03-06
-Stopped at: Completed 14-02-PLAN.md — pipeline coordinator + CLI refactor
-Resume file: .planning/phases/14-cli-tui-fixes-command-pipeline-refactor/14-02-SUMMARY.md
+Last session: 2025-06-04
+Stopped at: Completed 14-01-PLAN.md — TUI rendering fix (all Phase 14 plans done, v1.2 complete)
+Resume file: .planning/phases/14-cli-tui-fixes-command-pipeline-refactor/14-01-SUMMARY.md

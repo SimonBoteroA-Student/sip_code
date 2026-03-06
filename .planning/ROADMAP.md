@@ -44,7 +44,7 @@
 | 11. Bug Fixes and Test Cleanup | v1.0 | 1/1 | Complete | 2026-03-02 |
 | 12. Cross-platform OS Compatibility & Training Optimization | v1.1 | 4/4 | Complete | 2026-03-03 |
 | 13. Windows 10 Compatibility | v1.1 | 3/3 | Complete | 2026-03-03 |
-| 14. CLI & TUI Fixes — Command Pipeline Refactor | v1.2 | 1/2 | In Progress | — |
+| 14. CLI & TUI Fixes — Command Pipeline Refactor | 2/2 | Complete   | 2026-03-06 | — |
 
 <details>
 <summary>✅ v1.1 Cross-Platform OS Compatibility & Windows Support (Phases 12–13) — SHIPPED 2026-03-03</summary>
@@ -67,7 +67,7 @@
 
 **Goal:** Fix chart edge clipping, restore hardware config display and title in TUI, refactor CLI commands so `run-pipeline` acts as a master orchestrator calling individual subcommands, and centralize hardware config prompting at pipeline start.
 **Depends on:** Phase 13
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 14-01-PLAN.md — Fix TUI rendering bugs (Layout instead of Group for screen mode)
