@@ -5,19 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Milestone v1.1 complete — Cross-platform OS compatibility and Windows 10 support (Phases 12-13, 7 plans, all done)
+**Current focus:** Milestone v1.2 complete — CLI & TUI Polish (Phase 14, 2 plans, all done)
 
 ## Current Position
 
 Milestone: v1.2 — CLI & TUI Polish
-Phase 14: CLI & TUI Fixes — Command Pipeline Refactor — **Not planned yet**
-Status: Phase added, awaiting planning.
+Phase 14: CLI & TUI Fixes — Command Pipeline Refactor — **Plan 2/2 Executed (14-01 pending)**
+Status: Plan 14-02 complete. Plan 14-01 (TUI rendering bugs) pending.
 
-Progress: [░░░░░░░░░░░░░░░░░░░░] v1.2 Starting
+Progress: [██████████░░░░░░░░░░] v1.2 In Progress
 
 ## Accumulated Context
 
 ### Decisions
+
+Phase 14-02 decisions:
+- Dynamic function resolution via getattr + _STEP_FN_NAMES dict for mockability — cached dicts break unittest.mock.patch
+- Only refactored simple standalone commands (build-rcac, build-labels, build-iric) to pipeline functions — complex commands kept inline for backward compatibility
+- Config banner printed by run_pipeline() orchestrator — eliminates duplicate config printing logic
 
 Phase 13-03 decisions:
 - Matrix strategy with fail-fast: false — both OS jobs complete independently
@@ -63,6 +68,7 @@ Phase 12-03 decisions:
 
 ### Roadmap Evolution
 
+- Phase 14 Plan 02 complete: pipeline.py coordinator + CLI refactor + --start-from support
 - Phase 14 added: CLI & TUI Fixes — Command Pipeline Refactor (chart edge clipping, hardware config display, command pipeline refactor)
 - Phase 13 Plan 03 complete: CI pipeline + pathlib audit + README Windows docs + Docker verification
 - Phase 13 Plan 01 complete: platform compatibility layer (compat.py) + consumer wiring
@@ -85,5 +91,5 @@ None — all prior blockers resolved.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Phase 14 context gathered
-Resume file: .planning/phases/14-cli-tui-fixes-command-pipeline-refactor/14-CONTEXT.md
+Stopped at: Completed 14-02-PLAN.md — pipeline coordinator + CLI refactor
+Resume file: .planning/phases/14-cli-tui-fixes-command-pipeline-refactor/14-02-SUMMARY.md

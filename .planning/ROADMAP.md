@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 Academic Deliverable** — Phases 1–11 (shipped 2026-03-02)
 - ✅ **v1.1 Cross-Platform OS Compatibility & Windows Support** — Phases 12–13 (shipped 2026-03-03)
-- 🔄 **v1.2 CLI & TUI Polish** — Phase 14
+- 🔄 **v1.2 CLI & TUI Polish** — Phase 14 (1/2 plans complete)
 
 ## Phases
 
@@ -44,7 +44,7 @@
 | 11. Bug Fixes and Test Cleanup | v1.0 | 1/1 | Complete | 2026-03-02 |
 | 12. Cross-platform OS Compatibility & Training Optimization | v1.1 | 4/4 | Complete | 2026-03-03 |
 | 13. Windows 10 Compatibility | v1.1 | 3/3 | Complete | 2026-03-03 |
-| 14. CLI & TUI Fixes — Command Pipeline Refactor | v1.2 | 0/2 | Planned | — |
+| 14. CLI & TUI Fixes — Command Pipeline Refactor | v1.2 | 1/2 | In Progress | — |
 
 <details>
 <summary>✅ v1.1 Cross-Platform OS Compatibility & Windows Support (Phases 12–13) — SHIPPED 2026-03-03</summary>
@@ -71,4 +71,4 @@
 
 Plans:
 - [ ] 14-01-PLAN.md — Fix TUI rendering bugs (Layout instead of Group for screen mode)
-- [ ] 14-02-PLAN.md — Pipeline coordinator + CLI refactor (PipelineConfig, run_*() functions, --start-from)
+- [x] 14-02-PLAN.md — Pipeline coordinator + CLI refactor (PipelineConfig, run_*() functions, --start-from)
