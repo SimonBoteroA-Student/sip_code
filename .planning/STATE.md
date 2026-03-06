@@ -9,12 +9,11 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 ## Current Position
 
-Milestone: v1.1 — **Shipped 2026-03-03**
-Phase 12: Cross-platform OS Compatibility & Training Optimization — **Complete 2026-03-03**
-Phase 13: Windows 10 Compatibility — **Complete 2026-03-03** (3 plans, 3 executed)
-Status: All plans complete. CI pipeline, pathlib audit, README docs, Docker verified.
+Milestone: v1.2 — CLI & TUI Polish
+Phase 14: CLI & TUI Fixes — Command Pipeline Refactor — **Not planned yet**
+Status: Phase added, awaiting planning.
 
-Progress: [████████████████████] v1.1 Complete
+Progress: [░░░░░░░░░░░░░░░░░░░░] v1.2 Starting
 
 ## Accumulated Context
 
@@ -64,6 +63,7 @@ Phase 12-03 decisions:
 
 ### Roadmap Evolution
 
+- Phase 14 added: CLI & TUI Fixes — Command Pipeline Refactor (chart edge clipping, hardware config display, command pipeline refactor)
 - Phase 13 Plan 03 complete: CI pipeline + pathlib audit + README Windows docs + Docker verification
 - Phase 13 Plan 01 complete: platform compatibility layer (compat.py) + consumer wiring
 - Phase 13 Plan 02 complete: hardware detection & benchmark Windows fixes
