@@ -45,6 +45,7 @@
 | 12. Cross-platform OS Compatibility & Training Optimization | v1.1 | 4/4 | Complete | 2026-03-03 |
 | 13. Windows 10 Compatibility | v1.1 | 3/3 | Complete | 2026-03-03 |
 | 14. CLI & TUI Fixes — Command Pipeline Refactor | 2/2 | Complete    | 2026-03-06 | — |
+| 15. Evaluation & Training Enhancements | — | 0/3 | Planning | — |
 
 <details>
 <summary>✅ v1.1 Cross-Platform OS Compatibility & Windows Support (Phases 12–13) — SHIPPED 2026-03-03</summary>
@@ -75,9 +76,11 @@ Plans:
 
 ### Phase 15: Evaluation and Training Module Enhancements — AUC-PR, Model Selector, Brier Skill Score, and Named Model Artifacts
 
-**Goal:** [To be planned]
+**Goal:** Add AUC-PR and Brier Skill Score metrics to evaluation, implement multi-model --model selector with TUI picker, and introduce named/versioned model artifacts with flat archival and --artifact evaluation flag.
 **Depends on:** Phase 14
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 15 to break down)
+- [ ] 15-01-PLAN.md — AUC-PR + Brier Skill Score metrics (evaluator + visualizer + reports)
+- [ ] 15-02-PLAN.md — Named model artifacts (trainer flat archiving + --artifact eval flag)
+- [ ] 15-03-PLAN.md — Model selector TUI + --model nargs='+' (CLI + pipeline + picker)
