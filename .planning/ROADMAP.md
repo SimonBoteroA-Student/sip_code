@@ -72,3 +72,12 @@
 Plans:
 - [ ] 14-01-PLAN.md — Fix TUI rendering bugs (Layout instead of Group for screen mode)
 - [x] 14-02-PLAN.md — Pipeline coordinator + CLI refactor (PipelineConfig, run_*() functions, --start-from)
+
+### Phase 15: Evaluation and Training Module Enhancements — AUC-PR, Model Selector, Brier Skill Score, and Named Model Artifacts
+
+**Goal:** [To be planned]
+**Depends on:** Phase 14
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 15 to break down)

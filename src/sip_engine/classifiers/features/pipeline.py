@@ -271,7 +271,14 @@ def _is_missing_required(row: dict, reason_counts: dict[str, int]) -> bool:
 # =============================================================================
 
 
-def build_features(force: bool = False) -> Path:
+def build_features(
+    force: bool = False,
+    n_jobs: int = 1,
+    max_ram_gb: int | None = None,
+    device: str = "cpu",
+    interactive: bool = False,
+    show_progress: bool = True,
+) -> Path:
     """Build features.parquet from all source data.
 
     Offline batch path — processes all contratos and writes features.parquet
@@ -280,6 +287,11 @@ def build_features(force: bool = False) -> Path:
 
     Args:
         force: If True, rebuild even if features.parquet already exists.
+        n_jobs: CPU cores to use for parallel operations.
+        max_ram_gb: Maximum RAM to use in GB (informational; not enforced yet).
+        device: Device identifier (``'cpu'``, ``'cuda'``, ``'rocm'``).
+        interactive: If True, show the interactive hardware config screen.
+        show_progress: If True, show a Rich live progress display.
 
     Returns:
         Path to the written features.parquet file.
@@ -288,6 +300,19 @@ def build_features(force: bool = False) -> Path:
         FileNotFoundError: If labels.parquet does not exist (required for
             provider history M1/M2 label integration).
     """
+    # ---- Optional interactive config screen ----
+    if interactive:
+        from sip_engine.shared.hardware import detect_hardware
+        from sip_engine.classifiers.ui.config_screen import show_features_config_screen
+        hw_config = detect_hardware()
+        user_cfg = show_features_config_screen(
+            hw_config,
+            defaults={"n_jobs": n_jobs, "max_ram_gb": max_ram_gb, "device": device},
+        )
+        n_jobs = user_cfg["n_jobs"]
+        max_ram_gb = user_cfg["max_ram_gb"]
+        device = user_cfg["device"]
+
     settings = get_settings()
     features_path = settings.features_path
 
@@ -303,200 +328,245 @@ def build_features(force: bool = False) -> Path:
         logger.info("Using cached features.parquet at %s", features_path)
         return features_path
 
-    logger.info("Building feature matrix...")
+    logger.info("Building feature matrix (n_jobs=%d, device=%s)...", n_jobs, device)
 
-    # ---- Step 1: Build provider history index ----
-    build_provider_history_index(force=force)
-
-    # ---- Step 2: Build lookup dicts from procesos and proveedores ----
-    logger.info("Building procesos lookup...")
-    procesos_lookup = _build_procesos_lookup()
-
-    logger.info("Building proveedores lookup...")
-    proveedores_lookup = _build_proveedores_lookup()
-
-    # ---- Step 3: Build num_actividades_economicas dict ----
-    logger.info("Building num_actividades lookup...")
-    num_actividades_lookup = _build_num_actividades_lookup()
-
-    # ---- Step 3b: Load IRIC thresholds and bid stats for Category D ----
-    # Lazy import to avoid circular dependency at module level
-    from sip_engine.classifiers.iric.pipeline import compute_iric as _compute_iric
-    from sip_engine.classifiers.iric.thresholds import (
-        load_iric_thresholds as _load_iric_thresholds,
-        reset_iric_thresholds_cache as _reset_iric_cache,
-    )
-    from sip_engine.classifiers.iric.bid_stats import build_bid_stats_lookup as _build_bid_stats_lookup
-
-    _iric_thresholds: dict | None = None
-    _bid_stats_lookup: dict = {}
-
-    # Check path directly to avoid stale module-level cache from prior test/run
-    _iric_thresholds_path = settings.iric_thresholds_path
-    if _iric_thresholds_path.exists():
+    # ---- Estimate total contratos rows for progress ETA ----
+    total_rows_estimate: int | None = None
+    if show_progress:
         try:
-            _reset_iric_cache()  # Ensure we load from the correct path for this settings instance
-            _iric_thresholds = _load_iric_thresholds(_iric_thresholds_path)
-            logger.info("IRIC thresholds loaded for Category D computation")
-        except Exception as exc:
-            logger.warning("IRIC thresholds could not be loaded (%s) — Category D will be NaN", exc)
-    else:
-        logger.warning(
-            "IRIC thresholds not found at %s — Category D features will be NaN in features.parquet. "
-            "Run build_iric() first to compute IRIC thresholds.",
-            _iric_thresholds_path,
+            from sip_engine.compat import count_lines
+            contratos_path = settings.contratos_path
+            if contratos_path.exists():
+                total_rows_estimate = max(0, count_lines(contratos_path) - 1)  # subtract header
+        except Exception:
+            pass  # ETA will just be unavailable
+
+    # ---- Set up live progress display ----
+    display: Any = None
+    if show_progress:
+        from sip_engine.classifiers.ui.progress import FeatureBuildProgressDisplay
+        display = FeatureBuildProgressDisplay(
+            device=device,
+            total_rows=total_rows_estimate,
         )
+        display.start()
 
-    if _iric_thresholds is not None:
-        logger.info("Building bid stats lookup for Category D...")
-        _bid_stats_lookup = _build_bid_stats_lookup()
+    try:
+        # ---- Step 1: Build provider history index ----
+        if display:
+            display.start_stage(0)
+        build_provider_history_index(force=force)
+        if display:
+            display.complete_stage(0)
 
-    # ---- Step 4: Stream contratos and compute all 34 features ----
-    from sip_engine.shared.data.loaders import load_contratos
+        # ---- Step 2: Build lookup dicts from procesos and proveedores ----
+        if display:
+            display.start_stage(1)
+        logger.info("Building procesos lookup...")
+        procesos_lookup = _build_procesos_lookup()
+        if display:
+            display.complete_stage(1)
 
-    all_rows: list[dict] = []
-    reason_counts: dict[str, int] = {}
-    rows_processed = 0
-    rows_dropped = 0
+        if display:
+            display.start_stage(2)
+        logger.info("Building proveedores lookup...")
+        proveedores_lookup = _build_proveedores_lookup()
+        if display:
+            display.complete_stage(2)
 
-    for chunk in load_contratos():
-        for _, row in chunk.iterrows():
-            rows_processed += 1
+        # ---- Step 3: Build num_actividades_economicas dict ----
+        if display:
+            display.start_stage(3)
+        logger.info("Building num_actividades lookup...")
+        num_actividades_lookup = _build_num_actividades_lookup()
+        if display:
+            display.complete_stage(3)
 
-            # Drop if missing required fields
-            row_dict = row.to_dict()
-            if _is_missing_required(row_dict, reason_counts):
-                rows_dropped += 1
-                continue
+        # ---- Step 3b: Load IRIC thresholds and bid stats for Category D ----
+        if display:
+            display.start_stage(4)
+        from sip_engine.classifiers.iric.pipeline import compute_iric as _compute_iric
+        from sip_engine.classifiers.iric.thresholds import (
+            load_iric_thresholds as _load_iric_thresholds,
+            reset_iric_thresholds_cache as _reset_iric_cache,
+        )
+        from sip_engine.classifiers.iric.bid_stats import build_bid_stats_lookup as _build_bid_stats_lookup
 
-            # --- Contract signing date ---
-            firma_date = _to_date(row_dict.get("Fecha de Firma"))
-            if firma_date is None:
-                reason_counts["Fecha de Firma (parse error)"] = (
-                    reason_counts.get("Fecha de Firma (parse error)", 0) + 1
-                )
-                rows_dropped += 1
-                continue
+        _iric_thresholds: dict | None = None
+        _bid_stats_lookup: dict = {}
 
-            # --- Procesos data lookup via Proceso de Compra -> ID del Portafolio ---
-            proceso_id = str(row_dict.get("Proceso de Compra", "")).strip()
-            procesos_data: dict | None = procesos_lookup.get(proceso_id)
-
-            # Inject the contract's Fecha de Firma into procesos_data for dias_decision
-            if procesos_data is not None:
-                procesos_data = dict(procesos_data)  # shallow copy
-                procesos_data["Fecha de Firma"] = firma_date
-
-            # --- Proveedor registration date lookup ---
-            raw_tipo = row_dict.get("TipoDocProveedor")
-            raw_num = row_dict.get("Documento Proveedor")
-            num_norm = normalize_numero(raw_num)
-            proveedor_fecha_creacion: datetime.date | None = (
-                proveedores_lookup.get(num_norm) if not is_malformed(num_norm) else None
+        _iric_thresholds_path = settings.iric_thresholds_path
+        if _iric_thresholds_path.exists():
+            try:
+                _reset_iric_cache()
+                _iric_thresholds = _load_iric_thresholds(_iric_thresholds_path)
+                logger.info("IRIC thresholds loaded for Category D computation")
+            except Exception as exc:
+                logger.warning("IRIC thresholds could not be loaded (%s) — Category D will be NaN", exc)
+        else:
+            logger.warning(
+                "IRIC thresholds not found at %s — Category D features will be NaN in features.parquet. "
+                "Run build_iric() first to compute IRIC thresholds.",
+                _iric_thresholds_path,
             )
 
-            # --- Category A: 10 contract features ---
-            cat_a = compute_category_a(row_dict)
+        if _iric_thresholds is not None:
+            logger.info("Building bid stats lookup for Category D...")
+            _bid_stats_lookup = _build_bid_stats_lookup()
 
-            # --- Category B: 9 temporal features ---
-            cat_b = compute_category_b(row_dict, procesos_data, proveedor_fecha_creacion)
+        if display:
+            display.complete_stage(4)
 
-            # --- Category C: 11 provider/competition features ---
-            tipo_norm = normalize_tipo(raw_tipo)
-            provider_history = lookup_provider_history(
-                tipo_doc=raw_tipo,
-                num_doc=raw_num,
-                as_of_date=firma_date,
-                departamento=str(row_dict.get("Departamento", "") or "").strip(),
-            )
-            provider_key = (tipo_norm, num_norm)
-            num_actividades = num_actividades_lookup.get(provider_key, 0)
-            cat_c = compute_category_c(row_dict, procesos_data, provider_history, num_actividades)
+        # ---- Step 4: Stream contratos and compute all 34 features ----
+        if display:
+            display.start_stage(5)
+        from sip_engine.shared.data.loaders import load_contratos
 
-            # --- Category D: 4 IRIC aggregate scores ---
-            if _iric_thresholds is not None:
-                _bid_stats = _bid_stats_lookup.get(proceso_id)
-                _bid_values = None
-                if _bid_stats is not None:
-                    # Pass bid values indirectly — bid_stats already computed;
-                    # use compute_iric with pre-computed result by calling without bid_values
-                    pass  # scores computed below without raw bid_values (already in lookup)
-                iric_result = _compute_iric(
-                    contract_row=row_dict,
-                    procesos_data=procesos_data,
-                    provider_history=provider_history,
-                    thresholds=_iric_thresholds,
-                    num_actividades=num_actividades,
-                    bid_values=None,  # bid stats stored separately in iric_scores.parquet
+        all_rows: list[dict] = []
+        reason_counts: dict[str, int] = {}
+        rows_processed = 0
+        rows_dropped = 0
+        _PROGRESS_INTERVAL = 5_000  # update display every N rows
+
+        for chunk in load_contratos():
+            for _, row in chunk.iterrows():
+                rows_processed += 1
+
+                row_dict = row.to_dict()
+                if _is_missing_required(row_dict, reason_counts):
+                    rows_dropped += 1
+                    if display and rows_processed % _PROGRESS_INTERVAL == 0:
+                        display.update_rows(rows_processed, rows_processed - rows_dropped, rows_dropped)
+                    continue
+
+                firma_date = _to_date(row_dict.get("Fecha de Firma"))
+                if firma_date is None:
+                    reason_counts["Fecha de Firma (parse error)"] = (
+                        reason_counts.get("Fecha de Firma (parse error)", 0) + 1
+                    )
+                    rows_dropped += 1
+                    if display and rows_processed % _PROGRESS_INTERVAL == 0:
+                        display.update_rows(rows_processed, rows_processed - rows_dropped, rows_dropped)
+                    continue
+
+                proceso_id = str(row_dict.get("Proceso de Compra", "")).strip()
+                procesos_data: dict | None = procesos_lookup.get(proceso_id)
+
+                if procesos_data is not None:
+                    procesos_data = dict(procesos_data)
+                    procesos_data["Fecha de Firma"] = firma_date
+
+                raw_tipo = row_dict.get("TipoDocProveedor")
+                raw_num = row_dict.get("Documento Proveedor")
+                num_norm = normalize_numero(raw_num)
+                proveedor_fecha_creacion: datetime.date | None = (
+                    proveedores_lookup.get(num_norm) if not is_malformed(num_norm) else None
                 )
-                cat_d = {
-                    "iric_anomalias": iric_result["iric_anomalias"],
-                    "iric_competencia": iric_result["iric_competencia"],
-                    "iric_score": iric_result["iric_score"],
-                    "iric_transparencia": iric_result["iric_transparencia"],
+
+                cat_a = compute_category_a(row_dict)
+                cat_b = compute_category_b(row_dict, procesos_data, proveedor_fecha_creacion)
+
+                tipo_norm = normalize_tipo(raw_tipo)
+                provider_history = lookup_provider_history(
+                    tipo_doc=raw_tipo,
+                    num_doc=raw_num,
+                    as_of_date=firma_date,
+                    departamento=str(row_dict.get("Departamento", "") or "").strip(),
+                )
+                provider_key = (tipo_norm, num_norm)
+                num_actividades = num_actividades_lookup.get(provider_key, 0)
+                cat_c = compute_category_c(row_dict, procesos_data, provider_history, num_actividades)
+
+                if _iric_thresholds is not None:
+                    iric_result = _compute_iric(
+                        contract_row=row_dict,
+                        procesos_data=procesos_data,
+                        provider_history=provider_history,
+                        thresholds=_iric_thresholds,
+                        num_actividades=num_actividades,
+                        bid_values=None,
+                    )
+                    cat_d = {
+                        "iric_anomalias": iric_result["iric_anomalias"],
+                        "iric_competencia": iric_result["iric_competencia"],
+                        "iric_score": iric_result["iric_score"],
+                        "iric_transparencia": iric_result["iric_transparencia"],
+                    }
+                else:
+                    cat_d = {
+                        "iric_anomalias": float("nan"),
+                        "iric_competencia": float("nan"),
+                        "iric_score": float("nan"),
+                        "iric_transparencia": float("nan"),
+                    }
+
+                feature_row = {
+                    "id_contrato": str(row_dict.get("ID Contrato", "")),
+                    **cat_a,
+                    **cat_b,
+                    **cat_c,
+                    **cat_d,
                 }
-            else:
-                cat_d = {
-                    "iric_anomalias": float("nan"),
-                    "iric_competencia": float("nan"),
-                    "iric_score": float("nan"),
-                    "iric_transparencia": float("nan"),
-                }
+                all_rows.append(feature_row)
 
-            # --- Merge all 34 features + id_contrato ---
-            feature_row = {
-                "id_contrato": str(row_dict.get("ID Contrato", "")),
-                **cat_a,
-                **cat_b,
-                **cat_c,
-                **cat_d,
-            }
-            all_rows.append(feature_row)
+                # Periodic display update
+                if display and rows_processed % _PROGRESS_INTERVAL == 0:
+                    display.update_rows(rows_processed, len(all_rows), rows_dropped)
 
-    logger.info(
-        "Feature extraction complete: %d rows processed, %d kept, %d dropped",
-        rows_processed,
-        len(all_rows),
-        rows_dropped,
-    )
-    if reason_counts:
-        for reason, count in sorted(reason_counts.items()):
-            logger.info("  Dropped %d rows due to missing: %s", count, reason)
+        # Final row count update
+        if display:
+            display.update_rows(rows_processed, len(all_rows), rows_dropped)
+            display.complete_stage(5)
 
-    # ---- Step 5: Build DataFrame and encoding mappings ----
-    df = pd.DataFrame(all_rows)
-    if df.empty:
-        raise ValueError(
-            f"No feature rows produced: {rows_processed} rows processed, "
-            f"{rows_dropped} dropped. Check date formats and required fields."
+        logger.info(
+            "Feature extraction complete: %d rows processed, %d kept, %d dropped",
+            rows_processed,
+            len(all_rows),
+            rows_dropped,
         )
-    df = df.set_index("id_contrato")
+        if reason_counts:
+            for reason, count in sorted(reason_counts.items()):
+                logger.info("  Dropped %d rows due to missing: %s", count, reason)
 
-    # Build encoding mappings from the full feature DataFrame (batch training mode)
-    mappings = build_encoding_mappings(df, force=force)
+        # ---- Step 5: Build DataFrame and encoding mappings ----
+        if display:
+            display.start_stage(6)
 
-    # Apply encoding to categorical columns
-    df = apply_encoding(df, mappings)
+        df = pd.DataFrame(all_rows)
+        if df.empty:
+            raise ValueError(
+                f"No feature rows produced: {rows_processed} rows processed, "
+                f"{rows_dropped} dropped. Check date formats and required fields."
+            )
+        df = df.set_index("id_contrato")
 
-    # ---- Step 6: Select canonical FEATURE_COLUMNS in order ----
-    # Only keep columns that are in FEATURE_COLUMNS; add missing ones as NaN
-    for col in FEATURE_COLUMNS:
-        if col not in df.columns:
-            df[col] = float("nan")
+        mappings = build_encoding_mappings(df, force=force)
+        df = apply_encoding(df, mappings)
 
-    df_out = df[FEATURE_COLUMNS]
+        for col in FEATURE_COLUMNS:
+            if col not in df.columns:
+                df[col] = float("nan")
 
-    # ---- Step 7: Write to features.parquet via pyarrow ----
-    features_path.parent.mkdir(parents=True, exist_ok=True)
-    table = pa.Table.from_pandas(df_out, preserve_index=True)
-    pq.write_table(table, features_path)
+        df_out = df[FEATURE_COLUMNS]
 
-    logger.info(
-        "features.parquet written to %s (%d rows, %d columns)",
-        features_path,
-        len(df_out),
-        len(df_out.columns),
-    )
+        features_path.parent.mkdir(parents=True, exist_ok=True)
+        table = pa.Table.from_pandas(df_out, preserve_index=True)
+        pq.write_table(table, features_path)
+
+        if display:
+            display.complete_stage(6)
+
+        logger.info(
+            "features.parquet written to %s (%d rows, %d columns)",
+            features_path,
+            len(df_out),
+            len(df_out.columns),
+        )
+
+    finally:
+        if display:
+            display.stop()
+
     return features_path
 
 

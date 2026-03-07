@@ -423,6 +423,7 @@ python -m sip_engine train [options]
 | `--device {cpu,cuda,rocm}` | Force training device (default: auto-detect) |
 | `--disable-rocm` | Skip ROCm GPU even if detected |
 | `--no-interactive` | Skip interactive config screen, use defaults/CLI args |
+| `--no-stats` | Disable live test-set metrics display (MAP@k, Brier, P/R/F1, ROC curve shown by default) |
 
 **What it does:**
 - Splits data 70/30 with stratified random sampling (seed=42)
@@ -457,6 +458,9 @@ python -m sip_engine train --n-iter 500 --n-jobs 4
 
 # Force CUDA GPU training, skip interactive config
 python -m sip_engine train --device cuda --no-interactive
+
+# Disable live metrics panel (faster refresh, less screen space)
+python -m sip_engine train --no-stats
 ```
 
 ---
@@ -509,6 +513,7 @@ python -m sip_engine run-pipeline [options]
 | `--force` | Rebuild all stages from scratch even if artifacts exist |
 | `--n-iter N` | HP search iterations per model (default: 200) |
 | `--n-jobs N` | Parallelism level (default: -1 = all cores) |
+| `--no-stats` | Disable live test-set metrics display (MAP@k, Brier, P/R/F1, ROC curve shown by default) |
 
 **Examples:**
 

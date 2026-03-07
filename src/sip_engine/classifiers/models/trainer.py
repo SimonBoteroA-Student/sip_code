@@ -728,7 +728,7 @@ def train_model(
     device: str | None = None,
     disable_rocm: bool = False,
     interactive: bool = True,
-    show_stats: bool = False,
+    show_stats: bool = True,
 ) -> Path:
     """Train a single XGBoost classifier and serialize all artifacts.
 

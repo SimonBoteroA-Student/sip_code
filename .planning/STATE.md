@@ -75,6 +75,7 @@ Phase 12-03 decisions:
 
 - Phase 14 Plan 01 complete: TUI rendering fix — Layout replaces Group at screen level in all 3 config screens
 - Phase 14 Plan 02 complete: pipeline.py coordinator + CLI refactor + --start-from support
+- Phase 15 added: Evaluation and Training Module Enhancements — AUC-PR, Model Selector, Brier Skill Score, and Named Model Artifacts
 - Phase 14 added: CLI & TUI Fixes — Command Pipeline Refactor (chart edge clipping, hardware config display, command pipeline refactor)
 - Phase 13 Plan 03 complete: CI pipeline + pathlib audit + README Windows docs + Docker verification
 - Phase 13 Plan 01 complete: platform compatibility layer (compat.py) + consumer wiring
