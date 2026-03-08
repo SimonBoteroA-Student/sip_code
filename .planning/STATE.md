@@ -5,19 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 15 — Evaluation & Training Enhancements (Plan 1/3 complete)
+**Current focus:** Phase 15 — Evaluation & Training Enhancements (Plan 2/3 complete)
 
 ## Current Position
 
 Milestone: v1.3 — Evaluation & Training Enhancements
-Phase 15: Evaluation & Training Module Enhancements — **Plan 1/3 Complete**
-Status: Plan 15-01 done (AUC-PR + BSS). Plans 15-02 and 15-03 remain.
+Phase 15: Evaluation & Training Module Enhancements — **Plan 2/3 Complete**
+Status: Plans 15-01 (AUC-PR + BSS) and 15-02 (Named Artifacts) done. Plan 15-03 remains.
 
-Progress: [█░░░░░░░░░░░░░░░░░░░] Phase 15 in progress (1/3 plans)
+Progress: [██░░░░░░░░░░░░░░░░░░] Phase 15 in progress (2/3 plans)
 
 ## Accumulated Context
 
 ### Decisions
+
+Phase 15-02 decisions:
+- Flat archiving to old/ replaces date-keyed archiving — run-numbered files are self-identifying
+- Run number scanning checks model_dir + model_dir/old/ for collision-safety
+- artifact=None preserves existing code paths; --artifact requires --model
 
 Phase 15-01 decisions:
 - BSS guarded against div-by-zero: returns 0.0 when brier_baseline == 0
@@ -81,6 +86,7 @@ Phase 12-03 decisions:
 
 - Phase 14 Plan 01 complete: TUI rendering fix — Layout replaces Group at screen level in all 3 config screens
 - Phase 14 Plan 02 complete: pipeline.py coordinator + CLI refactor + --start-from support
+- Phase 15 Plan 02 complete: Named model artifacts — run-numbered files, flat archiving, --artifact CLI flag
 - Phase 15 Plan 01 complete: AUC-PR + BSS metrics in evaluator, PR curve chart in visualizer, 4 new tests
 - Phase 15 added: Evaluation and Training Module Enhancements — AUC-PR, Model Selector, Brier Skill Score, and Named Model Artifacts
 - Phase 14 added: CLI & TUI Fixes — Command Pipeline Refactor (chart edge clipping, hardware config display, command pipeline refactor)
@@ -104,6 +110,6 @@ None — all prior blockers resolved.
 
 ## Session Continuity
 
-Last session: 2026-06-04
-Stopped at: Completed 15-01-PLAN.md — AUC-PR + Brier Skill Score (Phase 15, Plan 1/3)
-Resume file: .planning/phases/15-evaluation-and-training-module-enhancements-auc-pr-model-selector-brier-skill-score-and-named-model-artifacts/15-01-SUMMARY.md
+Last session: 2026-03-08
+Stopped at: Completed 15-02-PLAN.md — Named model artifacts (trainer + evaluator + --artifact CLI flag)
+Resume file: .planning/phases/15-evaluation-and-training-module-enhancements-auc-pr-model-selector-brier-skill-score-and-named-model-artifacts/15-02-SUMMARY.md

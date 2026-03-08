@@ -82,5 +82,5 @@ Plans:
 
 Plans:
 - [x] 15-01-PLAN.md — AUC-PR + Brier Skill Score metrics (evaluator + visualizer + reports)
-- [ ] 15-02-PLAN.md — Named model artifacts (trainer flat archiving + --artifact eval flag)
+- [x] 15-02-PLAN.md — Named model artifacts (trainer flat archiving + --artifact eval flag)
 - [ ] 15-03-PLAN.md — Model selector TUI + --model nargs='+' (CLI + pipeline + picker)
