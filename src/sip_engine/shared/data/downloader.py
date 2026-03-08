@@ -1,11 +1,12 @@
 """Download SECOP databases from datos.gov.co.
 
-Uses the Socrata Open Data API (SODA) endpoint
-(resource/{id}.csv?$limit=N) with parallel curl processes for concurrent
-downloads.  Interactive progress is displayed via periodic polling of
-partially-downloaded file sizes.
+Uses the Socrata Open Data API (SODA) endpoint with paginated requests
+(resource/{id}.csv?$limit=N&$offset=M) and parallel curl processes for
+concurrent downloads.  Interactive progress is displayed via periodic
+polling of partially-downloaded file sizes.
 
 Features:
+- Paginated SODA API requests (50,000 rows/page) for complete downloads
 - Parallel downloads (configurable concurrency, default 4)
 - Largest-first scheduling to minimise wall-clock time
 - Stall detection (abort + retry if speed < 1 KB/s for 60 s)
@@ -16,7 +17,7 @@ Features:
 - Automatic fallback to Python requests when curl is unavailable
 
 Usage (from CLI):
-    python -m sip_engine download-data                    # all 8 datasets
+    python -m sip_engine download-data                    # all 9 datasets
     python -m sip_engine download-data --dataset contratos procesos
     python -m sip_engine download-data --dry-run          # show URLs only
     python -m sip_engine download-data --resume           # retry failed ones
@@ -39,6 +40,13 @@ import requests  # Fallback when curl is not available
 
 from sip_engine.compat import safe_rename
 from sip_engine.shared.config import get_settings
+
+# ── Pagination config ─────────────────────────────────────────────────────────
+
+# Rows per SODA API page.  Most Socrata instances silently cap $limit at
+# 50,000–1,000,000 regardless of what you request.  Using 50,000 is safe
+# for all known instances and keeps per-page response sizes manageable.
+_SODA_PAGE_SIZE: int = 50_000
 
 # ── Dataset registry ─────────────────────────────────────────────────────────
 
@@ -66,16 +74,17 @@ class SECOPDataset:
     filename: str          # target filename inside secop_dir
     description: str       # human-readable name
 
-    # Maximum rows to request from the SODA API.  Must exceed the largest
-    # dataset (adiciones ≈ 15.8 M rows as of 2025-02).
-    _SODA_LIMIT: int = 50_000_000
+    def page_url(self, offset: int = 0, limit: int = _SODA_PAGE_SIZE) -> str:
+        """Build a paginated SODA API URL."""
+        return (
+            f"https://www.datos.gov.co/resource/{self.api_id}"
+            f".csv?$limit={limit}&$offset={offset}"
+        )
 
     @property
     def url(self) -> str:
-        return (
-            f"https://www.datos.gov.co/resource/{self.api_id}"
-            f".csv?$limit={self._SODA_LIMIT}"
-        )
+        """Base URL (for dry-run display)."""
+        return f"https://www.datos.gov.co/resource/{self.api_id}.csv"
 
     @property
     def approx_bytes(self) -> int:
@@ -180,6 +189,15 @@ def _clear_lines(n: int) -> None:
     sys.stdout.flush()
 
 
+def _count_csv_data_rows(path: Path) -> int:
+    """Count data rows (excluding header) in a CSV file."""
+    if not path.exists() or path.stat().st_size == 0:
+        return 0
+    with path.open("rb") as f:
+        total_lines = sum(1 for _ in f)
+    return max(total_lines - 1, 0)
+
+
 # ── Core download logic ──────────────────────────────────────────────────────
 
 def _curl_available() -> bool:
@@ -200,32 +218,62 @@ def _download_with_requests(
     output_dir: Path,
     succeeded: list[Path],
 ) -> list[Path]:
-    """Sequential download fallback using Python requests (no curl needed).
+    """Sequential paginated download using Python requests (no curl needed).
 
-    Simpler than the parallel curl path but fully functional.  Used
-    automatically on Windows or any system where curl is not installed.
+    Used automatically on Windows or any system where curl is not installed.
     """
     for ds in datasets:
         target = output_dir / ds.filename
-        tmp = target.with_suffix(".csv.part")
+        part = target.with_suffix(".csv.part")
         print(f"  ⟳  Downloading {ds.key} ({ds.description})...")
         try:
-            response = requests.get(ds.url, stream=True, timeout=600)
-            response.raise_for_status()
-            downloaded = 0
-            with tmp.open("wb") as f:
-                for chunk in response.iter_content(chunk_size=65536):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        # Print progress every ~10 MB
-                        if downloaded % (10 * 1024 * 1024) < 65536:
-                            print(f"\r    {_fmt_size(downloaded)}", end="", flush=True)
-            print(f"\r  ✓  {ds.key:<16} {_fmt_size(downloaded)}")
-            safe_rename(tmp, target)
-            succeeded.append(target)
+            offset = 0
+            page_num = 0
+
+            while True:
+                url = ds.page_url(offset=offset)
+                response = requests.get(url, timeout=600)
+                response.raise_for_status()
+                content = response.content
+
+                if not content.strip():
+                    break
+
+                # Count data rows (lines minus header)
+                lines = content.split(b"\n")
+                while lines and lines[-1] == b"":
+                    lines.pop()
+                data_rows = len(lines) - 1  # subtract header
+                if data_rows <= 0:
+                    break
+
+                with part.open("wb" if page_num == 0 else "ab") as f:
+                    if page_num == 0:
+                        f.write(content)
+                    else:
+                        # Skip first line (header)
+                        idx = content.index(b"\n") + 1
+                        f.write(content[idx:])
+
+                part_size = part.stat().st_size
+                print(
+                    f"\r    {_fmt_size(part_size)}  page {page_num + 1}",
+                    end="", flush=True,
+                )
+
+                page_num += 1
+                offset += _SODA_PAGE_SIZE
+
+                if data_rows < _SODA_PAGE_SIZE:
+                    break
+
+            final_size = part.stat().st_size if part.exists() else 0
+            print(f"\r  ✓  {ds.key:<16} {_fmt_size(final_size)}  ({page_num} pages)")
+            if part.exists():
+                safe_rename(part, target)
+                succeeded.append(target)
         except KeyboardInterrupt:
-            print(f"\n  ⚠  Download interrupted. Partial file preserved: {tmp}")
+            print(f"\n  ⚠  Download interrupted. Partial file preserved: {part}")
             break
         except Exception as e:
             print(f"\r  ✗  {ds.key:<16} {e}")
@@ -238,15 +286,30 @@ _SPEED_WINDOW_SECONDS = 3.0
 
 @dataclass
 class _DownloadSlot:
-    """Tracks one active curl download."""
+    """Tracks one active paginated curl download."""
 
     dataset: SECOPDataset
     target: Path           # final destination
-    tmp: Path              # temporary download path (.part)
-    proc: subprocess.Popen  # curl process
+    part: Path             # accumulated download (.part)
+    page_tmp: Path         # temp file for current page (.page)
+    proc: subprocess.Popen  # curl process (for current page)
     started: float         # time.monotonic() at launch
+    offset: int = 0        # current SODA $offset
+    page_count: int = 0    # pages completed so far
     # Rolling speed window: deque of (timestamp, cumulative_bytes)
     size_samples: deque = field(default_factory=lambda: deque(maxlen=10))
+
+    def current_size(self) -> int:
+        """Total bytes downloaded so far (accumulated + in-flight page)."""
+        try:
+            part_size = self.part.stat().st_size if self.part.exists() else 0
+        except OSError:
+            part_size = 0
+        try:
+            page_size = self.page_tmp.stat().st_size if self.page_tmp.exists() else 0
+        except OSError:
+            page_size = 0
+        return part_size + page_size
 
     def instantaneous_speed(self) -> float:
         """Return bytes/sec over the last ~3 seconds."""
@@ -268,14 +331,9 @@ class _DownloadSlot:
         self.size_samples.append((time.monotonic(), size))
 
 
-def _launch_curl(
-    ds: SECOPDataset, output_dir: Path, *, resume: bool = False
-) -> _DownloadSlot:
-    """Start a curl process for one dataset."""
-    target = output_dir / ds.filename
-    tmp = target.with_suffix(".csv.part")
-
-    cmd = [
+def _curl_cmd(url: str, output_path: Path) -> list[str]:
+    """Build a curl command for one SODA API page."""
+    return [
         "curl",
         "--silent",                # suppress default progress
         "--show-error",            # still show errors
@@ -290,16 +348,52 @@ def _launch_curl(
         "--connect-timeout", "30",
         "--speed-limit", "1000",   # stall watchdog: min 1 KB/s ...
         "--speed-time", "60",      # ... for 60 seconds before aborting
-        "--output", str(tmp),
+        "--output", str(output_path),
+        url,
     ]
 
-    # NOTE: --continue-at is incompatible with the SODA API (dynamic
-    # response, no Content-Range support).  On resume we simply re-download
-    # from scratch and overwrite the .part file.
-    if resume and tmp.exists() and tmp.stat().st_size > 0:
-        pass  # .part will be overwritten by --output
 
-    cmd.append(ds.url)
+def _append_page(slot: _DownloadSlot) -> int:
+    """Append completed page to the .part file.
+
+    Keeps the CSV header from the first page only; strips headers from
+    subsequent pages.  Returns the number of data rows in this page.
+    """
+    page = slot.page_tmp
+    part = slot.part
+
+    if not page.exists() or page.stat().st_size == 0:
+        return 0
+
+    is_first = (slot.page_count == 0)
+    data_rows = 0
+
+    with page.open("rb") as src, part.open("wb" if is_first else "ab") as dst:
+        for i, line in enumerate(src):
+            if i == 0:
+                if is_first:
+                    dst.write(line)
+                # Either way, header is not a data row
+                continue
+            dst.write(line)
+            data_rows += 1
+
+    page.unlink(missing_ok=True)
+    return data_rows
+
+
+def _launch_curl(ds: SECOPDataset, output_dir: Path) -> _DownloadSlot:
+    """Start a curl process for the first page of a dataset."""
+    target = output_dir / ds.filename
+    part = target.with_suffix(".csv.part")
+    page_tmp = target.with_suffix(".csv.page")
+
+    # Always start fresh — SODA pagination cannot resume mid-dataset
+    if part.exists():
+        part.unlink()
+
+    url = ds.page_url(offset=0)
+    cmd = _curl_cmd(url, page_tmp)
 
     proc = subprocess.Popen(
         cmd,
@@ -309,46 +403,57 @@ def _launch_curl(
     slot = _DownloadSlot(
         dataset=ds,
         target=target,
-        tmp=tmp,
+        part=part,
+        page_tmp=page_tmp,
         proc=proc,
         started=time.monotonic(),
+        offset=0,
+        page_count=0,
     )
-    # Seed with initial size if resuming
-    if resume and tmp.exists():
-        slot.record_size(tmp.stat().st_size)
-    else:
-        slot.record_size(0)
+    slot.record_size(0)
     return slot
+
+
+def _launch_next_page(slot: _DownloadSlot) -> None:
+    """Launch curl for the next page, replacing the slot's process."""
+    # Close previous process's stderr to avoid resource leaks
+    if slot.proc.stderr:
+        slot.proc.stderr.close()
+
+    url = slot.dataset.page_url(offset=slot.offset)
+    cmd = _curl_cmd(url, slot.page_tmp)
+    slot.proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
 
 
 def _render_progress(
     slots: list[_DownloadSlot],
-    finished: list[tuple[SECOPDataset, float, float, bool]],  # (ds, size, elapsed, ok)
+    finished: list[tuple[SECOPDataset, float, float, bool, int]],
     total_count: int,
 ) -> int:
     """Print a live progress table.  Returns number of lines printed."""
     width = _term_width()
     lines: list[str] = []
 
-    header = f"  Downloading {total_count} SECOP datasets from datos.gov.co"
+    header = f"  Downloading {total_count} SECOP datasets (paginated, {_SODA_PAGE_SIZE:,} rows/page)"
     lines.append(header)
     lines.append("─" * min(width, 78))
 
     # Finished downloads
-    for ds, size, elapsed, ok in finished:
+    for ds, size, elapsed, ok, pages in finished:
         status = "✓" if ok else "✗"
         elapsed_str = _fmt_duration(elapsed)
         avg_speed = _fmt_size(size / elapsed) + "/s" if elapsed > 0 and ok else ""
-        label = f"done in {elapsed_str}  {avg_speed}" if ok else "FAILED"
+        label = f"done in {elapsed_str}  {avg_speed}  ({pages} pages)" if ok else "FAILED"
         lines.append(f"  {status}  {ds.key:<16} {_fmt_size(size):>12}   {label}")
 
     # Active downloads
     for slot in slots:
-        try:
-            current_size = slot.tmp.stat().st_size if slot.tmp.exists() else 0
-        except OSError:
-            current_size = 0
-        slot.record_size(current_size)
+        size = slot.current_size()
+        slot.record_size(size)
 
         speed = slot.instantaneous_speed()
         speed_str = f"{_fmt_size(speed)}/s" if speed > 100 else "starting…"
@@ -356,18 +461,19 @@ def _render_progress(
         # ETA based on approximate known size
         eta_str = ""
         approx = slot.dataset.approx_bytes
-        if approx > 0 and speed > 100 and current_size < approx:
-            remaining = approx - current_size
+        if approx > 0 and speed > 100 and size < approx:
+            remaining = approx - size
             eta_str = f"  ETA {_fmt_duration(remaining / speed)}"
         # Progress percentage
         pct_str = ""
-        if approx > 0 and current_size > 0:
-            pct = min(current_size / approx * 100, 99.9)
+        if approx > 0 and size > 0:
+            pct = min(size / approx * 100, 99.9)
             pct_str = f"  {pct:4.1f}%"
 
+        page_str = f"  p{slot.page_count + 1}"
         lines.append(
-            f"  ⟳  {slot.dataset.key:<16} {_fmt_size(current_size):>12}   "
-            f"{speed_str}{pct_str}{eta_str}"
+            f"  ⟳  {slot.dataset.key:<16} {_fmt_size(size):>12}   "
+            f"{speed_str}{pct_str}{page_str}{eta_str}"
         )
 
     # Pending count
@@ -396,10 +502,10 @@ def download_datasets(
     skip_existing: bool = False,
     resume: bool = False,
 ) -> list[Path]:
-    """Download SECOP datasets from datos.gov.co using parallel curl.
+    """Download SECOP datasets from datos.gov.co using paginated SODA API.
 
     Args:
-        datasets: Which datasets to download (default: all 8).
+        datasets: Which datasets to download (default: all 9).
         output_dir: Destination directory (default: Settings.secop_dir).
         parallel: Max concurrent curl processes (default: 4).
         dry_run: If True, print URLs and exit without downloading.
@@ -418,7 +524,8 @@ def download_datasets(
 
     # ── Dry-run mode ──────────────────────────────────────────────────
     if dry_run:
-        print(f"\n  Dry run — would download {len(datasets)} datasets to {output_dir}\n")
+        print(f"\n  Dry run — would download {len(datasets)} datasets to {output_dir}")
+        print(f"  Paginated: {_SODA_PAGE_SIZE:,} rows/page\n")
         for ds in datasets:
             existing = output_dir / ds.filename
             part = existing.with_suffix(".csv.part")
@@ -454,13 +561,14 @@ def download_datasets(
         for ds in datasets:
             part = (output_dir / ds.filename).with_suffix(".csv.part")
             if part.exists() and part.stat().st_size > 0:
-                print(f"  ↻  {ds.key:<16} resuming from {_fmt_size(part.stat().st_size)}")
+                print(f"  ↻  {ds.key:<16} .part found ({_fmt_size(part.stat().st_size)}), re-downloading")
 
     # ── Confirm before downloading ────────────────────────────────────
     total_approx = sum(ds.approx_bytes for ds in datasets)
     print(f"\n  Will download {len(datasets)} datasets to {output_dir}")
     print(f"  Estimated total: ~{_fmt_size(total_approx)}")
     print(f"  Parallel connections: {parallel}")
+    print(f"  Page size: {_SODA_PAGE_SIZE:,} rows/page")
     print(f"  Resume mode: {'on' if resume else 'off'}\n")
     for ds in datasets:
         print(f"    • {ds.description}  ({ds.filename}, ~{_fmt_size(ds.approx_bytes)})")
@@ -483,10 +591,10 @@ def download_datasets(
         succeeded: list[Path] = []
         return _download_with_requests(list(datasets), output_dir, succeeded)
 
-    # ── Run parallel downloads with live progress ─────────────────────
+    # ── Run parallel paginated downloads with live progress ───────────
     queue = list(datasets)
     active: list[_DownloadSlot] = []
-    finished: list[tuple[SECOPDataset, float, float, bool]] = []
+    finished: list[tuple[SECOPDataset, float, float, bool, int]] = []
     succeeded: list[Path] = []
     total = len(queue)
     prev_lines = 0
@@ -512,14 +620,14 @@ def download_datasets(
             # Fill up to `parallel` slots
             while queue and len(active) < parallel:
                 ds = queue.pop(0)
-                active.append(_launch_curl(ds, output_dir, resume=resume))
+                active.append(_launch_curl(ds, output_dir))
 
             # Render progress
             if prev_lines > 0:
                 _clear_lines(prev_lines)
             prev_lines = _render_progress(active, finished, total)
 
-            # Check for completed processes
+            # Check for completed curl processes (page-level)
             still_active: list[_DownloadSlot] = []
             for slot in active:
                 retcode = slot.proc.poll()
@@ -527,27 +635,37 @@ def download_datasets(
                     still_active.append(slot)
                     continue
 
-                # Process finished
-                elapsed = time.monotonic() - slot.started
-                ok = retcode == 0
-                size = 0.0
-                if ok and slot.tmp.exists():
-                    size = slot.tmp.stat().st_size
-                    safe_rename(slot.tmp, slot.target)
-                    succeeded.append(slot.target)
-                elif not ok:
+                if retcode == 0:
+                    # Page completed — append to .part and decide next step
+                    data_rows = _append_page(slot)
+                    slot.page_count += 1
+
+                    if data_rows < _SODA_PAGE_SIZE:
+                        # Last page — dataset complete
+                        elapsed = time.monotonic() - slot.started
+                        size = slot.part.stat().st_size if slot.part.exists() else 0
+                        safe_rename(slot.part, slot.target)
+                        succeeded.append(slot.target)
+                        finished.append((slot.dataset, size, elapsed, True, slot.page_count))
+                    else:
+                        # More pages to fetch
+                        slot.offset += _SODA_PAGE_SIZE
+                        _launch_next_page(slot)
+                        still_active.append(slot)
+                else:
+                    # Page failed — mark dataset as failed
+                    elapsed = time.monotonic() - slot.started
                     stderr_msg = ""
                     if slot.proc.stderr:
                         stderr_msg = slot.proc.stderr.read().decode(errors="replace").strip()
-                    # Keep .part file for resume — don't delete it
-                    part_size = slot.tmp.stat().st_size if slot.tmp.exists() else 0
-                    size = part_size
+                    size = slot.part.stat().st_size if slot.part.exists() else 0
                     if stderr_msg:
                         sys.stdout.write(
                             f"\r  ✗  {slot.dataset.key}: curl exit {retcode} — {stderr_msg}\n"
                         )
-
-                finished.append((slot.dataset, size, elapsed, ok))
+                    # Clean up page temp but preserve .part
+                    slot.page_tmp.unlink(missing_ok=True)
+                    finished.append((slot.dataset, size, elapsed, False, slot.page_count))
 
             active = still_active
             if active:
@@ -562,6 +680,10 @@ def download_datasets(
     _render_progress([], finished, total)
 
     if interrupted:
+        # Clean up page temp files
+        for ds in datasets:
+            page_tmp = (output_dir / ds.filename).with_suffix(".csv.page")
+            page_tmp.unlink(missing_ok=True)
         # Show resume hint
         part_files = [
             (ds.key, (output_dir / ds.filename).with_suffix(".csv.part"))
@@ -575,9 +697,9 @@ def download_datasets(
         print()
         return succeeded
 
-    ok_count = sum(1 for _, _, _, ok in finished if ok)
+    ok_count = sum(1 for _, _, _, ok, _ in finished if ok)
     fail_count = total - ok_count
-    total_bytes = sum(sz for _, sz, _, ok in finished if ok)
+    total_bytes = sum(sz for _, sz, _, ok, _ in finished if ok)
 
     print(f"\n  Done: {ok_count}/{total} succeeded ({_fmt_size(total_bytes)} total)")
     if fail_count:
