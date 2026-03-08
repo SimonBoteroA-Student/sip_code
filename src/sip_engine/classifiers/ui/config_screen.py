@@ -131,6 +131,37 @@ class _DeviceSelector:
         return Text(prefix + label, style=style)
 
 
+class _CheckboxWidget:
+    """Multi-select checkbox: [x] M1  [ ] M2  [x] M3  [ ] M4"""
+
+    def __init__(self, options: list[str], selected: set[str] | None = None):
+        self.options = options
+        self.selected = selected if selected is not None else set(options)
+        self._cursor = 0
+
+    def toggle(self) -> None:
+        opt = self.options[self._cursor]
+        if opt in self.selected:
+            self.selected.discard(opt)
+        else:
+            self.selected.add(opt)
+
+    def move_up(self) -> None:
+        self._cursor = max(0, self._cursor - 1)
+
+    def move_down(self) -> None:
+        self._cursor = min(len(self.options) - 1, self._cursor + 1)
+
+    def render(self) -> Text:
+        lines = Text()
+        for i, opt in enumerate(self.options):
+            check = "x" if opt in self.selected else " "
+            cursor = ">" if i == self._cursor else " "
+            style = "bold cyan" if i == self._cursor else ""
+            lines.append(f"  {cursor} [{check}] {opt}\n", style=style)
+        return lines
+
+
 # ---------------------------------------------------------------------------
 # Keyboard input helpers (cross-platform)
 # ---------------------------------------------------------------------------
@@ -161,6 +192,8 @@ def _read_key_unix() -> str:
             return _KEY_ENTER
         if ch in ("q", "\x03"):  # q or Ctrl-C
             return _KEY_QUIT
+        if ch == " ":
+            return " "
         if ch.isdigit():
             return ch
         return ""
@@ -181,6 +214,8 @@ def _read_key_win() -> str:
         ch2 = msvcrt.getwch()
         mapping = {"H": _KEY_UP, "P": _KEY_DOWN, "M": _KEY_RIGHT, "K": _KEY_LEFT}
         return mapping.get(ch2, "")
+    if ch == " ":
+        return " "
     if ch.isdigit():
         return ch
     return ""
@@ -606,3 +641,54 @@ def show_pipeline_config_screen(
         "max_ram_gb": ram_slider.current,
         "device": device_sel.current,
     }
+
+
+def show_model_picker(
+    model_ids: list[str] | None = None,
+) -> list[str]:
+    """Interactive checkbox picker for model selection.
+
+    Returns list of selected model IDs. Falls back to all models
+    if stdin is not a TTY.
+    """
+    if model_ids is None:
+        model_ids = ["M1", "M2", "M3", "M4"]
+
+    if not sys.stdin.isatty():
+        return list(model_ids)
+
+    widget = _CheckboxWidget(model_ids)
+    console = Console()
+
+    def _build_display() -> Panel:
+        body = Text()
+        body.append("Select models to process:\n\n")
+        body.append(widget.render())
+        body.append("\n")
+        body.append(
+            "  Up/Down = navigate  |  Space = toggle  |  Enter = confirm\n",
+            style="dim",
+        )
+        if not widget.selected:
+            body.append("  (select at least one model)\n", style="yellow")
+        return Panel(body, title="[bold cyan]Model Selector", border_style="cyan")
+
+    with Live(_build_display(), console=console, screen=False, refresh_per_second=10) as live:
+        while True:
+            key = _read_key()
+            if key in (_KEY_UP,):
+                widget.move_up()
+            elif key in (_KEY_DOWN,):
+                widget.move_down()
+            elif key == " ":
+                widget.toggle()
+            elif key in (_KEY_ENTER,):
+                if widget.selected:
+                    break
+            elif key in (_KEY_QUIT,):
+                # On quit/escape, return all models (safe default)
+                return list(model_ids)
+            live.update(_build_display())
+
+    selected = [opt for opt in model_ids if opt in widget.selected]
+    return selected

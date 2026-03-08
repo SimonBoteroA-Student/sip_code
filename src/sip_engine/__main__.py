@@ -79,8 +79,10 @@ def main() -> None:
     train_parser = subparsers.add_parser("train", help="Train XGBoost prediction models")
     train_parser.add_argument(
         "--model",
+        nargs="+",
         choices=["M1", "M2", "M3", "M4"],
-        help="Train a single model (default: all 4)",
+        metavar="MODEL",
+        help="Model(s) to train (e.g., --model M1 M3). Default: interactive picker or all 4.",
     )
     train_parser.add_argument(
         "--force",
@@ -135,8 +137,10 @@ def main() -> None:
     run_parser = subparsers.add_parser("run-pipeline", help="Run the full SIP pipeline end to end")
     run_parser.add_argument(
         "--model",
+        nargs="+",
         choices=["M1", "M2", "M3", "M4"],
-        help="Train and evaluate only this model (features are always built for all)",
+        metavar="MODEL",
+        help="Model(s) to train and evaluate (e.g., --model M1 M3). Default: interactive picker or all 4.",
     )
     run_parser.add_argument(
         "--quick",
@@ -192,8 +196,10 @@ def main() -> None:
     evaluate_parser = subparsers.add_parser("evaluate", help="Evaluate trained models")
     evaluate_parser.add_argument(
         "--model",
+        nargs="+",
         choices=["M1", "M2", "M3", "M4"],
-        help="Evaluate a single model (default: all 4)",
+        metavar="MODEL",
+        help="Model(s) to evaluate (e.g., --model M1 M3). Default: all 4.",
     )
     evaluate_parser.add_argument(
         "--models-dir",
@@ -346,7 +352,13 @@ def main() -> None:
 
     elif args.command == "train":
         from sip_engine.classifiers.models.trainer import train_model, MODEL_IDS
-        models_to_train = [args.model] if args.model else MODEL_IDS
+        if args.model:
+            models_to_train = args.model  # already a list from nargs='+'
+        elif not args.no_interactive:
+            from sip_engine.classifiers.ui.config_screen import show_model_picker
+            models_to_train = show_model_picker()
+        else:
+            models_to_train = MODEL_IDS
         try:
             if args.build_features:
                 from sip_engine.shared.data.rcac_builder import build_rcac
@@ -390,7 +402,7 @@ def main() -> None:
             print("Error: --artifact requires --model (specify which model)", file=sys.stderr)
             sys.exit(1)
 
-        models_to_eval = [args.model] if args.model else MODEL_IDS
+        models_to_eval = args.model if args.model else MODEL_IDS
         try:
             if len(models_to_eval) == 1:
                 report_path = evaluate_model(
@@ -506,6 +518,15 @@ def main() -> None:
                     )
                 )
 
+            # Model selection
+            if args.model:
+                selected_models = args.model  # list from nargs='+'
+            elif not args.no_interactive:
+                from sip_engine.classifiers.ui.config_screen import show_model_picker
+                selected_models = show_model_picker()
+            else:
+                selected_models = None  # None = all models (PipelineConfig default)
+
             cfg = PipelineConfig(
                 n_jobs=pipeline_cfg["n_jobs"],
                 n_iter=pipeline_cfg["n_iter"],
@@ -513,7 +534,7 @@ def main() -> None:
                 max_ram_gb=pipeline_cfg["max_ram_gb"],
                 device=pipeline_cfg["device"],
                 force=args.force,
-                model=args.model,
+                model=selected_models,
                 quick=args.quick,
                 disable_rocm=args.disable_rocm,
                 show_stats=not args.no_stats,

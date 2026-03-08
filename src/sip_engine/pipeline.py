@@ -25,7 +25,7 @@ class PipelineConfig:
     max_ram_gb: int
     device: str
     force: bool = False
-    model: str | None = None
+    model: list[str] | None = None
     quick: bool = False
     disable_rocm: bool = False
     show_stats: bool = True
@@ -97,7 +97,7 @@ def run_train(cfg: PipelineConfig) -> list[Path]:
     """Train one or all XGBoost models."""
     from sip_engine.classifiers.models.trainer import train_model, MODEL_IDS
 
-    model_ids: Sequence[str] = [cfg.model] if cfg.model else MODEL_IDS
+    model_ids: Sequence[str] = cfg.model if cfg.model else MODEL_IDS
     results: list[Path] = []
     for mid in model_ids:
         path = train_model(
@@ -123,9 +123,12 @@ def run_evaluate(cfg: PipelineConfig) -> Path:
         MODEL_IDS,
     )
 
-    if cfg.model:
-        return evaluate_model(model_id=cfg.model, artifact=getattr(cfg, 'artifact', None))
-    return evaluate_all()
+    model_ids = cfg.model if cfg.model else MODEL_IDS
+    if len(model_ids) == len(MODEL_IDS):
+        return evaluate_all()
+    for mid in model_ids:
+        evaluate_model(model_id=mid)
+    return Path("artifacts/evaluation")
 
 
 # ---------------------------------------------------------------------------
