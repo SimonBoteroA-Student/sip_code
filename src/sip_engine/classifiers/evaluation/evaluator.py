@@ -25,10 +25,12 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (
+    average_precision_score,
     brier_score_loss,
     confusion_matrix,
     f1_score,
     ndcg_score,
+    precision_recall_curve,
     precision_score,
     recall_score,
     roc_auc_score,
@@ -263,19 +265,31 @@ def _load_artifacts(
 def _compute_discrimination_metrics(
     y_true: np.ndarray, y_scores: np.ndarray
 ) -> dict:
-    """Compute AUC-ROC and ROC curve data (EVAL-01).
+    """Compute AUC-ROC, ROC curve, AUC-PR, and PR curve data.
 
     Returns:
-        Dict with "auc_roc" (float) and "roc_curve" (dict with fpr/tpr/thresholds lists).
+        Dict with "auc_roc", "roc_curve", "auc_pr", and "pr_curve".
+        pr_curve contains precision/recall arrays (len = len(thresholds) + 1)
+        and thresholds array.
     """
     auc = roc_auc_score(y_true, y_scores)
     fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+
+    pr_precision, pr_recall, pr_thresholds = precision_recall_curve(y_true, y_scores)
+    auc_pr = average_precision_score(y_true, y_scores)
+
     return {
         "auc_roc": float(auc),
         "roc_curve": {
             "fpr": fpr.tolist(),
             "tpr": tpr.tolist(),
             "thresholds": thresholds.tolist(),
+        },
+        "auc_pr": float(auc_pr),
+        "pr_curve": {
+            "precision": pr_precision.tolist(),
+            "recall": pr_recall.tolist(),
+            "thresholds": pr_thresholds.tolist(),
         },
     }
 
@@ -316,17 +330,25 @@ def _compute_recall_precision_at_k(
 def _compute_calibration_metrics(
     y_true: np.ndarray, y_scores: np.ndarray
 ) -> dict:
-    """Compute Brier Score and baseline (EVAL-05).
+    """Compute Brier Score, baseline, and Brier Skill Score (BSS).
+
+    BSS = 1 - (brier / brier_baseline). Returns 0.0 if baseline == 0
+    (all-positive or all-negative labels).
 
     Returns:
-        Dict with "brier_score" and "brier_baseline" (positive_rate * (1 - positive_rate)).
+        Dict with "brier_score", "brier_baseline", and "brier_skill_score".
     """
     brier = brier_score_loss(y_true, y_scores)
     positive_rate = float(y_true.mean())
     brier_baseline = positive_rate * (1.0 - positive_rate)
+    if brier_baseline > 0:
+        brier_skill_score = 1.0 - (brier / brier_baseline)
+    else:
+        brier_skill_score = 0.0
     return {
         "brier_score": float(brier),
         "brier_baseline": float(brier_baseline),
+        "brier_skill_score": float(brier_skill_score),
     }
 
 
@@ -589,6 +611,16 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
         "",
         "---",
         "",
+        "## 1b. Discrimination — PR Curve",
+        "",
+        "| Metric | Value |",
+        "|--------|-------|",
+        f"| **AUC-PR** | **{disc.get('auc_pr', 0):.4f}** |",
+        "",
+        f"![PR Curve]({img}/pr_curve{ms}.png)",
+        "",
+        "---",
+        "",
         "## 2. Score Distribution",
         "",
         f"![Score Distribution]({img}/score_distribution{ms}.png)",
@@ -700,8 +732,10 @@ def _write_markdown_report(eval_dict: dict, output_path: Path) -> None:
         "|--------|------:|",
         f"| Brier Score | {calib.get('brier_score', 0):.4f} |",
         f"| Brier Baseline (random) | {calib.get('brier_baseline', 0):.4f} |",
+        f"| Brier Skill Score (BSS) | {calib.get('brier_skill_score', 0):.4f} |",
         "",
         "> Lower Brier Score = better calibration. Baseline = positive_rate × (1 − positive_rate).",
+        "> BSS > 0 = better than random; BSS = 1 = perfect.",
         "",
         f"![Calibration]({img}/calibration_summary{ms}.png)",
         "",
@@ -847,9 +881,11 @@ def evaluate_model(
     # Step 3: Compute metrics
     discrimination = _compute_discrimination_metrics(y_test, y_scores)
     print(f"  ✓ AUC-ROC: {discrimination['auc_roc']:.4f}")
+    print(f"  AUC-PR: {discrimination['auc_pr']:.4f}")
 
     calibration = _compute_calibration_metrics(y_test, y_scores)
     print(f"  ✓ Brier Score: {calibration['brier_score']:.4f}")
+    print(f"  BSS: {calibration['brier_skill_score']:.4f}")
 
     ranking = _compute_ranking_metrics(y_test, y_scores)
     print(
@@ -1000,7 +1036,9 @@ def evaluate_all(
 
             summary[model_id] = {
                 "auc_roc": disc["auc_roc"],
+                "auc_pr": disc.get("auc_pr", 0.0),
                 "brier_score": calib["brier_score"],
+                "brier_skill_score": calib.get("brier_skill_score", 0.0),
                 "map_100": rank["map_100"],
                 "map_500": rank["map_500"],
                 "map_1000": rank["map_1000"],
@@ -1057,13 +1095,15 @@ def _print_summary_table(summary: dict[str, dict]) -> None:
     if not summary:
         return
 
-    headers = ["Model", "AUC-ROC", "Brier", "MAP@100", "MAP@1000", "Recall@100", "Recall@1000", "P@K100", "Opt.Thresh", "R@Opt"]
+    headers = ["Model", "AUC-ROC", "AUC-PR", "Brier", "BSS", "MAP@100", "MAP@1000", "Recall@100", "Recall@1000", "P@K100", "Opt.Thresh", "R@Opt"]
     rows = []
     for mid, m in summary.items():
         rows.append([
             mid,
             f"{m['auc_roc']:.4f}",
+            f"{m.get('auc_pr', 0):.4f}",
             f"{m['brier_score']:.4f}",
+            f"{m.get('brier_skill_score', 0):.4f}",
             f"{m['map_100']:.4f}",
             f"{m['map_1000']:.4f}",
             f"{m.get('recall_100', 0):.4f}",
