@@ -672,6 +672,52 @@ def _json_safe(obj: Any) -> Any:
 # =============================================================================
 
 
+def _next_run_number(model_dir: Path) -> int:
+    """Scan model_dir and model_dir/old/ for existing run-numbered files, return next N."""
+    import re
+
+    pattern = re.compile(r"model_run(\d{3})_")
+    existing: set[int] = set()
+    for search_dir in [model_dir, model_dir / "old"]:
+        if not search_dir.exists():
+            continue
+        for item in search_dir.iterdir():
+            if item.is_file():
+                m = pattern.match(item.name)
+                if m:
+                    existing.add(int(m.group(1)))
+    return max(existing, default=0) + 1
+
+
+def _archive_existing_model_flat(model_dir: Path) -> None:
+    """Move canonical artifacts to old/ (flat, not date-keyed).
+
+    Moves model.pkl, training_report.json, feature_registry.json,
+    and test_data.parquet into old/. Run-numbered files are NOT moved
+    (they stay where they are). Existing date-keyed subdirectories
+    in old/ are NOT touched.
+    """
+    import shutil
+
+    if not model_dir.exists():
+        return
+
+    old_dir = model_dir / "old"
+    old_dir.mkdir(parents=True, exist_ok=True)
+
+    canonical_files = ["model.pkl", "training_report.json", "feature_registry.json",
+                       "test_data.parquet"]
+    for name in canonical_files:
+        src = model_dir / name
+        if src.exists():
+            dest = old_dir / name
+            if dest.exists():
+                dest.unlink()
+            shutil.move(str(src), str(dest))
+
+    logger.info("Archived canonical artifacts to %s (flat)", old_dir)
+
+
 def _archive_existing_model(model_dir: Path) -> None:
     """Move existing model artifacts to old/{YYYY-MM-DD}/ subfolder.
 
@@ -796,8 +842,8 @@ def train_model(
         )
         return model_dir
 
-    # Archive existing artifacts before overwriting
-    _archive_existing_model(model_dir)
+    # Archive existing artifacts before overwriting (flat archival)
+    _archive_existing_model_flat(model_dir)
 
     model_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Training model %s — artifacts will be saved to %s", model_id, model_dir)
@@ -1085,6 +1131,16 @@ def train_model(
     logger.info("model.pkl saved to %s", model_pkl_path)
 
     # ------------------------------------------------------------------
+    # Step 11b: Save named run artifact
+    import shutil as _shutil
+    run_number = _next_run_number(model_dir)
+    metric_name = "auc_roc"  # CV scoring metric used during training
+    run_filename = f"model_run{run_number:03d}_{metric_name}.pkl"
+    run_path = model_dir / run_filename
+    _shutil.copy2(str(model_pkl_path), str(run_path))
+    logger.info("Named artifact saved: %s", run_path)
+
+    # ------------------------------------------------------------------
     # Step 12: Save feature_registry.json
     # ------------------------------------------------------------------
     feature_registry = _json_safe({
@@ -1132,6 +1188,8 @@ def train_model(
 
     training_report = _json_safe({
         "model_id": model_id,
+        "run_number": run_number,
+        "run_filename": run_filename,
         "label_distribution": {
             "0": int((y == 0).sum()),
             "1": int((y == 1).sum()),
@@ -1159,6 +1217,13 @@ def train_model(
     report_path = model_dir / "training_report.json"
     report_path.write_text(json.dumps(training_report, indent=2))
     logger.info("training_report.json saved to %s", report_path)
+
+    # ------------------------------------------------------------------
+    # Step 13b: Save named companion report
+    run_report_name = f"training_report_run{run_number:03d}_{metric_name}.json"
+    run_report_path = model_dir / run_report_name
+    _shutil.copy2(str(report_path), str(run_report_path))
+    logger.info("Named companion report saved: %s", run_report_path)
 
     # ------------------------------------------------------------------
     # Step 14: Save test_data.parquet (with id_contrato as named index)
