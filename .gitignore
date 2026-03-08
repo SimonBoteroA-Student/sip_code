@@ -6,7 +6,8 @@ __pycache__/
 .agent/workflows/
 
 # Ignore all Data contents by default
-Data/**
+data/**
+monitor/**
 
 # Allow directories to be traversed so whitelists work
 !Data/**/

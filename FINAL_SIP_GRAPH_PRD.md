@@ -28,7 +28,7 @@ A React-based interactive graph explorer allows investigators to select any cont
 **Core Design Decisions:**
 
 - **Unit of analysis:** actors (contractors, individuals, entities) and their relationships, NOT individual contracts.
-- **Total independence from SIP XGBoost:** no shared pipeline, features, models, or composite index.
+- **Total independence from SIP XGBoost:** no shared pipeline, features, models, or composite index. (THE ONLY INFORMATION THAT IS SHARED IS THE DOWNLOADER MODULE AND THE DATASETS)
 - **Dual approach:** unsupervised anomaly detection (Stage 1) + subgraph classification with weak labels (Stage 2).
 - **Algorithm progression:** Phase 1: GraphSAGE → Phase 2: HGT.
 - **Heterogeneous graph:** 5 node types, 5 edge types with distinct semantics.
@@ -42,7 +42,7 @@ A React-based interactive graph explorer allows investigators to select any cont
 
 ### 2.1 Limitations of the Current Tabular Approach
 
-The SIP XGBoost pipeline treats each contract as an independent observation, enriched with contractor features (RCAC, IHP) and process features. This approach fails to capture:
+The SIP XGBoost pipeline tre`ats each contract as an independent observation, enriched with contractor features (RCAC, IHP) and process features. This approach fails to capture:
 
 - **Co-bidding networks:** contractors that systematically participate together in tenders, rotating who wins.
 - **Shell companies with shared legal representatives:** one person controls multiple companies that appear to compete with each other.
