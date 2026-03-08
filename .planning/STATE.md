@@ -5,19 +5,25 @@
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Milestone v1.2 complete — CLI & TUI Polish (Phase 14, 2 plans, all done)
+**Current focus:** Phase 15 — Evaluation & Training Enhancements (Plan 1/3 complete)
 
 ## Current Position
 
-Milestone: v1.2 — CLI & TUI Polish
-Phase 14: CLI & TUI Fixes — Command Pipeline Refactor — **Plan 2/2 Complete**
-Status: All plans complete. Phase 14 done. v1.2 milestone complete.
+Milestone: v1.3 — Evaluation & Training Enhancements
+Phase 15: Evaluation & Training Module Enhancements — **Plan 1/3 Complete**
+Status: Plan 15-01 done (AUC-PR + BSS). Plans 15-02 and 15-03 remain.
 
-Progress: [████████████████████] v1.2 Complete
+Progress: [█░░░░░░░░░░░░░░░░░░░] Phase 15 in progress (1/3 plans)
 
 ## Accumulated Context
 
 ### Decisions
+
+Phase 15-01 decisions:
+- BSS guarded against div-by-zero: returns 0.0 when brier_baseline == 0
+- PR curve sentinel point preserved as-is (len = len(thresholds) + 1)
+- plot_pr_curve follows exact same pattern as plot_roc_curve for consistency
+- test_generate_all_charts updated from 7 to 8 expected charts
 
 Phase 14-01 decisions:
 - Layout with explicit size hints replaces Group at screen level — Rich needs dimension negotiation for Live(screen=True) alternate buffer
@@ -75,6 +81,7 @@ Phase 12-03 decisions:
 
 - Phase 14 Plan 01 complete: TUI rendering fix — Layout replaces Group at screen level in all 3 config screens
 - Phase 14 Plan 02 complete: pipeline.py coordinator + CLI refactor + --start-from support
+- Phase 15 Plan 01 complete: AUC-PR + BSS metrics in evaluator, PR curve chart in visualizer, 4 new tests
 - Phase 15 added: Evaluation and Training Module Enhancements — AUC-PR, Model Selector, Brier Skill Score, and Named Model Artifacts
 - Phase 14 added: CLI & TUI Fixes — Command Pipeline Refactor (chart edge clipping, hardware config display, command pipeline refactor)
 - Phase 13 Plan 03 complete: CI pipeline + pathlib audit + README Windows docs + Docker verification
@@ -97,6 +104,6 @@ None — all prior blockers resolved.
 
 ## Session Continuity
 
-Last session: 2025-06-04
-Stopped at: Completed 14-01-PLAN.md — TUI rendering fix (all Phase 14 plans done, v1.2 complete)
-Resume file: .planning/phases/14-cli-tui-fixes-command-pipeline-refactor/14-01-SUMMARY.md
+Last session: 2026-06-04
+Stopped at: Completed 15-01-PLAN.md — AUC-PR + Brier Skill Score (Phase 15, Plan 1/3)
+Resume file: .planning/phases/15-evaluation-and-training-module-enhancements-auc-pr-model-selector-brier-skill-score-and-named-model-artifacts/15-01-SUMMARY.md

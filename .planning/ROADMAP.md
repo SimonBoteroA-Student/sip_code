@@ -45,7 +45,7 @@
 | 12. Cross-platform OS Compatibility & Training Optimization | v1.1 | 4/4 | Complete | 2026-03-03 |
 | 13. Windows 10 Compatibility | v1.1 | 3/3 | Complete | 2026-03-03 |
 | 14. CLI & TUI Fixes — Command Pipeline Refactor | 2/2 | Complete    | 2026-03-06 | — |
-| 15. Evaluation & Training Enhancements | — | 0/3 | Planning | — |
+| 15. Evaluation & Training Enhancements | — | 1/3 | In Progress | — |
 
 <details>
 <summary>✅ v1.1 Cross-Platform OS Compatibility & Windows Support (Phases 12–13) — SHIPPED 2026-03-03</summary>
@@ -81,6 +81,6 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 15-01-PLAN.md — AUC-PR + Brier Skill Score metrics (evaluator + visualizer + reports)
+- [x] 15-01-PLAN.md — AUC-PR + Brier Skill Score metrics (evaluator + visualizer + reports)
 - [ ] 15-02-PLAN.md — Named model artifacts (trainer flat archiving + --artifact eval flag)
 - [ ] 15-03-PLAN.md — Model selector TUI + --model nargs='+' (CLI + pipeline + picker)
