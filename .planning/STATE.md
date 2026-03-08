@@ -5,19 +5,25 @@
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 15 — Evaluation & Training Enhancements (Plan 2/3 complete)
+**Current focus:** Phase 15 — Evaluation & Training Enhancements (Plan 3/3 complete)
 
 ## Current Position
 
 Milestone: v1.3 — Evaluation & Training Enhancements
-Phase 15: Evaluation & Training Module Enhancements — **Plan 2/3 Complete**
-Status: Plans 15-01 (AUC-PR + BSS) and 15-02 (Named Artifacts) done. Plan 15-03 remains.
+Phase 15: Evaluation & Training Module Enhancements — **Plan 3/3 Complete**
+Status: All plans complete — 15-01 (AUC-PR + BSS), 15-02 (Named Artifacts), 15-03 (Model Selector).
 
-Progress: [██░░░░░░░░░░░░░░░░░░] Phase 15 in progress (2/3 plans)
+Progress: [███░░░░░░░░░░░░░░░░░] Phase 15 complete (3/3 plans)
 
 ## Accumulated Context
 
 ### Decisions
+
+Phase 15-03 decisions:
+- _CheckboxWidget uses set[str] for selected — order-preserving output reconstructed from original list
+- Space key support added to _read_key_unix() and _read_key_win() as ' ' literal
+- run_evaluate subset path returns Path('artifacts/evaluation') — consistent return type
+- evaluate handler does not show TUI picker — defaults to all models when --model omitted
 
 Phase 15-02 decisions:
 - Flat archiving to old/ replaces date-keyed archiving — run-numbered files are self-identifying
@@ -86,6 +92,7 @@ Phase 12-03 decisions:
 
 - Phase 14 Plan 01 complete: TUI rendering fix — Layout replaces Group at screen level in all 3 config screens
 - Phase 14 Plan 02 complete: pipeline.py coordinator + CLI refactor + --start-from support
+- Phase 15 Plan 03 complete: Multi-model --model nargs='+' flag + TUI checkbox picker + PipelineConfig list[str] type
 - Phase 15 Plan 02 complete: Named model artifacts — run-numbered files, flat archiving, --artifact CLI flag
 - Phase 15 Plan 01 complete: AUC-PR + BSS metrics in evaluator, PR curve chart in visualizer, 4 new tests
 - Phase 15 added: Evaluation and Training Module Enhancements — AUC-PR, Model Selector, Brier Skill Score, and Named Model Artifacts
@@ -111,5 +118,5 @@ None — all prior blockers resolved.
 ## Session Continuity
 
 Last session: 2026-03-08
-Stopped at: Completed 15-02-PLAN.md — Named model artifacts (trainer + evaluator + --artifact CLI flag)
-Resume file: .planning/phases/15-evaluation-and-training-module-enhancements-auc-pr-model-selector-brier-skill-score-and-named-model-artifacts/15-02-SUMMARY.md
+Stopped at: Completed 15-03-PLAN.md — Multi-model selector TUI + nargs='+' --model flag + PipelineConfig list[str]
+Resume file: .planning/phases/15-evaluation-and-training-module-enhancements-auc-pr-model-selector-brier-skill-score-and-named-model-artifacts/15-03-SUMMARY.md
