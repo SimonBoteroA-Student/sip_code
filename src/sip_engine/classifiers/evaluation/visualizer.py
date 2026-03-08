@@ -149,6 +149,57 @@ def plot_roc_curve(
     return path
 
 
+def plot_pr_curve(
+    eval_dict: dict,
+    output_dir: Path,
+    filename: str = "pr_curve.png",
+) -> Path:
+    """Plot Precision-Recall curve with AUC-PR annotation and random baseline.
+
+    Args:
+        eval_dict: Full evaluation dictionary from evaluator.
+        output_dir: Directory to save the image.
+        filename: Output filename.
+
+    Returns:
+        Path to the saved image.
+    """
+    _apply_style()
+    disc = eval_dict.get("discrimination", {})
+    pr = disc.get("pr_curve", {})
+    auc_pr = disc.get("auc_pr", 0.0)
+    model_id = eval_dict.get("model_id", "?")
+
+    precision = np.array(pr.get("precision", [1, 0]))
+    recall = np.array(pr.get("recall", [0, 1]))
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+    ax.plot(recall, precision, color=_COLORS["primary"], lw=2,
+            label=f"PR Curve (AUC-PR = {auc_pr:.4f})")
+    ax.fill_between(recall, precision, alpha=0.1, color=_COLORS["primary"])
+
+    # Baseline: horizontal line at positive_rate
+    label_dist = eval_dict.get("label_distribution", {})
+    pos_rate = label_dist.get("positive_rate", 0.0)
+    if pos_rate > 0:
+        ax.axhline(y=pos_rate, color=_COLORS["neutral"], ls="--", lw=1,
+                   label=f"Random ({pos_rate:.2%})")
+
+    ax.set_xlabel("Recall")
+    ax.set_ylabel("Precision")
+    ax.set_title(f"{model_id} — PR Curve")
+    ax.legend(loc="upper right")
+    ax.set_xlim([0.0, 1.0])
+    ax.set_ylim([0.0, 1.05])
+    ax.grid(True, alpha=0.3)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / filename
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
 def plot_precision_recall_f1(
     eval_dict: dict,
     output_dir: Path,
@@ -494,6 +545,7 @@ def generate_all_charts(
 
     paths.append(plot_confusion_matrix(eval_dict, output_dir, filename=f"confusion_matrix{model_suffix}.png"))
     paths.append(plot_roc_curve(eval_dict, output_dir, filename=f"roc_curve{model_suffix}.png"))
+    paths.append(plot_pr_curve(eval_dict, output_dir, filename=f"pr_curve{model_suffix}.png"))
     paths.append(plot_precision_recall_f1(eval_dict, output_dir, filename=f"precision_recall_f1{model_suffix}.png"))
     paths.append(plot_ranking_metrics(eval_dict, output_dir, filename=f"ranking_metrics{model_suffix}.png"))
     paths.append(plot_recall_precision_at_k(eval_dict, output_dir, filename=f"recall_precision_at_k{model_suffix}.png"))

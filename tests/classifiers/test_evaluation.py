@@ -33,6 +33,7 @@ from sip_engine.classifiers.evaluation.visualizer import (
     plot_calibration_summary,
     plot_confusion_matrix,
     plot_precision_recall_f1,
+    plot_pr_curve,
     plot_ranking_metrics,
     plot_roc_curve,
     plot_score_distribution,
@@ -583,11 +584,11 @@ def test_plot_calibration_summary(minimal_eval_dict, tmp_path):
 
 
 def test_generate_all_charts(synthetic_data, minimal_eval_dict, tmp_path):
-    """generate_all_charts creates all 7 chart files."""
+    """generate_all_charts creates all 8 chart files (including PR curve)."""
     y_true, y_scores = synthetic_data
     img_dir = tmp_path / "images"
     paths = generate_all_charts(minimal_eval_dict, y_true, y_scores, img_dir)
-    assert len(paths) == 7, f"Expected 7 charts, got {len(paths)}"
+    assert len(paths) == 8, f"Expected 8 charts, got {len(paths)}"
     for p in paths:
         assert p.exists(), f"Chart file missing: {p.name}"
         assert p.stat().st_size > 1000, f"Chart file too small: {p.name}"
@@ -606,3 +607,59 @@ def test_markdown_report_contains_images(minimal_eval_dict, tmp_path):
     assert "![Score Distribution]" in content, "Markdown should embed score distribution image"
     assert "![Calibration]" in content, "Markdown should embed calibration image"
     assert "images/" in content, "Image paths should reference images/ directory"
+
+
+# =============================================================================
+# AUC-PR, BSS, and PR curve chart tests
+# =============================================================================
+
+
+def test_auc_pr_in_discrimination(synthetic_data):
+    """AUC-PR metric and PR curve data are present in discrimination output."""
+    y_true, y_scores = synthetic_data
+    result = _compute_discrimination_metrics(y_true, y_scores)
+    assert "auc_pr" in result
+    assert 0.0 <= result["auc_pr"] <= 1.0
+    assert "pr_curve" in result
+    pr = result["pr_curve"]
+    assert "precision" in pr
+    assert "recall" in pr
+    assert "thresholds" in pr
+    # precision/recall have len(thresholds) + 1 (sentinel point)
+    assert len(pr["precision"]) == len(pr["thresholds"]) + 1
+    assert len(pr["recall"]) == len(pr["thresholds"]) + 1
+
+
+def test_brier_skill_score(synthetic_data):
+    """BSS is computed and guarded against division by zero."""
+    y_true, y_scores = synthetic_data
+    result = _compute_calibration_metrics(y_true, y_scores)
+    assert "brier_skill_score" in result
+    bss = result["brier_skill_score"]
+    assert isinstance(bss, float)
+    # With real data, BSS should be positive (better than random)
+    # since synthetic_data has positives scoring higher
+
+
+def test_brier_skill_score_zero_baseline():
+    """BSS returns 0.0 when baseline is zero (all-positive labels)."""
+    y_true = np.ones(10)
+    y_scores = np.random.rand(10)
+    result = _compute_calibration_metrics(y_true, y_scores)
+    assert result["brier_skill_score"] == 0.0
+    assert result["brier_baseline"] == 0.0
+
+
+def test_plot_pr_curve(tmp_path, synthetic_data):
+    """PR curve chart is generated correctly."""
+    y_true, y_scores = synthetic_data
+    disc = _compute_discrimination_metrics(y_true, y_scores)
+    eval_dict = {
+        "model_id": "M1",
+        "discrimination": disc,
+        "label_distribution": {"positive_rate": 0.2},
+    }
+    path = plot_pr_curve(eval_dict, tmp_path, filename="pr_curve_m1.png")
+    assert path.exists()
+    assert path.name == "pr_curve_m1.png"
+    assert path.stat().st_size > 1000
