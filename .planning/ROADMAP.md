@@ -45,7 +45,7 @@
 | 12. Cross-platform OS Compatibility & Training Optimization | v1.1 | 4/4 | Complete | 2026-03-03 |
 | 13. Windows 10 Compatibility | v1.1 | 3/3 | Complete | 2026-03-03 |
 | 14. CLI & TUI Fixes — Command Pipeline Refactor | 2/2 | Complete    | 2026-03-06 | — |
-| 15. Evaluation & Training Enhancements | — | 1/3 | In Progress | — |
+| 15. Evaluation & Training Enhancements | — | 3/3 | Complete | 2026-03-08 |
 
 <details>
 <summary>✅ v1.1 Cross-Platform OS Compatibility & Windows Support (Phases 12–13) — SHIPPED 2026-03-03</summary>

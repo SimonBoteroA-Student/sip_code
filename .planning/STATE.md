@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 15 — Evaluation & Training Enhancements (Plan 3/3 complete)
+**Current focus:** Phase 15 complete — Evaluation & Training Enhancements (3/3 plans verified)
 
 ## Current Position
 
