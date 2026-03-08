@@ -12,7 +12,9 @@
       "Skill(gsd:progress)",
       "Skill(gsd:verify-work)",
       "Bash(sort -k2)",
-      "Bash(read f:*)"
+      "Bash(read f:*)",
+      "Bash(PATH=\"$PWD/.venv/bin:$PATH\" python:*)",
+      "Bash(PATH=\"$PWD/.venv/bin:$PATH\" pytest:*)"
     ]
   }
 }

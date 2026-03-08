@@ -8,12 +8,10 @@ to defaults in non-interactive environments (piped stdin / CI).
 from __future__ import annotations
 
 import logging
-import platform
 import sys
 from typing import Any
 
 from rich.console import Console, Group
-from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
@@ -257,21 +255,22 @@ def _build_hardware_panel(hw: HardwareConfig) -> Panel:
 # Shared screen layout builder
 # ---------------------------------------------------------------------------
 
-def _make_screen_layout(
+def _make_screen_group(
     hw_panel: Panel,
     config_panel: Panel,
     header_panel: Panel | None = None,
-) -> Layout:
-    """Build a full-screen Layout for Live(screen=True) rendering."""
-    layout = Layout()
-    parts: list[Layout] = []
+) -> Group:
+    """Stack panels vertically for Live rendering.
+
+    Uses Group instead of Layout to avoid terminal-size-dependent rendering
+    issues (blank screen on large terminals, clipped content on small ones).
+    """
+    parts: list[Panel] = []
     if header_panel is not None:
-        parts.append(Layout(header_panel, name="header", size=5))
-    # Hardware panel: 5 data lines + 2 border lines = 7, + 1 safety = 8
-    parts.append(Layout(hw_panel, name="hardware", size=8))
-    parts.append(Layout(config_panel, name="config"))
-    layout.split_column(*parts)
-    return layout
+        parts.append(header_panel)
+    parts.append(hw_panel)
+    parts.append(config_panel)
+    return Group(*parts)
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +334,7 @@ def show_config_screen(
     selected = 0
     console = Console()
 
-    def _make_layout() -> Layout:
+    def _make_layout() -> Group:
         hw_panel = _build_hardware_panel(hw_config)
 
         lines: list[Text] = []
@@ -352,10 +351,10 @@ def show_config_screen(
 
         config_panel = Panel(Group(*lines), title="Training Settings", border_style="blue")
 
-        return _make_screen_layout(hw_panel, config_panel)
+        return _make_screen_group(hw_panel, config_panel)
 
     try:
-        with Live(_make_layout(), console=console, refresh_per_second=10, screen=True) as live:
+        with Live(_make_layout(), console=console, refresh_per_second=10, screen=False) as live:
             while True:
                 key = _read_key()
                 if key == _KEY_ENTER:
@@ -450,7 +449,7 @@ def show_features_config_screen(
     selected = 0
     console = Console()
 
-    def _make_layout() -> Layout:
+    def _make_layout() -> Group:
         hw_panel = _build_hardware_panel(hw_config)
 
         lines: list[Text] = []
@@ -466,10 +465,10 @@ def show_features_config_screen(
         lines.append(footer)
 
         config_panel = Panel(Group(*lines), title="Feature Build Settings", border_style="cyan")
-        return _make_screen_layout(hw_panel, config_panel)
+        return _make_screen_group(hw_panel, config_panel)
 
     try:
-        with Live(_make_layout(), console=console, refresh_per_second=10, screen=True) as live:
+        with Live(_make_layout(), console=console, refresh_per_second=10, screen=False) as live:
             while True:
                 key = _read_key()
                 if key == _KEY_ENTER:
@@ -570,7 +569,7 @@ def show_pipeline_config_screen(
     selected = 0
     console = Console()
 
-    def _make_layout() -> Layout:
+    def _make_layout() -> Group:
         hw_panel = _build_hardware_panel(hw_config)
 
         lines: list[Text] = []
@@ -593,10 +592,10 @@ def show_pipeline_config_screen(
                 title="[bold cyan]SIP Pipeline — Full Run",
                 border_style="cyan",
             )
-        return _make_screen_layout(hw_panel, config_panel, header_panel=header_panel)
+        return _make_screen_group(hw_panel, config_panel, header_panel=header_panel)
 
     try:
-        with Live(_make_layout(), console=console, refresh_per_second=10, screen=True) as live:
+        with Live(_make_layout(), console=console, refresh_per_second=10, screen=False) as live:
             while True:
                 key = _read_key()
                 if key == _KEY_ENTER:
