@@ -54,13 +54,13 @@ class TestPipelineConfig:
             max_ram_gb=16,
             device="cuda",
             force=True,
-            model="M2",
+            model=["M2"],
             quick=True,
             disable_rocm=True,
             show_stats=False,
         )
         assert cfg.force is True
-        assert cfg.model == "M2"
+        assert cfg.model == ["M2"]
         assert cfg.quick is True
         assert cfg.disable_rocm is True
         assert cfg.show_stats is False
@@ -152,7 +152,7 @@ class TestRunFunctions:
         assert len(results) == 4
 
     def test_run_train_single_model(self):
-        cfg = PipelineConfig(n_jobs=2, n_iter=50, cv_folds=3, max_ram_gb=4, device="cpu", model="M1")
+        cfg = PipelineConfig(n_jobs=2, n_iter=50, cv_folds=3, max_ram_gb=4, device="cpu", model=["M1"])
         with patch("sip_engine.classifiers.models.trainer.train_model", return_value=Path("m1_dir")) as m:
             results = run_train(cfg)
         m.assert_called_once()
@@ -169,14 +169,14 @@ class TestRunFunctions:
         assert result == Path("eval_dir")
 
     def test_run_evaluate_single_model(self):
-        cfg = PipelineConfig(n_jobs=2, n_iter=50, cv_folds=3, max_ram_gb=4, device="cpu", model="M3")
+        cfg = PipelineConfig(n_jobs=2, n_iter=50, cv_folds=3, max_ram_gb=4, device="cpu", model=["M3"])
         with (
             patch("sip_engine.classifiers.evaluation.evaluator.evaluate_model", return_value=Path("m3_eval")) as m,
             patch("sip_engine.classifiers.evaluation.evaluator.MODEL_IDS", ["M1", "M2", "M3", "M4"]),
         ):
             result = run_evaluate(cfg)
-        m.assert_called_once_with(model_id="M3", artifact=None)
-        assert result == Path("m3_eval")
+        m.assert_called_once_with(model_id="M3")
+        assert result == Path("artifacts/evaluation")
 
 
 # ---------------------------------------------------------------------------
