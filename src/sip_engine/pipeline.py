@@ -124,7 +124,7 @@ def run_evaluate(cfg: PipelineConfig) -> Path:
     )
 
     if cfg.model:
-        return evaluate_model(model_id=cfg.model)
+        return evaluate_model(model_id=cfg.model, artifact=getattr(cfg, 'artifact', None))
     return evaluate_all()
 
 

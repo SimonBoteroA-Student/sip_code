@@ -175,7 +175,7 @@ class TestRunFunctions:
             patch("sip_engine.classifiers.evaluation.evaluator.MODEL_IDS", ["M1", "M2", "M3", "M4"]),
         ):
             result = run_evaluate(cfg)
-        m.assert_called_once_with(model_id="M3")
+        m.assert_called_once_with(model_id="M3", artifact=None)
         assert result == Path("m3_eval")
 
 

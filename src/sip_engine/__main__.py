@@ -205,6 +205,12 @@ def main() -> None:
         type=Path,
         help="Override evaluation output directory (default: artifacts/evaluation)",
     )
+    evaluate_parser.add_argument(
+        "--artifact",
+        type=str,
+        default=None,
+        help="Load a specific model artifact (e.g., model_run001_auc_roc.pkl) instead of model.pkl",
+    )
 
     subparsers.add_parser("backup-v1", help="Backup current artifacts to v1_baseline/")
 
@@ -380,6 +386,10 @@ def main() -> None:
     elif args.command == "evaluate":
         from sip_engine.classifiers.evaluation.evaluator import evaluate_all, evaluate_model, MODEL_IDS
 
+        if getattr(args, 'artifact', None) and not args.model:
+            print("Error: --artifact requires --model (specify which model)", file=sys.stderr)
+            sys.exit(1)
+
         models_to_eval = [args.model] if args.model else MODEL_IDS
         try:
             if len(models_to_eval) == 1:
@@ -387,6 +397,7 @@ def main() -> None:
                     model_id=models_to_eval[0],
                     models_dir=args.models_dir,
                     output_dir=args.output_dir,
+                    artifact=getattr(args, 'artifact', None),
                 )
                 print(f"Evaluation complete: {report_path}")
             else:

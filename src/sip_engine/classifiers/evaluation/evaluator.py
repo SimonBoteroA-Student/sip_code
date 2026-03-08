@@ -217,12 +217,15 @@ def recall_precision_at_k(
 def _load_artifacts(
     model_id: str,
     models_dir: Path | None = None,
+    artifact: str | None = None,
 ) -> tuple[Any, pd.DataFrame, dict, dict]:
     """Load model artifacts from disk.
 
     Args:
         model_id: One of M1, M2, M3, M4.
         models_dir: Base directory for model artifacts. Defaults to artifacts/models.
+        artifact: Optional specific artifact filename (e.g., model_run001_auc_roc.pkl).
+            Searches model_dir then model_dir/old/. Hard-fails if not found.
 
     Returns:
         Tuple of (model, test_df, training_report, feature_registry).
@@ -235,12 +238,54 @@ def _load_artifacts(
 
     model_dir = models_dir / model_id
 
+    # Resolve model file path: canonical or artifact-specific
+    if artifact is not None:
+        candidate_main = model_dir / artifact
+        candidate_old = model_dir / "old" / artifact
+        if candidate_main.exists():
+            model_path = candidate_main
+        elif candidate_old.exists():
+            model_path = candidate_old
+        else:
+            raise FileNotFoundError(
+                f"Artifact '{artifact}' not found for model {model_id}. "
+                f"Searched:\n  {candidate_main}\n  {candidate_old}"
+            )
+        # Try to find a matching companion training report
+        stem = artifact.replace(".pkl", "")
+        report_name = stem.replace("model_run", "training_report_run") + ".json"
+        companion_main = model_path.parent / report_name
+        if companion_main.exists():
+            report_path = companion_main
+        else:
+            report_path = model_dir / "training_report.json"
+    else:
+        model_path = model_dir / "model.pkl"
+        report_path = model_dir / "training_report.json"
+
     required_files = {
-        "model.pkl": model_dir / "model.pkl",
         "test_data.parquet": model_dir / "test_data.parquet",
-        "training_report.json": model_dir / "training_report.json",
         "feature_registry.json": model_dir / "feature_registry.json",
     }
+
+    # Check model file
+    if not model_path.exists():
+        raise FileNotFoundError(
+            f"Model {model_id} artifact '{model_path.name}' not found at {model_path} — "
+            f"run 'python -m sip_engine train --model {model_id}' first"
+        )
+
+    # Check training report
+    if not report_path.exists():
+        # Fall back to canonical report
+        fallback = model_dir / "training_report.json"
+        if fallback.exists():
+            report_path = fallback
+        else:
+            raise FileNotFoundError(
+                f"Model {model_id} artifact 'training_report.json' not found at {fallback} — "
+                f"run 'python -m sip_engine train --model {model_id}' first"
+            )
 
     for name, path in required_files.items():
         if not path.exists():
@@ -249,9 +294,9 @@ def _load_artifacts(
                 f"run 'python -m sip_engine train --model {model_id}' first"
             )
 
-    model = joblib.load(required_files["model.pkl"])
+    model = joblib.load(model_path)
     test_df = pd.read_parquet(required_files["test_data.parquet"])
-    training_report = json.loads(required_files["training_report.json"].read_text())
+    training_report = json.loads(report_path.read_text())
     feature_registry = json.loads(required_files["feature_registry.json"].read_text())
 
     return model, test_df, training_report, feature_registry
@@ -832,6 +877,7 @@ def evaluate_model(
     model_id: str,
     models_dir: Path | None = None,
     output_dir: Path | None = None,
+    artifact: str | None = None,
 ) -> Path:
     """Evaluate a single trained model on its held-out test set.
 
@@ -842,6 +888,8 @@ def evaluate_model(
         model_id: Model identifier, one of M1, M2, M3, M4.
         models_dir: Directory containing model artifacts. Defaults to artifacts/models.
         output_dir: Root output directory for evaluation reports. Defaults to artifacts/evaluation.
+        artifact: Optional specific artifact filename (e.g., model_run001_auc_roc.pkl).
+            Loads that file instead of the canonical model.pkl.
 
     Returns:
         Path to the output directory for this model (e.g., artifacts/evaluation/M1/).
@@ -862,7 +910,7 @@ def evaluate_model(
     _archive_existing_evaluation(output_dir / model_id)
 
     # Step 1: Load artifacts
-    model, test_df, training_report, feature_registry = _load_artifacts(model_id, models_dir)
+    model, test_df, training_report, feature_registry = _load_artifacts(model_id, models_dir, artifact=artifact)
 
     feature_columns: list[str] = feature_registry["feature_columns"]
     X_test = test_df[feature_columns]
