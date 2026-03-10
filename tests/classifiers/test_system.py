@@ -77,7 +77,7 @@ def pytest_addoption(parser):
 
 @pytest.fixture(scope="module")
 def synthetic_feature_dict():
-    """Return a deterministic 34-feature dict matching FEATURE_COLUMNS."""
+    """Return a deterministic 45-feature dict matching FEATURE_COLUMNS."""
     rng = np.random.RandomState(7)
     result: dict = {}
     for col in FEATURE_COLUMNS:
@@ -92,7 +92,7 @@ def synthetic_feature_dict():
 
 @pytest.fixture(scope="module")
 def toy_models_dir(tmp_path_factory):
-    """Create M1–M4 model dirs each with a toy XGBClassifier for 34 features."""
+    """Create M1–M4 model dirs each with a toy XGBClassifier for 45 features."""
     base = tmp_path_factory.mktemp("sys_models")
     models_root = base / "models"
 
@@ -139,7 +139,7 @@ def test_full_pipeline_fixture_mode(toy_models_dir, synthetic_feature_dict, monk
     - Result schema (all required top-level keys present)
     - CRI score in [0, 1], level one of 5 valid strings
     - Per-model probability in [0, 1] and shap_top10 non-empty
-    - raw_features has 34 keys
+    - raw_features has 45 keys
     - serialize_to_json produces valid JSON
     - Determinism: same inputs + frozen timestamp → byte-identical output
     """
@@ -190,9 +190,9 @@ def test_full_pipeline_fixture_mode(toy_models_dir, synthetic_feature_dict, monk
         s10 = mdata["shap_top10"]
         assert isinstance(s10, list) and len(s10) > 0, f"{mid}.shap_top10 is empty"
 
-    # ---- raw_features has 34 keys ----
-    assert len(result["raw_features"]) == 34, (
-        f"raw_features has {len(result['raw_features'])} keys, expected 34"
+    # ---- raw_features has 45 keys ----
+    assert len(result["raw_features"]) == 45, (
+        f"raw_features has {len(result['raw_features'])} keys, expected 45"
     )
 
     # ---- JSON validity ----

@@ -1442,9 +1442,9 @@ def _make_pipeline_env(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_feature_columns_constant_length():
-    """FEATURE_COLUMNS must have exactly 34 entries (30 Cat A/B/C + 4 Cat D IRIC)."""
+    """FEATURE_COLUMNS must have exactly 45 entries (30 Cat A/B/C + 15 Cat D IRIC)."""
     from sip_engine.classifiers.features.pipeline import FEATURE_COLUMNS
-    assert len(FEATURE_COLUMNS) == 34
+    assert len(FEATURE_COLUMNS) == 45
 
 
 def test_feat08_no_post_execution_columns():
@@ -1515,14 +1515,14 @@ def test_build_features_creates_parquet(tmp_path, monkeypatch):
 
 
 def test_build_features_column_count(tmp_path, monkeypatch):
-    """features.parquet must have exactly 34 feature columns (30 Cat A/B/C + 4 Cat D IRIC)."""
+    """features.parquet must have exactly 45 feature columns (30 Cat A/B/C + 15 Cat D IRIC)."""
     _make_pipeline_env(tmp_path, monkeypatch)
 
     from sip_engine.classifiers.features.pipeline import build_features
     result_path = build_features(force=True)
 
     df = pd.read_parquet(result_path)
-    assert len(df.columns) == 34, f"Expected 34 columns, got {len(df.columns)}: {list(df.columns)}"
+    assert len(df.columns) == 45, f"Expected 45 columns, got {len(df.columns)}: {list(df.columns)}"
 
 
 def test_build_features_column_order(tmp_path, monkeypatch):
@@ -1700,4 +1700,4 @@ def test_features_init_exports_build_features():
     assert callable(build_features)
     assert callable(compute_features)
     assert isinstance(FEATURE_COLUMNS, list)
-    assert len(FEATURE_COLUMNS) == 34
+    assert len(FEATURE_COLUMNS) == 45

@@ -38,8 +38,8 @@ class PipelineConfig:
 STEP_NAMES: tuple[str, ...] = (
     "rcac",
     "labels",
-    "features",
     "iric",
+    "features",
     "train",
     "evaluate",
 )
@@ -47,8 +47,8 @@ STEP_NAMES: tuple[str, ...] = (
 _STEP_LABELS: dict[str, str] = {
     "rcac": "[1/6] RCAC",
     "labels": "[2/6] Labels",
-    "features": "[3/6] Features",
-    "iric": "[4/6] IRIC Scores",
+    "iric": "[3/6] IRIC Scores",
+    "features": "[4/6] Features",
     "train": "[5/6] Training Models",
     "evaluate": "[6/6] Evaluation",
 }

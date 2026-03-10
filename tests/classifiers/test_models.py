@@ -454,11 +454,11 @@ def test_train_model_end_to_end_quick(tmp_path, monkeypatch, model_id):
     assert (model_dir / "training_report.json").exists(), "training_report.json must exist"
     assert (model_dir / "test_data.parquet").exists(), "test_data.parquet must exist"
 
-    # Verify feature_registry.json has 34 feature columns
+    # Verify feature_registry.json has 45 feature columns
     registry = json.loads((model_dir / "feature_registry.json").read_text())
     assert "feature_columns" in registry, "feature_registry.json must have 'feature_columns'"
-    assert len(registry["feature_columns"]) == 34, (
-        f"feature_columns must have 34 entries, got {len(registry['feature_columns'])}"
+    assert len(registry["feature_columns"]) == 45, (
+        f"feature_columns must have 45 entries, got {len(registry['feature_columns'])}"
     )
 
     # Verify training_report.json has strategy_comparison

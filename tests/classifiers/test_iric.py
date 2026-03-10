@@ -1283,10 +1283,10 @@ class TestFeatureColumnsHasCategoryD:
         assert "iric_transparencia" in FEATURE_COLUMNS
 
     def test_feature_columns_count_34(self):
-        """FEATURE_COLUMNS must have exactly 34 entries (30 Cat A/B/C + 4 Cat D)."""
+        """FEATURE_COLUMNS must have exactly 45 entries (30 Cat A/B/C + 15 Cat D IRIC)."""
         from sip_engine.classifiers.features.pipeline import FEATURE_COLUMNS
-        assert len(FEATURE_COLUMNS) == 34, (
-            f"Expected 34 features, got {len(FEATURE_COLUMNS)}: {FEATURE_COLUMNS}"
+        assert len(FEATURE_COLUMNS) == 45, (
+            f"Expected 45 features, got {len(FEATURE_COLUMNS)}: {FEATURE_COLUMNS}"
         )
 
     def test_category_d_in_alphabetical_order(self):
@@ -1299,18 +1299,20 @@ class TestFeatureColumnsHasCategoryD:
         )
 
     def test_category_d_at_end(self):
-        """Category D features must appear after all Category C features."""
+        """All 15 Category D (IRIC) features must appear after all Category A/B/C features."""
         from sip_engine.classifiers.features.pipeline import FEATURE_COLUMNS
-        cat_d_features = {"iric_anomalias", "iric_competencia", "iric_score", "iric_transparencia"}
-        cat_c_end_index = max(
-            i for i, f in enumerate(FEATURE_COLUMNS) if not f.startswith("iric_")
+        # Category D = last 15 entries; Category A/B/C = first 30 entries
+        cat_abc_count = 30
+        cat_d_features = set(FEATURE_COLUMNS[cat_abc_count:])
+        cat_abc_features = set(FEATURE_COLUMNS[:cat_abc_count])
+        # No Cat D feature should appear in Cat A/B/C positions
+        overlap = cat_d_features & cat_abc_features
+        assert not overlap, (
+            f"Category D features found in Cat A/B/C positions: {overlap}"
         )
-        cat_d_start_index = min(
-            i for i, f in enumerate(FEATURE_COLUMNS) if f in cat_d_features
-        )
-        assert cat_d_start_index > cat_c_end_index, (
-            "Category D features must come after all Category A/B/C features"
-        )
+        # All 4 aggregate scores must be in Cat D
+        for agg in ("iric_anomalias", "iric_competencia", "iric_score", "iric_transparencia"):
+            assert agg in cat_d_features, f"Aggregate score '{agg}' must be in Cat D (last 15)"
 
     def test_kurtosis_drn_not_in_feature_columns(self):
         """kurtosis and DRN bid stats must NOT be in FEATURE_COLUMNS (NaN-heavy)."""

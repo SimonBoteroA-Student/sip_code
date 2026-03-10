@@ -83,7 +83,7 @@ class TestStepRegistry:
         assert len(STEP_NAMES) == 6
 
     def test_step_names_order(self):
-        assert STEP_NAMES == ("rcac", "labels", "features", "iric", "train", "evaluate")
+        assert STEP_NAMES == ("rcac", "labels", "iric", "features", "train", "evaluate")
 
     def test_step_labels_match_step_names(self):
         assert set(_STEP_LABELS.keys()) == set(STEP_NAMES)
@@ -194,7 +194,7 @@ class TestRunPipeline:
 
     def test_invalid_start_from_message_lists_valid(self):
         cfg = PipelineConfig(n_jobs=2, n_iter=50, cv_folds=3, max_ram_gb=4, device="cpu")
-        with pytest.raises(ValueError, match="rcac, labels, features, iric, train, evaluate"):
+        with pytest.raises(ValueError, match="rcac, labels, iric, features, train, evaluate"):
             run_pipeline(cfg, start_from="nope")
 
     @patch("sip_engine.pipeline.run_evaluate")

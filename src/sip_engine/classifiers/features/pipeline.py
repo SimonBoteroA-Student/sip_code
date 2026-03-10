@@ -75,12 +75,18 @@ FEATURE_COLUMNS: list[str] = [
     "num_retrasos_previos", "num_sobrecostos_previos", "proponente_unico",
     "tipo_persona_proveedor", "valor_total_contratos_previos_depto",
     "valor_total_contratos_previos_nacional",
-    # Category D (4 features) — IRIC aggregate scores (Phase 6, FEAT-04)
+    # Category D (15 features) — IRIC aggregate scores + binary components (Phase 6 + Phase 16)
     # Note: kurtosis (curtosis_licitacion) and DRN (diferencia_relativa_norm) from
     # bid_stats are NOT included here — they are NaN-heavy (~60% of contracts have
     # 0 or 1 bids via direct contracting). They are stored in iric_scores.parquet
     # artifact but excluded from XGBoost feature vectors.
+    # 4 aggregate scores (Phase 6, FEAT-04):
     "iric_anomalias", "iric_competencia", "iric_score", "iric_transparencia",
+    # 11 binary components (Phase 16):
+    "ausencia_proceso", "contratacion_directa", "datos_faltantes",
+    "historial_proveedor_alto", "periodo_decision_extremo", "periodo_publicidad_extremo",
+    "proveedor_multiproposito", "proveedor_retrasos_previos", "proveedor_sobrecostos_previos",
+    "regimen_especial", "unico_proponente",
 ]
 
 # Critical fields — rows missing ANY of these are dropped (CONTEXT.md decision)
@@ -382,44 +388,22 @@ def build_features(
         if display:
             display.complete_stage(3)
 
-        # ---- Step 3b: Load IRIC thresholds and bid stats for Category D ----
+        # ---- Auto-trigger build_iric() if iric_scores.parquet is missing ----
+        iric_scores_path = settings.iric_scores_path
+        if not iric_scores_path.exists():
+            logger.info("iric_scores.parquet not found — auto-triggering build_iric()")
+            try:
+                from sip_engine.classifiers.iric.pipeline import build_iric as _build_iric
+                _build_iric(force=False)
+            except Exception as exc:
+                logger.warning(
+                    "build_iric() auto-trigger failed (%s) — IRIC columns will be NaN",
+                    exc,
+                )
+
+        # ---- Step 4: Stream contratos and compute Cat A/B/C features ----
         if display:
             display.start_stage(4)
-        from sip_engine.classifiers.iric.pipeline import compute_iric as _compute_iric
-        from sip_engine.classifiers.iric.thresholds import (
-            load_iric_thresholds as _load_iric_thresholds,
-            reset_iric_thresholds_cache as _reset_iric_cache,
-        )
-        from sip_engine.classifiers.iric.bid_stats import build_bid_stats_lookup as _build_bid_stats_lookup
-
-        _iric_thresholds: dict | None = None
-        _bid_stats_lookup: dict = {}
-
-        _iric_thresholds_path = settings.iric_thresholds_path
-        if _iric_thresholds_path.exists():
-            try:
-                _reset_iric_cache()
-                _iric_thresholds = _load_iric_thresholds(_iric_thresholds_path)
-                logger.info("IRIC thresholds loaded for Category D computation")
-            except Exception as exc:
-                logger.warning("IRIC thresholds could not be loaded (%s) — Category D will be NaN", exc)
-        else:
-            logger.warning(
-                "IRIC thresholds not found at %s — Category D features will be NaN in features.parquet. "
-                "Run build_iric() first to compute IRIC thresholds.",
-                _iric_thresholds_path,
-            )
-
-        if _iric_thresholds is not None:
-            logger.info("Building bid stats lookup for Category D...")
-            _bid_stats_lookup = _build_bid_stats_lookup()
-
-        if display:
-            display.complete_stage(4)
-
-        # ---- Step 4: Stream contratos and compute all 34 features ----
-        if display:
-            display.start_stage(5)
         from sip_engine.shared.data.loaders import load_contratos
 
         all_rows: list[dict] = []
@@ -477,35 +461,11 @@ def build_features(
                 num_actividades = num_actividades_lookup.get(provider_key, 0)
                 cat_c = compute_category_c(row_dict, procesos_data, provider_history, num_actividades)
 
-                if _iric_thresholds is not None:
-                    iric_result = _compute_iric(
-                        contract_row=row_dict,
-                        procesos_data=procesos_data,
-                        provider_history=provider_history,
-                        thresholds=_iric_thresholds,
-                        num_actividades=num_actividades,
-                        bid_values=None,
-                    )
-                    cat_d = {
-                        "iric_anomalias": iric_result["iric_anomalias"],
-                        "iric_competencia": iric_result["iric_competencia"],
-                        "iric_score": iric_result["iric_score"],
-                        "iric_transparencia": iric_result["iric_transparencia"],
-                    }
-                else:
-                    cat_d = {
-                        "iric_anomalias": float("nan"),
-                        "iric_competencia": float("nan"),
-                        "iric_score": float("nan"),
-                        "iric_transparencia": float("nan"),
-                    }
-
                 feature_row = {
                     "id_contrato": str(row_dict.get("ID Contrato", "")),
                     **cat_a,
                     **cat_b,
                     **cat_c,
-                    **cat_d,
                 }
                 all_rows.append(feature_row)
 
@@ -516,7 +476,7 @@ def build_features(
         # Final row count update
         if display:
             display.update_rows(rows_processed, len(all_rows), rows_dropped)
-            display.complete_stage(5)
+            display.complete_stage(4)
 
         logger.info(
             "Feature extraction complete: %d rows processed, %d kept, %d dropped",
@@ -528,9 +488,9 @@ def build_features(
             for reason, count in sorted(reason_counts.items()):
                 logger.info("  Dropped %d rows due to missing: %s", count, reason)
 
-        # ---- Step 5: Build DataFrame and encoding mappings ----
+        # ---- Step 5: Build DataFrame, apply encodings, and merge IRIC columns ----
         if display:
-            display.start_stage(6)
+            display.start_stage(5)
 
         df = pd.DataFrame(all_rows)
         if df.empty:
@@ -543,6 +503,28 @@ def build_features(
         mappings = build_encoding_mappings(df, force=force)
         df = apply_encoding(df, mappings)
 
+        # ---- Merge IRIC columns from iric_scores.parquet ----
+        _IRIC_FEATURE_COLUMNS: list[str] = [
+            "iric_anomalias", "iric_competencia", "iric_score", "iric_transparencia",
+            "ausencia_proceso", "contratacion_directa", "datos_faltantes",
+            "historial_proveedor_alto", "periodo_decision_extremo", "periodo_publicidad_extremo",
+            "proveedor_multiproposito", "proveedor_retrasos_previos", "proveedor_sobrecostos_previos",
+            "regimen_especial", "unico_proponente",
+        ]
+        if iric_scores_path.exists():
+            iric_df = pd.read_parquet(iric_scores_path)
+            for col in _IRIC_FEATURE_COLUMNS:
+                if col in iric_df.columns:
+                    iric_df[col] = iric_df[col].astype(float)
+            available_cols = [c for c in _IRIC_FEATURE_COLUMNS if c in iric_df.columns]
+            df = df.join(iric_df[available_cols], how="left")
+            logger.info("Merged %d IRIC columns from iric_scores.parquet", len(available_cols))
+        else:
+            logger.warning(
+                "iric_scores.parquet not found at %s — IRIC columns will be NaN",
+                iric_scores_path,
+            )
+
         for col in FEATURE_COLUMNS:
             if col not in df.columns:
                 df[col] = float("nan")
@@ -554,7 +536,7 @@ def build_features(
         pq.write_table(table, features_path)
 
         if display:
-            display.complete_stage(6)
+            display.complete_stage(5)
 
         logger.info(
             "features.parquet written to %s (%d rows, %d columns)",
@@ -579,15 +561,15 @@ def compute_features(
     iric_thresholds: dict | None = None,
     bid_values: list[float] | None = None,
 ) -> dict:
-    """Compute a complete 34-feature vector for a single contract (online inference).
+    """Compute a complete 45-feature vector for a single contract (online inference).
 
     Uses the same Category A/B/C/D extraction functions as build_features() for
     train-serve parity (FEAT-07). Loads encoding mappings from JSON for consistent
     categorical encoding. Loads provider history index for lookup_provider_history.
 
-    Category D (IRIC): 4 aggregate scores injected after Cat A/B/C. If
+    Category D (IRIC): 4 aggregate scores + 11 binary components (15 total). If
     iric_thresholds is not provided, attempts to load from disk via
-    load_iric_thresholds(). If thresholds file does not exist, Cat D features
+    load_iric_thresholds(). If thresholds file does not exist, all Cat D features
     are set to NaN.
 
     Args:
@@ -606,7 +588,7 @@ def compute_features(
             kurtosis/DRN — those are only in the iric_scores.parquet artifact.
 
     Returns:
-        Dict with exactly FEATURE_COLUMNS keys (34 total), values encoded as
+        Dict with exactly FEATURE_COLUMNS keys (45 total), values encoded as
         integers/floats. Category D values are NaN if thresholds unavailable.
     """
     # Inject signing date into procesos_data for dias_decision calculation
@@ -636,7 +618,7 @@ def compute_features(
     )
     cat_c = compute_category_c(contract_row, procesos_data, provider_history, num_actividades)
 
-    # Category D: 4 IRIC aggregate scores
+    # Category D: 15 IRIC columns (4 aggregate scores + 11 binary components)
     # Lazy import to avoid circular dependency (iric.pipeline imports features.provider_history)
     try:
         from sip_engine.classifiers.iric.pipeline import compute_iric
@@ -659,25 +641,39 @@ def compute_features(
             bid_values=bid_values,
         )
         cat_d = {
+            # 4 aggregate scores (Phase 6)
             "iric_anomalias": iric_result["iric_anomalias"],
             "iric_competencia": iric_result["iric_competencia"],
             "iric_score": iric_result["iric_score"],
             "iric_transparencia": iric_result["iric_transparencia"],
+            # 11 binary components (Phase 16)
+            "ausencia_proceso": float(iric_result.get("ausencia_proceso", float("nan"))),
+            "contratacion_directa": float(iric_result.get("contratacion_directa", float("nan"))),
+            "datos_faltantes": float(iric_result.get("datos_faltantes", float("nan"))),
+            "historial_proveedor_alto": float(iric_result.get("historial_proveedor_alto", float("nan"))),
+            "periodo_decision_extremo": float(iric_result.get("periodo_decision_extremo") or float("nan")),
+            "periodo_publicidad_extremo": float(iric_result.get("periodo_publicidad_extremo") or float("nan")),
+            "proveedor_multiproposito": float(iric_result.get("proveedor_multiproposito", float("nan"))),
+            "proveedor_retrasos_previos": float(iric_result.get("proveedor_retrasos_previos", float("nan"))),
+            "proveedor_sobrecostos_previos": float(iric_result.get("proveedor_sobrecostos_previos", float("nan"))),
+            "regimen_especial": float(iric_result.get("regimen_especial", float("nan"))),
+            "unico_proponente": float(iric_result.get("unico_proponente") or float("nan")),
         }
     except FileNotFoundError:
-        # Thresholds file not yet built — return NaN for Cat D
+        # Thresholds file not yet built — return NaN for all Cat D columns
         logger.warning(
             "IRIC thresholds not found — Category D features will be NaN. "
             "Run build_iric() to generate thresholds."
         )
-        cat_d = {
-            "iric_anomalias": float("nan"),
-            "iric_competencia": float("nan"),
-            "iric_score": float("nan"),
-            "iric_transparencia": float("nan"),
-        }
+        cat_d = {k: float("nan") for k in [
+            "iric_anomalias", "iric_competencia", "iric_score", "iric_transparencia",
+            "ausencia_proceso", "contratacion_directa", "datos_faltantes",
+            "historial_proveedor_alto", "periodo_decision_extremo", "periodo_publicidad_extremo",
+            "proveedor_multiproposito", "proveedor_retrasos_previos", "proveedor_sobrecostos_previos",
+            "regimen_especial", "unico_proponente",
+        ]}
 
-    # Merge all 34 features
+    # Merge all features
     features = {**cat_a, **cat_b, **cat_c}
 
     # Apply encoding via single-row DataFrame, then extract back to dict
