@@ -84,3 +84,13 @@ Plans:
 - [x] 15-01-PLAN.md — AUC-PR + Brier Skill Score metrics (evaluator + visualizer + reports)
 - [x] 15-02-PLAN.md — Named model artifacts (trainer flat archiving + --artifact eval flag)
 - [x] 15-03-PLAN.md — Model selector TUI + --model nargs='+' (CLI + pipeline + picker)
+
+### Phase 16: Include IRIC scores as model features — rebuild feature builder and training pipeline
+
+**Goal:** Include all 15 IRIC score columns (4 aggregates + 11 binary components) as model features; reorder pipeline so iric runs before features; retrain models on the expanded 45-feature dataset.
+**Depends on:** Phase 15
+**Plans:** 2 plans
+
+Plans:
+- [ ] 16-00: Create test_pipeline16.py (Wave 0 — test first)
+- [ ] 16-01: Reorder pipeline + expand features + retrain (Wave 1)
