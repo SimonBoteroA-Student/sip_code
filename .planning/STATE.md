@@ -90,6 +90,7 @@ Phase 12-03 decisions:
 
 ### Roadmap Evolution
 
+- Phase 17 added: Hardware Optimization — RAM management & multithreading acceleration for label, feature, and IRIC building
 - Phase 16 added: Include IRIC scores as model features — rebuild feature builder and training pipeline
 - Phase 14 Plan 01 complete: TUI rendering fix — Layout replaces Group at screen level in all 3 config screens
 - Phase 14 Plan 02 complete: pipeline.py coordinator + CLI refactor + --start-from support
