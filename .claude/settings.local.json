@@ -15,7 +15,13 @@
       "Bash(read f:*)",
       "Bash(PATH=\"$PWD/.venv/bin:$PATH\" python:*)",
       "Bash(PATH=\"$PWD/.venv/bin:$PATH\" pytest:*)",
-      "Bash(.venv/bin/pytest:*)"
+      "Bash(.venv/bin/pytest:*)",
+      "Bash(cd \"/Users/simonb/SIP Code\" && cat monitor/_csv_meta.json | .venv/bin/python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f'{k}: {len\\(v.get\\(\\\\\"columns\\\\\",[]\\)\\)} cols -> {v.get\\(\\\\\"columns\\\\\",[]\\)}'\\) for k,v in d.items\\(\\)]\")",
+      "Bash(cd \"/Users/simonb/SIP Code\" && cat monitor/_all_xlsx_meta.json | .venv/bin/python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(f'{k}: {len\\(v.get\\(\\\\\"columns\\\\\",[]\\)\\)} cols -> {v.get\\(\\\\\"columns\\\\\",[]\\)}'\\) for k,v in d.items\\(\\)]\")",
+      "Bash(cd \"/Users/simonb/SIP Code\" && .venv/bin/python3 -c \"\ntry:\n    import PyPDF2\n    print\\('PyPDF2 available'\\)\nexcept:\n    try:\n        import pypdf\n        print\\('pypdf available'\\)\n    except:\n        print\\('No PDF library available'\\)\n\")",
+      "Bash(cd \"/Users/simonb/SIP Code\" && .venv/bin/python3 << 'PYEOF'\nimport json\n\n# Load metadata\nwith open\\(\"monitor/_csv_meta.json\"\\) as f:\n    csv_meta = json.load\\(f\\)\nwith open\\(\"monitor/_all_xlsx_meta.json\"\\) as f:\n    xlsx_meta = json.load\\(f\\)\n\n# Print sample values for a few key files to help write column descriptions\nfor name in [\"CONTRATOS.csv\", \"FINANCIADORES.csv\", \"contratos-campanas.csv\"]:\n    m = csv_meta[name]\n    print\\(f\"\\\\n=== {name} ===\"\\)\n    for c in m[\"columns\"]:\n        print\\(f\"  {c}: {m['sample_values'].get\\(c, []\\)}\"\\)\n\nPYEOF)",
+      "Bash(cd \"/Users/simonb/SIP Code\" && .venv/bin/jupyter nbconvert --to notebook --execute monitor/00_dataset_catalog.ipynb --output 00_dataset_catalog_executed.ipynb --ExecutePreprocessor.timeout=300 2>&1 | tail -5)",
+      "Bash(cd \"/Users/simonb/SIP Code\" && .venv/bin/python3 -c \"\nimport json\nwith open\\('monitor/00_dataset_catalog.ipynb'\\) as f:\n    nb = json.load\\(f\\)\ncells = nb['cells']\nmd_cells = sum\\(1 for c in cells if c['cell_type'] == 'markdown'\\)\ncode_cells = sum\\(1 for c in cells if c['cell_type'] == 'code'\\)\nprint\\(f'Valid notebook: {nb[\\\\\"nbformat\\\\\"]} format'\\)\nprint\\(f'Cells: {md_cells} markdown + {code_cells} code = {len\\(cells\\)} total'\\)\n\")"
     ]
   }
 }

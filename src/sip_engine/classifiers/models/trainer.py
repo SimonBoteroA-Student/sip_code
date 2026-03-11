@@ -621,10 +621,6 @@ def _hp_search(
     if device_kwargs is None:
         device_kwargs = {"tree_method": "hist"}
 
-    # Add max_bin=512 for CUDA path — more GPU work per split
-    if device_kwargs.get("device", "").startswith("cuda") and "max_bin" not in device_kwargs:
-        device_kwargs = {**device_kwargs, "max_bin": 512}
-
     param_samples = list(ParameterSampler(PARAM_DIST, n_iter=n_iter, random_state=seed))
 
     best_params: dict = {}
