@@ -37,6 +37,8 @@ from sip_engine.classifiers.features.provider_history import (
 from sip_engine.shared.memory import (
     MemoryMonitor,
     cleanup,
+    create_worker_pool,
+    get_shared_lookups,
     load_checkpoint,
     remove_checkpoint,
     save_checkpoint,
@@ -281,6 +283,99 @@ def _is_missing_required(row: dict, reason_counts: dict[str, int]) -> bool:
 
 
 # =============================================================================
+# Multiprocessing worker (module-level for picklability)
+# =============================================================================
+
+
+def _process_features_chunk(chunk: "pd.DataFrame") -> list[dict]:  # type: ignore[name-defined]
+    """Process a contratos chunk: extract all features per row.
+
+    Accesses shared lookups (procesos_lookup, proveedores_lookup,
+    num_actividades_lookup, processed_ids) from the module-global dict
+    populated by the pool initializer.
+
+    Args:
+        chunk: A contratos chunk (DataFrame) to process.
+
+    Returns:
+        List of dicts, each with ``id_contrato`` + Category A/B/C feature keys.
+        Rows missing required fields or with null signing dates are dropped.
+    """
+    import datetime as _dt
+
+    import pandas as _pd
+
+    from sip_engine.classifiers.features.category_a import compute_category_a
+    from sip_engine.classifiers.features.category_b import compute_category_b
+    from sip_engine.classifiers.features.category_c import compute_category_c
+    from sip_engine.classifiers.features.provider_history import lookup_provider_history
+    from sip_engine.shared.data.rcac_builder import is_malformed, normalize_numero, normalize_tipo
+    from sip_engine.shared.memory import get_shared_lookups
+
+    shared = get_shared_lookups()
+    procesos_lookup: dict = shared["procesos_lookup"]
+    proveedores_lookup: dict = shared["proveedores_lookup"]
+    num_actividades_lookup: dict = shared["num_actividades_lookup"]
+    processed_ids: set = shared.get("processed_ids", set())
+
+    results: list[dict] = []
+
+    for _, row in chunk.iterrows():
+        row_dict = row.to_dict()
+        id_contrato = str(row_dict.get("ID Contrato", ""))
+
+        # Skip already-processed rows (checkpoint resume)
+        if id_contrato in processed_ids:
+            continue
+
+        # Drop rows missing required fields
+        reason_counts: dict[str, int] = {}
+        if _is_missing_required(row_dict, reason_counts):
+            continue
+
+        firma_date = _to_date(row_dict.get("Fecha de Firma"))
+        if firma_date is None:
+            continue
+
+        proceso_id = str(row_dict.get("Proceso de Compra", "")).strip()
+        procesos_data: dict | None = procesos_lookup.get(proceso_id)
+
+        if procesos_data is not None:
+            procesos_data = dict(procesos_data)
+            procesos_data["Fecha de Firma"] = firma_date
+
+        raw_tipo = row_dict.get("TipoDocProveedor")
+        raw_num = row_dict.get("Documento Proveedor")
+        num_norm = normalize_numero(raw_num)
+        proveedor_fecha_creacion: _dt.date | None = (
+            proveedores_lookup.get(num_norm) if not is_malformed(num_norm) else None
+        )
+
+        cat_a = compute_category_a(row_dict)
+        cat_b = compute_category_b(row_dict, procesos_data, proveedor_fecha_creacion)
+
+        tipo_norm = normalize_tipo(raw_tipo)
+        provider_history = lookup_provider_history(
+            tipo_doc=raw_tipo,
+            num_doc=raw_num,
+            as_of_date=firma_date,
+            departamento=str(row_dict.get("Departamento", "") or "").strip(),
+        )
+        provider_key = (tipo_norm, num_norm)
+        num_actividades = num_actividades_lookup.get(provider_key, 0)
+        cat_c = compute_category_c(row_dict, procesos_data, provider_history, num_actividades)
+
+        results.append({
+            "id_contrato": id_contrato,
+            **cat_a,
+            **cat_b,
+            **cat_c,
+        })
+
+    return results
+
+
+# =============================================================================
 # Public API
 # =============================================================================
 
@@ -441,96 +536,143 @@ def build_features(
         rows_dropped = 0
         _PROGRESS_INTERVAL = 5_000  # update display every N rows
 
-        for chunk in load_contratos():
-            # Memory check before processing each chunk
-            if monitor:
-                status = monitor.check()
-                if status == "warning":
-                    gc.collect()
-                    logger.warning(
-                        "Memory warning (features loop): RSS=%.2fGB / budget=%.2fGB — "
-                        "running GC",
-                        monitor.current_usage_bytes() / (1024 ** 3),
-                        monitor.budget_bytes / (1024 ** 3),
-                    )
-                elif status == "critical":
-                    gc.collect()
-                    if monitor.check() == "critical":
-                        save_checkpoint(all_rows, checkpoint_path)
-                        rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
-                        budget_gb = monitor.budget_bytes / (1024 ** 3)
-                        raise MemoryError(
-                            f"RAM budget exceeded during feature extraction: "
-                            f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
-                            f"Checkpoint saved ({len(all_rows)} rows). "
-                            f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+        if n_jobs > 1:
+            # ---- Multiprocessing path (n_jobs > 1) ----
+            lookups = {
+                "procesos_lookup": procesos_lookup,
+                "proveedores_lookup": proveedores_lookup,
+                "num_actividades_lookup": num_actividades_lookup,
+                "processed_ids": processed_ids,
+            }
+            pool, lookups_path = create_worker_pool(n_jobs, lookups)
+            try:
+                for chunk_results in pool.imap_unordered(_process_features_chunk, load_contratos()):
+                    all_rows.extend(chunk_results)
+                    rows_processed += len(chunk_results)  # approximate
+                    if display:
+                        display.update_rows(rows_processed, len(all_rows), rows_dropped)
+                    if monitor:
+                        status = monitor.check()
+                        if status == "warning":
+                            gc.collect()
+                            logger.warning(
+                                "Memory warning (features MP loop): RSS=%.2fGB / budget=%.2fGB — GC",
+                                monitor.current_usage_bytes() / (1024 ** 3),
+                                monitor.budget_bytes / (1024 ** 3),
+                            )
+                        elif status == "critical":
+                            gc.collect()
+                            if monitor.check() == "critical":
+                                pool.terminate()
+                                save_checkpoint(all_rows, checkpoint_path)
+                                rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
+                                budget_gb = monitor.budget_bytes / (1024 ** 3)
+                                raise MemoryError(
+                                    f"RAM budget exceeded during feature extraction (MP): "
+                                    f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
+                                    f"Checkpoint saved ({len(all_rows)} rows). "
+                                    f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+                                )
+            finally:
+                pool.close()
+                pool.join()
+                if lookups_path:
+                    try:
+                        Path(lookups_path).unlink()
+                    except FileNotFoundError:
+                        pass
+        else:
+            # ---- Single-process path (n_jobs <= 1) ----
+            for chunk in load_contratos():
+                # Memory check before processing each chunk
+                if monitor:
+                    status = monitor.check()
+                    if status == "warning":
+                        gc.collect()
+                        logger.warning(
+                            "Memory warning (features loop): RSS=%.2fGB / budget=%.2fGB — "
+                            "running GC",
+                            monitor.current_usage_bytes() / (1024 ** 3),
+                            monitor.budget_bytes / (1024 ** 3),
                         )
+                    elif status == "critical":
+                        gc.collect()
+                        if monitor.check() == "critical":
+                            save_checkpoint(all_rows, checkpoint_path)
+                            rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
+                            budget_gb = monitor.budget_bytes / (1024 ** 3)
+                            raise MemoryError(
+                                f"RAM budget exceeded during feature extraction: "
+                                f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
+                                f"Checkpoint saved ({len(all_rows)} rows). "
+                                f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+                            )
 
-            for _, row in chunk.iterrows():
-                rows_processed += 1
+                for _, row in chunk.iterrows():
+                    rows_processed += 1
 
-                row_dict = row.to_dict()
-                id_contrato = str(row_dict.get("ID Contrato", ""))
+                    row_dict = row.to_dict()
+                    id_contrato = str(row_dict.get("ID Contrato", ""))
 
-                # Skip already-processed rows (checkpoint resume)
-                if id_contrato in processed_ids:
-                    continue
+                    # Skip already-processed rows (checkpoint resume)
+                    if id_contrato in processed_ids:
+                        continue
 
-                if _is_missing_required(row_dict, reason_counts):
-                    rows_dropped += 1
-                    if display and rows_processed % _PROGRESS_INTERVAL == 0:
-                        display.update_rows(rows_processed, rows_processed - rows_dropped, rows_dropped)
-                    continue
+                    if _is_missing_required(row_dict, reason_counts):
+                        rows_dropped += 1
+                        if display and rows_processed % _PROGRESS_INTERVAL == 0:
+                            display.update_rows(rows_processed, rows_processed - rows_dropped, rows_dropped)
+                        continue
 
-                firma_date = _to_date(row_dict.get("Fecha de Firma"))
-                if firma_date is None:
-                    reason_counts["Fecha de Firma (parse error)"] = (
-                        reason_counts.get("Fecha de Firma (parse error)", 0) + 1
+                    firma_date = _to_date(row_dict.get("Fecha de Firma"))
+                    if firma_date is None:
+                        reason_counts["Fecha de Firma (parse error)"] = (
+                            reason_counts.get("Fecha de Firma (parse error)", 0) + 1
+                        )
+                        rows_dropped += 1
+                        if display and rows_processed % _PROGRESS_INTERVAL == 0:
+                            display.update_rows(rows_processed, rows_processed - rows_dropped, rows_dropped)
+                        continue
+
+                    proceso_id = str(row_dict.get("Proceso de Compra", "")).strip()
+                    procesos_data: dict | None = procesos_lookup.get(proceso_id)
+
+                    if procesos_data is not None:
+                        procesos_data = dict(procesos_data)
+                        procesos_data["Fecha de Firma"] = firma_date
+
+                    raw_tipo = row_dict.get("TipoDocProveedor")
+                    raw_num = row_dict.get("Documento Proveedor")
+                    num_norm = normalize_numero(raw_num)
+                    proveedor_fecha_creacion: datetime.date | None = (
+                        proveedores_lookup.get(num_norm) if not is_malformed(num_norm) else None
                     )
-                    rows_dropped += 1
+
+                    cat_a = compute_category_a(row_dict)
+                    cat_b = compute_category_b(row_dict, procesos_data, proveedor_fecha_creacion)
+
+                    tipo_norm = normalize_tipo(raw_tipo)
+                    provider_history = lookup_provider_history(
+                        tipo_doc=raw_tipo,
+                        num_doc=raw_num,
+                        as_of_date=firma_date,
+                        departamento=str(row_dict.get("Departamento", "") or "").strip(),
+                    )
+                    provider_key = (tipo_norm, num_norm)
+                    num_actividades = num_actividades_lookup.get(provider_key, 0)
+                    cat_c = compute_category_c(row_dict, procesos_data, provider_history, num_actividades)
+
+                    feature_row = {
+                        "id_contrato": id_contrato,
+                        **cat_a,
+                        **cat_b,
+                        **cat_c,
+                    }
+                    all_rows.append(feature_row)
+
+                    # Periodic display update
                     if display and rows_processed % _PROGRESS_INTERVAL == 0:
-                        display.update_rows(rows_processed, rows_processed - rows_dropped, rows_dropped)
-                    continue
-
-                proceso_id = str(row_dict.get("Proceso de Compra", "")).strip()
-                procesos_data: dict | None = procesos_lookup.get(proceso_id)
-
-                if procesos_data is not None:
-                    procesos_data = dict(procesos_data)
-                    procesos_data["Fecha de Firma"] = firma_date
-
-                raw_tipo = row_dict.get("TipoDocProveedor")
-                raw_num = row_dict.get("Documento Proveedor")
-                num_norm = normalize_numero(raw_num)
-                proveedor_fecha_creacion: datetime.date | None = (
-                    proveedores_lookup.get(num_norm) if not is_malformed(num_norm) else None
-                )
-
-                cat_a = compute_category_a(row_dict)
-                cat_b = compute_category_b(row_dict, procesos_data, proveedor_fecha_creacion)
-
-                tipo_norm = normalize_tipo(raw_tipo)
-                provider_history = lookup_provider_history(
-                    tipo_doc=raw_tipo,
-                    num_doc=raw_num,
-                    as_of_date=firma_date,
-                    departamento=str(row_dict.get("Departamento", "") or "").strip(),
-                )
-                provider_key = (tipo_norm, num_norm)
-                num_actividades = num_actividades_lookup.get(provider_key, 0)
-                cat_c = compute_category_c(row_dict, procesos_data, provider_history, num_actividades)
-
-                feature_row = {
-                    "id_contrato": id_contrato,
-                    **cat_a,
-                    **cat_b,
-                    **cat_c,
-                }
-                all_rows.append(feature_row)
-
-                # Periodic display update
-                if display and rows_processed % _PROGRESS_INTERVAL == 0:
-                    display.update_rows(rows_processed, len(all_rows), rows_dropped)
+                        display.update_rows(rows_processed, len(all_rows), rows_dropped)
 
         # Final row count update
         if display:
