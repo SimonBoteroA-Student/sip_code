@@ -621,6 +621,10 @@ def _hp_search(
     if device_kwargs is None:
         device_kwargs = {"tree_method": "hist"}
 
+    # Add max_bin=512 for CUDA path — more GPU work per split
+    if device_kwargs.get("device", "").startswith("cuda") and "max_bin" not in device_kwargs:
+        device_kwargs = {**device_kwargs, "max_bin": 512}
+
     param_samples = list(ParameterSampler(PARAM_DIST, n_iter=n_iter, random_state=seed))
 
     best_params: dict = {}
@@ -634,6 +638,43 @@ def _hp_search(
         and X_test_arr is not None
         and y_test_arr is not None
     )
+
+    # Pre-build fold DMatrix objects for CUDA path — eliminates idle-GPU pattern
+    # between fits caused by repeated numpy→DMatrix conversion on every XGBClassifier.fit().
+    # CPU path (including ROCm) uses existing sklearn XGBClassifier.fit() code path unchanged.
+    fold_dmats_spw: list[tuple] | None = None
+    fold_dmats_ups: list[tuple] | None = None
+
+    if device_kwargs.get("device", "").startswith("cuda"):
+        logger.debug("Pre-building fold DMatrix objects for CUDA HP search")
+        cv_prebuild = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+        fold_dmats_spw = []
+        fold_dmats_ups = []
+        for train_idx, val_idx in cv_prebuild.split(X, y):
+            X_tr, y_tr = X[train_idx], y[train_idx]
+            X_val, y_val = X[val_idx], y[val_idx]
+
+            # Strategy A (scale_pos_weight): original training fold
+            dtrain_spw = xgb.DMatrix(X_tr, label=y_tr)
+            dval = xgb.DMatrix(X_val, label=y_val)
+            fold_dmats_spw.append((dtrain_spw, dval, y_val))
+
+            # Strategy B (upsampling): pre-build upsampled training fold
+            n_maj = int((y_tr == 0).sum())
+            n_target = int(n_maj * 0.25 / 0.75)
+            X_min = X_tr[y_tr == 1]
+            if len(X_min) > 0 and n_target > 0:
+                X_min_up = resample(
+                    X_min, n_samples=max(n_target, 1), replace=True, random_state=seed
+                )
+                y_min_up = np.ones(len(X_min_up), dtype=y.dtype)
+                X_maj_rows = X_tr[y_tr == 0]
+                X_tr_up = np.vstack([X_maj_rows, X_min_up])
+                y_tr_up = np.concatenate([np.zeros(len(X_maj_rows), dtype=y.dtype), y_min_up])
+                dtrain_ups = xgb.DMatrix(X_tr_up, label=y_tr_up)
+            else:
+                dtrain_ups = dtrain_spw  # fallback: same as scale_pos_weight fold
+            fold_dmats_ups.append((dtrain_ups, dval, y_val))
 
     display: TrainingProgressDisplay | None = None
     if progress:
@@ -653,6 +694,8 @@ def _hp_search(
             n_splits=n_splits,
             seed=seed,
             device_kwargs=device_kwargs,
+            fold_dmats_spw=fold_dmats_spw,
+            fold_dmats_ups=fold_dmats_ups,
         )
 
         winner = comparison["winner"]
