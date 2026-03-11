@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import gc
 import logging
 from pathlib import Path
 
@@ -27,8 +28,19 @@ from sip_engine.shared.data.rcac_builder import (
     normalize_tipo,
 )
 from sip_engine.shared.data.rcac_lookup import rcac_lookup
+from sip_engine.shared.memory import (
+    MemoryMonitor,
+    adaptive_chunk_size,
+    cleanup,
+    load_checkpoint,
+    remove_checkpoint,
+    save_checkpoint,
+)
 
 logger = logging.getLogger(__name__)
+
+# Chunk size for M3/M4 processing loop (rows per iteration)
+_M3M4_CHUNK_SIZE = 5_000
 
 # ============================================================
 # Constants
@@ -42,12 +54,25 @@ M2_TIPOS: set[str] = {"EXTENSION"}
 # Internal helpers
 # ============================================================
 
-def _load_contratos_base() -> pd.DataFrame:
+def _load_contratos_base(
+    monitor: MemoryMonitor | None = None,
+    checkpoint_path: Path | None = None,
+) -> pd.DataFrame:
     """Load the contratos base DataFrame with deduplication by ID Contrato.
 
     Streams all contratos chunks and selects the columns needed for label
     construction. Duplicate rows sharing the same ID Contrato are collapsed
     to a single row (keep first occurrence).
+
+    When *monitor* is provided, memory pressure is checked before each chunk:
+    - ``'warning'``: run ``gc.collect()`` to free unreachable objects.
+    - ``'critical'``: retry after aggressive GC; abort with an empty checkpoint
+      if pressure remains.
+
+    Args:
+        monitor: Optional :class:`~sip_engine.shared.memory.MemoryMonitor`.
+        checkpoint_path: Checkpoint file path (used only when aborting on
+            critical memory to signal that the run started).
 
     Returns:
         DataFrame with columns: ID Contrato, TipoDocProveedor, Documento Proveedor.
@@ -57,6 +82,28 @@ def _load_contratos_base() -> pd.DataFrame:
     chunks: list[pd.DataFrame] = []
 
     for chunk in load_contratos():
+        if monitor:
+            status = monitor.check()
+            if status == "warning":
+                gc.collect()
+                logger.warning(
+                    "Memory warning during contratos load: RSS=%.2fGB / budget=%.2fGB — "
+                    "running GC",
+                    monitor.current_usage_bytes() / (1024 ** 3),
+                    monitor.budget_bytes / (1024 ** 3),
+                )
+            elif status == "critical":
+                gc.collect()
+                if monitor.check() == "critical":
+                    rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
+                    budget_gb = monitor.budget_bytes / (1024 ** 3)
+                    if checkpoint_path is not None:
+                        save_checkpoint([], checkpoint_path)
+                    raise MemoryError(
+                        f"RAM budget exceeded during contratos load: "
+                        f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
+                        f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+                    )
         chunks.append(chunk[needed_cols])
 
     df = pd.concat(chunks, ignore_index=True)
@@ -259,16 +306,25 @@ def build_labels(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = 
     M4 = 1 if contract provider is found in the RCAC index (corruption antecedents).
     Null for M3/M4 when provider document ID is missing or malformed.
 
+    When *max_ram_gb* is provided, a :class:`~sip_engine.shared.memory.MemoryMonitor`
+    enforces the budget:
+    - At 90% (warning): ``gc.collect()`` is called between processing chunks.
+    - At 100% (critical): processed rows are saved as a checkpoint and execution
+      aborts with an actionable message.  Restarting with ``force=False`` resumes
+      from the last saved row.
+
     Args:
         force: If True, rebuild even if labels.parquet already exists.
-        n_jobs: Number of parallel jobs (reserved for Plan 17-02 implementation).
-        max_ram_gb: RAM budget in GB (reserved for Plan 17-02 implementation).
+        n_jobs: Number of parallel jobs (reserved for future use).
+        max_ram_gb: RAM budget in GB.  ``None`` disables monitoring (default
+            behaviour identical to pre-Phase 17).
 
     Returns:
         Path to the labels.parquet file.
 
     Raises:
         FileNotFoundError: If the RCAC index has not been built yet.
+        MemoryError: If RAM budget is exceeded and the checkpoint has been saved.
     """
     settings = get_settings()
 
@@ -284,8 +340,20 @@ def build_labels(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = 
     # ---- Prepare output directory ----
     settings.artifacts_labels_dir.mkdir(parents=True, exist_ok=True)
 
-    # ---- Load contratos base ----
-    df = _load_contratos_base()
+    # ---- MemoryMonitor setup ----
+    monitor: MemoryMonitor | None = MemoryMonitor(max_ram_gb) if max_ram_gb is not None else None
+
+    # ---- Checkpoint support ----
+    checkpoint_path: Path = settings.artifacts_labels_dir / "_checkpoint.parquet"
+    checkpoint_df, processed_ids = load_checkpoint(checkpoint_path)
+    prior_rows: list[dict] = checkpoint_df.to_dict("records") if not checkpoint_df.empty else []
+    if processed_ids:
+        logger.info(
+            "Resuming from checkpoint: %d rows already processed", len(processed_ids)
+        )
+
+    # ---- Load contratos base (memory-checked per chunk) ----
+    df = _load_contratos_base(monitor=monitor, checkpoint_path=checkpoint_path)
     contratos_ids: set[str] = set(df["ID Contrato"].dropna().tolist())
 
     # ---- Build M1/M2 sets from adiciones ----
@@ -324,21 +392,77 @@ def build_labels(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = 
             "M2 has only %d positive examples — model may not be trainable", m2_count
         )
 
-    # ---- Build boletines set and compute M3/M4 ----
-    boletines_set = _build_boletines_set()
-    df = _compute_m3_m4(df, boletines_set)
+    # ---- Lifecycle cleanup: M1/M2 sets no longer needed ----
+    del m1_contracts, m2_contracts, dias_m2_ids
+    cleanup()
 
-    # ---- Select and rename output columns ----
+    # ---- Build boletines set ----
+    boletines_set = _build_boletines_set()
+
+    # ---- Compute M3/M4 in chunks with memory monitoring ----
+    # Filter to rows that have not been processed by a prior (checkpointed) run
+    df_unprocessed = df[~df["ID Contrato"].isin(processed_ids)] if processed_ids else df
+
+    current_chunk_size = _M3M4_CHUNK_SIZE
+    all_rows: list[dict] = list(prior_rows)
+
     output_cols = [
         "ID Contrato",
         "M1", "M2", "M3", "M4",
         "TipoDocProveedor_norm",
         "DocProveedor_norm",
     ]
-    out = df[output_cols].rename(columns={"ID Contrato": "id_contrato"})
+
+    for start in range(0, len(df_unprocessed), current_chunk_size):
+        if monitor:
+            status = monitor.check()
+            if status == "warning":
+                current_chunk_size = adaptive_chunk_size(monitor, current_chunk_size)
+                gc.collect()
+                logger.warning(
+                    "Memory warning (M3/M4 loop): RSS=%.2fGB / budget=%.2fGB — "
+                    "adaptive chunk_size=%d",
+                    monitor.current_usage_bytes() / (1024 ** 3),
+                    monitor.budget_bytes / (1024 ** 3),
+                    current_chunk_size,
+                )
+            elif status == "critical":
+                gc.collect()
+                if monitor.check() == "critical":
+                    save_checkpoint(all_rows, checkpoint_path)
+                    rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
+                    budget_gb = monitor.budget_bytes / (1024 ** 3)
+                    raise MemoryError(
+                        f"RAM budget exceeded during M3/M4 computation: "
+                        f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
+                        f"Checkpoint saved ({len(all_rows)} rows). "
+                        f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+                    )
+
+        chunk_df = df_unprocessed.iloc[start : start + current_chunk_size].copy()
+        chunk_result = _compute_m3_m4(chunk_df, boletines_set)
+        chunk_out = chunk_result[output_cols].rename(columns={"ID Contrato": "id_contrato"})
+        all_rows.extend(chunk_out.to_dict("records"))
+
+    # ---- Lifecycle cleanup: boletines_set no longer needed ----
+    del boletines_set
+    cleanup()
+
+    # ---- Build output DataFrame from accumulated rows ----
+    out = pd.DataFrame(all_rows)
+    del all_rows
+    cleanup()
+
+    # Restore nullable Int8 dtypes lost by dict round-trip
+    for col in ["M1", "M2", "M3", "M4"]:
+        if col in out.columns:
+            out[col] = out[col].astype("Int8")
 
     # ---- Write to parquet ----
     out.to_parquet(settings.labels_path, index=False, engine="pyarrow")
+
+    # ---- Remove checkpoint on successful completion ----
+    remove_checkpoint(checkpoint_path)
 
     # ---- Final summary ----
     total_out = len(out)
