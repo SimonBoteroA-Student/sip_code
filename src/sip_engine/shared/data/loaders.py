@@ -115,6 +115,7 @@ def _load_csv(
     has_header: bool = True,
     colnames: list[str] | None = None,
     validate: bool = True,
+    chunk_size: int | None = None,
 ) -> Generator[pd.DataFrame, None, None]:
     """Core generator implementing the shared CSV loading pattern.
 
@@ -128,6 +129,8 @@ def _load_csv(
         has_header: If False, use header=None (headerless file).
         colnames: Rename columns to these names after reading (headerless files).
         validate: Whether to run validate_columns() before reading.
+        chunk_size: Override ``settings.chunk_size`` when provided.  When
+            ``None`` (default), the global setting is used.
 
     Yields:
         pd.DataFrame chunks with dtypes enforced and currency cols cleaned.
@@ -152,8 +155,8 @@ def _load_csv(
         )
 
     settings = get_settings()
-    chunk_size = settings.chunk_size
-    total = _total_chunks(path, chunk_size, has_header=has_header)
+    effective_chunk_size = chunk_size if chunk_size is not None else settings.chunk_size
+    total = _total_chunks(path, effective_chunk_size, has_header=has_header)
     rows_loaded = 0
 
     # Set up bad-row counter via py.warnings logger
@@ -165,7 +168,7 @@ def _load_csv(
     t0 = time.time()
 
     read_kwargs: dict = dict(
-        chunksize=chunk_size,
+        chunksize=effective_chunk_size,
         dtype=resolved_dtype,
         encoding=encoding,
         encoding_errors="replace",
@@ -214,11 +217,15 @@ def _load_csv(
 # SECOP loaders — 9 headed UTF-8 files
 # ============================================================
 
-def load_contratos() -> Generator[pd.DataFrame, None, None]:
+def load_contratos(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
     """Yield chunks of contratos_SECOP.csv with currency columns cleaned to Float64.
 
     DATA-06: chunked, never holds full file in memory.
     DATA-07: currency 'Valor del Contrato' cleaned from '$X,XXX' to Float64.
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.  When
+            ``None`` (default), the global setting is used.
     """
     settings = get_settings()
     yield from _load_csv(
@@ -228,14 +235,18 @@ def load_contratos() -> Generator[pd.DataFrame, None, None]:
         dtype=CONTRATOS_DTYPE,
         encoding="utf-8",
         currency_cols=CONTRATOS_CURRENCY_COLS,
+        chunk_size=chunk_size,
     )
 
 
-def load_procesos() -> Generator[pd.DataFrame, None, None]:
+def load_procesos(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
     """Yield chunks of procesos_SECOP.csv (~6.4M rows, 5.3 GB).
 
     Mixed-type columns (Nit Entidad, PCI) forced to str to suppress DtypeWarning.
     Currency columns 'Precio Base' and 'Valor Total Adjudicacion' cleaned to Float64.
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
     """
     settings = get_settings()
     yield from _load_csv(
@@ -245,13 +256,17 @@ def load_procesos() -> Generator[pd.DataFrame, None, None]:
         dtype=PROCESOS_DTYPE,
         encoding="utf-8",
         currency_cols=PROCESOS_CURRENCY_COLS,
+        chunk_size=chunk_size,
     )
 
 
-def load_ofertas() -> Generator[pd.DataFrame, None, None]:
+def load_ofertas(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
     """Yield chunks of ofertas_proceso_SECOP.csv (~9.7M rows, 3.4 GB).
 
     Currency column 'Valor de la Oferta' cleaned to Float64.
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
     """
     settings = get_settings()
     yield from _load_csv(
@@ -261,11 +276,16 @@ def load_ofertas() -> Generator[pd.DataFrame, None, None]:
         dtype=OFERTAS_DTYPE,
         encoding="utf-8",
         currency_cols=OFERTAS_CURRENCY_COLS,
+        chunk_size=chunk_size,
     )
 
 
-def load_proponentes() -> Generator[pd.DataFrame, None, None]:
-    """Yield chunks of proponentes_proceso_SECOP.csv (small file, 9 columns)."""
+def load_proponentes(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
+    """Yield chunks of proponentes_proceso_SECOP.csv (small file, 9 columns).
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
+    """
     settings = get_settings()
     yield from _load_csv(
         path=settings.proponentes_path,
@@ -273,11 +293,16 @@ def load_proponentes() -> Generator[pd.DataFrame, None, None]:
         usecols=PROPONENTES_USECOLS,
         dtype=PROPONENTES_DTYPE,
         encoding="utf-8",
+        chunk_size=chunk_size,
     )
 
 
-def load_proveedores() -> Generator[pd.DataFrame, None, None]:
-    """Yield chunks of proveedores_registrados.csv (small file, 25 columns)."""
+def load_proveedores(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
+    """Yield chunks of proveedores_registrados.csv (small file, 25 columns).
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
+    """
     settings = get_settings()
     yield from _load_csv(
         path=settings.proveedores_path,
@@ -285,11 +310,16 @@ def load_proveedores() -> Generator[pd.DataFrame, None, None]:
         usecols=PROVEEDORES_USECOLS,
         dtype=PROVEEDORES_DTYPE,
         encoding="utf-8",
+        chunk_size=chunk_size,
     )
 
 
-def load_boletines() -> Generator[pd.DataFrame, None, None]:
-    """Yield chunks of boletines.csv (small file). Document ID columns kept as str."""
+def load_boletines(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
+    """Yield chunks of boletines.csv (small file). Document ID columns kept as str.
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
+    """
     settings = get_settings()
     yield from _load_csv(
         path=settings.boletines_path,
@@ -297,14 +327,18 @@ def load_boletines() -> Generator[pd.DataFrame, None, None]:
         usecols=BOLETINES_USECOLS,
         dtype=BOLETINES_DTYPE,
         encoding="utf-8",
+        chunk_size=chunk_size,
     )
 
 
-def load_ejecucion() -> Generator[pd.DataFrame, None, None]:
+def load_ejecucion(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
     """Yield chunks of ejecucion_contratos.csv.
 
     POST-EXECUTION DATA — excluded from feature vectors (FEAT-08).
     Loader exists for RCAC builder use only (cross-referencing execution status).
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
     """
     settings = get_settings()
     yield from _load_csv(
@@ -313,11 +347,16 @@ def load_ejecucion() -> Generator[pd.DataFrame, None, None]:
         usecols=EJECUCION_USECOLS,
         dtype=EJECUCION_DTYPE,
         encoding="utf-8",
+        chunk_size=chunk_size,
     )
 
 
-def load_suspensiones() -> Generator[pd.DataFrame, None, None]:
-    """Yield chunks of suspensiones_contratos.csv (small file, 7 columns)."""
+def load_suspensiones(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
+    """Yield chunks of suspensiones_contratos.csv (small file, 7 columns).
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
+    """
     settings = get_settings()
     yield from _load_csv(
         path=settings.suspensiones_path,
@@ -325,11 +364,16 @@ def load_suspensiones() -> Generator[pd.DataFrame, None, None]:
         usecols=SUSPENSIONES_USECOLS,
         dtype=SUSPENSIONES_DTYPE,
         encoding="utf-8",
+        chunk_size=chunk_size,
     )
 
 
-def load_adiciones() -> Generator[pd.DataFrame, None, None]:
-    """Yield chunks of adiciones.csv (tiny file, ~1.3k rows). Used for M1/M2 labels."""
+def load_adiciones(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
+    """Yield chunks of adiciones.csv (tiny file, ~1.3k rows). Used for M1/M2 labels.
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
+    """
     settings = get_settings()
     yield from _load_csv(
         path=settings.adiciones_path,
@@ -337,6 +381,7 @@ def load_adiciones() -> Generator[pd.DataFrame, None, None]:
         usecols=ADICIONES_USECOLS,
         dtype=ADICIONES_DTYPE,
         encoding="utf-8",
+        chunk_size=chunk_size,
     )
 
 
@@ -344,11 +389,14 @@ def load_adiciones() -> Generator[pd.DataFrame, None, None]:
 # PACO loaders — 3 headed UTF-8 files
 # ============================================================
 
-def load_paco_resp_fiscales() -> Generator[pd.DataFrame, None, None]:
+def load_paco_resp_fiscales(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
     """Yield chunks of responsabilidades_fiscales_PACO.csv (~6.6k rows).
 
     'Tipo y Num Docuemento' is a combined type+number field (Phase 3 parses it).
     Note: typo 'Docuemento' is in the source file, preserved here.
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
     """
     settings = get_settings()
     yield from _load_csv(
@@ -357,11 +405,16 @@ def load_paco_resp_fiscales() -> Generator[pd.DataFrame, None, None]:
         usecols=RESP_FISCALES_USECOLS,
         dtype=RESP_FISCALES_DTYPE,
         encoding="utf-8",
+        chunk_size=chunk_size,
     )
 
 
-def load_paco_colusiones() -> Generator[pd.DataFrame, None, None]:
-    """Yield chunks of colusiones_en_contratacion_SIC.csv (~103 rows, tiny)."""
+def load_paco_colusiones(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
+    """Yield chunks of colusiones_en_contratacion_SIC.csv (~103 rows, tiny).
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
+    """
     settings = get_settings()
     yield from _load_csv(
         path=settings.colusiones_sic_path,
@@ -369,11 +422,16 @@ def load_paco_colusiones() -> Generator[pd.DataFrame, None, None]:
         usecols=COLUSIONES_USECOLS,
         dtype=COLUSIONES_DTYPE,
         encoding="utf-8",
+        chunk_size=chunk_size,
     )
 
 
-def load_paco_sanciones_penales() -> Generator[pd.DataFrame, None, None]:
-    """Yield chunks of sanciones_penales_FGN.csv (~3.9k rows, 9 geographic columns)."""
+def load_paco_sanciones_penales(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
+    """Yield chunks of sanciones_penales_FGN.csv (~3.9k rows, 9 geographic columns).
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
+    """
     settings = get_settings()
     yield from _load_csv(
         path=settings.sanciones_penales_path,
@@ -381,6 +439,7 @@ def load_paco_sanciones_penales() -> Generator[pd.DataFrame, None, None]:
         usecols=SANCIONES_PENALES_USECOLS,
         dtype=SANCIONES_PENALES_DTYPE,
         encoding="utf-8",
+        chunk_size=chunk_size,
     )
 
 
@@ -388,12 +447,15 @@ def load_paco_sanciones_penales() -> Generator[pd.DataFrame, None, None]:
 # PACO headerless loaders — 2 files with no header row
 # ============================================================
 
-def load_paco_siri() -> Generator[pd.DataFrame, None, None]:
+def load_paco_siri(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
     """Yield chunks of sanciones_SIRI_PACO.csv (no header, positional columns).
 
     Only cols 4 and 5 (0-indexed) are loaded — tipo_documento and numero_documento.
     DATA-04: cols 5 and 6 per 1-indexed spec; [4, 5] in 0-indexed pandas.
     Spanish characters (CÉDULA DE CIUDADANÍA) preserved via UTF-8 encoding.
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
     """
     settings = get_settings()
     yield from _load_csv(
@@ -405,14 +467,18 @@ def load_paco_siri() -> Generator[pd.DataFrame, None, None]:
         has_header=False,
         colnames=SIRI_COLNAMES,
         validate=False,  # headerless — no column names to validate
+        chunk_size=chunk_size,
     )
 
 
-def load_paco_multas() -> Generator[pd.DataFrame, None, None]:
+def load_paco_multas(chunk_size: int | None = None) -> Generator[pd.DataFrame, None, None]:
     """Yield chunks of multas_SECOP_PACO.csv (no header, all 15 columns).
 
     Columns renamed to col_0 through col_14.
     col[5] = NIT of sanctioned provider (Phase 3 refines column usage).
+
+    Args:
+        chunk_size: Override the global ``settings.chunk_size``.
     """
     settings = get_settings()
     yield from _load_csv(
@@ -424,4 +490,5 @@ def load_paco_multas() -> Generator[pd.DataFrame, None, None]:
         has_header=False,
         colnames=MULTAS_COLNAMES,
         validate=False,  # headerless — no column names to validate
+        chunk_size=chunk_size,
     )
