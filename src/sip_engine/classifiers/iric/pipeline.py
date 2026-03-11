@@ -21,6 +21,7 @@ FEAT-04, IRIC-01 through IRIC-08
 
 from __future__ import annotations
 
+import gc
 import logging
 import math
 from pathlib import Path
@@ -36,6 +37,13 @@ from sip_engine.classifiers.iric.thresholds import (
     calibrate_iric_thresholds,
     load_iric_thresholds,
     save_iric_thresholds,
+)
+from sip_engine.shared.memory import (
+    MemoryMonitor,
+    cleanup,
+    load_checkpoint,
+    remove_checkpoint,
+    save_checkpoint,
 )
 
 logger = logging.getLogger(__name__)
@@ -200,14 +208,23 @@ def build_iric(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = No
     with 11 IRIC components, 4 aggregate scores, kurtosis, DRN, and n_bids
     per contract.
 
+    When *max_ram_gb* is provided, a :class:`~sip_engine.shared.memory.MemoryMonitor`
+    enforces the budget:
+    - At 90% (warning): ``gc.collect()`` is called and processing continues.
+    - At 100% (critical): processed rows are saved as a checkpoint and execution
+      aborts.  Restarting with ``force=False`` resumes from the last checkpoint.
+
     Args:
         force: If True, rebuild even if iric_scores.parquet already exists.
             Also forces threshold recalibration if thresholds JSON is absent.
-        n_jobs: Number of parallel jobs (reserved for Plan 17-02 implementation).
-        max_ram_gb: RAM budget in GB (reserved for Plan 17-02 implementation).
+        n_jobs: Number of parallel jobs (reserved for future use).
+        max_ram_gb: RAM budget in GB.  ``None`` disables monitoring.
 
     Returns:
         Path to the written iric_scores.parquet file.
+
+    Raises:
+        MemoryError: If RAM budget is exceeded and a checkpoint has been saved.
     """
     import pandas as pd
 
@@ -219,6 +236,19 @@ def build_iric(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = No
         return iric_scores_path
 
     logger.info("Building IRIC scores...")
+
+    # ---- MemoryMonitor setup ----
+    monitor: MemoryMonitor | None = MemoryMonitor(max_ram_gb) if max_ram_gb is not None else None
+
+    # ---- Checkpoint support ----
+    checkpoint_path: Path = settings.artifacts_iric_dir / "_checkpoint.parquet"
+    settings.artifacts_iric_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_df, processed_ids = load_checkpoint(checkpoint_path)
+    prior_rows: list[dict] = checkpoint_df.to_dict("records") if not checkpoint_df.empty else []
+    if processed_ids:
+        logger.info(
+            "Resuming from IRIC checkpoint: %d rows already processed", len(processed_ids)
+        )
 
     # ---- Step 1: Load or calibrate thresholds ----
     if settings.iric_thresholds_path.exists() and not force:
@@ -278,15 +308,42 @@ def build_iric(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = No
     # ---- Step 6: Stream contratos and compute IRIC per row ----
     from sip_engine.shared.data.loaders import load_contratos
 
-    all_rows: list[dict] = []
+    all_rows: list[dict] = list(prior_rows)
     rows_processed = 0
 
     for chunk in load_contratos():
+        # Memory check before processing each chunk
+        if monitor:
+            status = monitor.check()
+            if status == "warning":
+                gc.collect()
+                logger.warning(
+                    "Memory warning (IRIC loop): RSS=%.2fGB / budget=%.2fGB — running GC",
+                    monitor.current_usage_bytes() / (1024 ** 3),
+                    monitor.budget_bytes / (1024 ** 3),
+                )
+            elif status == "critical":
+                gc.collect()
+                if monitor.check() == "critical":
+                    save_checkpoint(all_rows, checkpoint_path)
+                    rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
+                    budget_gb = monitor.budget_bytes / (1024 ** 3)
+                    raise MemoryError(
+                        f"RAM budget exceeded during IRIC computation: "
+                        f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
+                        f"Checkpoint saved ({len(all_rows)} rows). "
+                        f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+                    )
+
         for _, row in chunk.iterrows():
             rows_processed += 1
             row_dict = row.to_dict()
 
             id_contrato = str(row_dict.get("ID Contrato", ""))
+
+            # Skip already-processed rows (checkpoint resume)
+            if id_contrato in processed_ids:
+                continue
 
             # Contract signing date
             firma_date = _to_date_iric(row_dict.get("Fecha de Firma"))
@@ -368,8 +425,14 @@ def build_iric(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = No
         len(all_rows),
     )
 
+    # ---- Lifecycle cleanup: lookups no longer needed ----
+    del procesos_lookup, num_actividades_lookup, bid_stats_lookup
+    cleanup()
+
     # ---- Step 7: Write to iric_scores.parquet via pyarrow ----
     df_out = pd.DataFrame(all_rows)
+    del all_rows
+    cleanup()
 
     # Ensure column ordering and presence
     for col in _IRIC_ARTIFACT_COLUMNS:
@@ -382,6 +445,9 @@ def build_iric(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = No
     iric_scores_path.parent.mkdir(parents=True, exist_ok=True)
     table = pa.Table.from_pandas(df_out, preserve_index=True)
     pq.write_table(table, iric_scores_path)
+
+    # ---- Remove checkpoint on successful completion ----
+    remove_checkpoint(checkpoint_path)
 
     logger.info(
         "iric_scores.parquet written to %s (%d rows, %d columns)",
