@@ -11,14 +11,20 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 Milestone: v1.3 — in progress (Phase 16 code complete, needs retrain)
 Phase 16: IRIC Feature Expansion — code complete (45 features), needs `run-pipeline --start-from train`
-Phase 17: Hardware Optimization — **In Progress (1/4 executed)**
-Plans: 17-01 ✅ (MemoryMonitor + loaders), 17-02 (build integration + lifecycle), 17-03 (multiprocessing), 17-04 (GPU opt)
+Phase 17: Hardware Optimization — **In Progress (2/4 executed)**
+Plans: 17-01 ✅ (MemoryMonitor + loaders), 17-02 ✅ (build integration + lifecycle), 17-03 (multiprocessing), 17-04 (GPU opt)
 
-Progress: [█████░░░░░░░░░░░░░░░] Phase 17 plan 1/4 complete
+Progress: [██████████░░░░░░░░░░] Phase 17 plan 2/4 complete
 
 ## Accumulated Context
 
 ### Decisions
+
+Phase 17-02 decisions:
+- build_labels M3/M4 computed in chunks (_M3M4_CHUNK_SIZE=5000) to enable checkpoint-save mid-computation
+- dict round-trip (to_dict/DataFrame) loses nullable Int8 — restored with astype('Int8') after reconstruction
+- features rows_processed initialized to len(processed_ids) so progress display is accurate on resume
+- del procesos_lookup / proveedores_lookup / num_actividades_lookup after streaming pass in iric and features
 
 Phase 17-01 decisions:
 - load_checkpoint returns (empty_df, empty_set) for missing file — callers do not need FileNotFoundError handling
@@ -130,5 +136,5 @@ None — all prior blockers resolved.
 ## Session Continuity
 
 Last session: 2026-03-11
-Stopped at: Completed 17-01-PLAN.md — MemoryMonitor + chunk_size loaders + n_jobs/max_ram_gb pipeline wiring
-Resume file: .planning/phases/17-hardware-optimization-ram-management-multithreading-acceleration/17-01-SUMMARY.md
+Stopped at: Completed 17-02-PLAN.md — MemoryMonitor integration + lifecycle cleanup + checkpoint-resume in all 3 build functions
+Resume file: .planning/phases/17-hardware-optimization-ram-management-multithreading-acceleration/17-02-SUMMARY.md

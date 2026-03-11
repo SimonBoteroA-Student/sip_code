@@ -104,7 +104,7 @@ Plans:
 **Plans:** 1/4 plans executed
 
 Plans:
-- [ ] 17-01-PLAN.md — MemoryMonitor foundation, loaders & pipeline wiring (Wave 1)
-- [ ] 17-02-PLAN.md — Build function integration: RAM management, lifecycle cleanup & checkpoints (Wave 1, after 17-01)
+- [x] 17-01-PLAN.md — MemoryMonitor foundation, loaders & pipeline wiring (Wave 1)
+- [x] 17-02-PLAN.md — Build function integration: RAM management, lifecycle cleanup & checkpoints (Wave 1, after 17-01)
 - [ ] 17-03-PLAN.md — Multiprocessing acceleration for labels/IRIC/features (Wave 2, after 17-01 + 17-02)
 - [ ] 17-04-PLAN.md — GPU optimization: DMatrix caching & max_bin for HP search (Wave 2, parallel with 17-03, after 17-01)
