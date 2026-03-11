@@ -32,6 +32,8 @@ from sip_engine.shared.memory import (
     MemoryMonitor,
     adaptive_chunk_size,
     cleanup,
+    create_worker_pool,
+    get_shared_lookups,
     load_checkpoint,
     remove_checkpoint,
     save_checkpoint,
@@ -292,6 +294,40 @@ def _compute_m3_m4(
 
 
 # ============================================================
+# Multiprocessing worker (module-level for picklability)
+# ============================================================
+
+# Output columns produced by the M3/M4 pass
+_LABELS_OUTPUT_COLS: list[str] = [
+    "ID Contrato",
+    "M1", "M2", "M3", "M4",
+    "TipoDocProveedor_norm",
+    "DocProveedor_norm",
+]
+
+
+def _process_labels_chunk(chunk: pd.DataFrame) -> list[dict]:
+    """Process a contratos chunk: compute M3/M4 labels per row.
+
+    Accesses ``boletines_set`` from the module-global shared lookups dict
+    (populated by the pool initializer via :func:`~sip_engine.shared.memory._init_worker`).
+
+    Args:
+        chunk: Sub-DataFrame of the contratos base with M1/M2 already assigned,
+            columns include: ID Contrato, M1, M2, TipoDocProveedor, Documento Proveedor.
+
+    Returns:
+        List of dicts, each representing one output row with M3/M4 computed.
+    """
+    shared = get_shared_lookups()
+    boletines_set: set[tuple[str, str]] = shared["boletines_set"]
+
+    chunk_result = _compute_m3_m4(chunk, boletines_set)
+    chunk_out = chunk_result[_LABELS_OUTPUT_COLS].rename(columns={"ID Contrato": "id_contrato"})
+    return chunk_out.to_dict("records")
+
+
+# ============================================================
 # Public API
 # ============================================================
 
@@ -406,43 +442,79 @@ def build_labels(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = 
     current_chunk_size = _M3M4_CHUNK_SIZE
     all_rows: list[dict] = list(prior_rows)
 
-    output_cols = [
-        "ID Contrato",
-        "M1", "M2", "M3", "M4",
-        "TipoDocProveedor_norm",
-        "DocProveedor_norm",
-    ]
+    if n_jobs > 1:
+        # ---- Multiprocessing path (n_jobs > 1) ----
+        lookups = {"boletines_set": boletines_set}
+        pool, lookups_path = create_worker_pool(n_jobs, lookups)
+        try:
+            def _label_chunk_gen():  # type: ignore[return]
+                for i in range(0, len(df_unprocessed), _M3M4_CHUNK_SIZE):
+                    yield df_unprocessed.iloc[i : i + _M3M4_CHUNK_SIZE].copy()
 
-    for start in range(0, len(df_unprocessed), current_chunk_size):
-        if monitor:
-            status = monitor.check()
-            if status == "warning":
-                current_chunk_size = adaptive_chunk_size(monitor, current_chunk_size)
-                gc.collect()
-                logger.warning(
-                    "Memory warning (M3/M4 loop): RSS=%.2fGB / budget=%.2fGB — "
-                    "adaptive chunk_size=%d",
-                    monitor.current_usage_bytes() / (1024 ** 3),
-                    monitor.budget_bytes / (1024 ** 3),
-                    current_chunk_size,
-                )
-            elif status == "critical":
-                gc.collect()
-                if monitor.check() == "critical":
-                    save_checkpoint(all_rows, checkpoint_path)
-                    rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
-                    budget_gb = monitor.budget_bytes / (1024 ** 3)
-                    raise MemoryError(
-                        f"RAM budget exceeded during M3/M4 computation: "
-                        f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
-                        f"Checkpoint saved ({len(all_rows)} rows). "
-                        f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+            for chunk_results in pool.imap_unordered(_process_labels_chunk, _label_chunk_gen()):
+                all_rows.extend(chunk_results)
+                if monitor:
+                    status = monitor.check()
+                    if status == "warning":
+                        gc.collect()
+                        logger.warning(
+                            "Memory warning (M3/M4 MP loop): RSS=%.2fGB / budget=%.2fGB — GC",
+                            monitor.current_usage_bytes() / (1024 ** 3),
+                            monitor.budget_bytes / (1024 ** 3),
+                        )
+                    elif status == "critical":
+                        gc.collect()
+                        if monitor.check() == "critical":
+                            pool.terminate()
+                            save_checkpoint(all_rows, checkpoint_path)
+                            rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
+                            budget_gb = monitor.budget_bytes / (1024 ** 3)
+                            raise MemoryError(
+                                f"RAM budget exceeded during M3/M4 computation (MP): "
+                                f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
+                                f"Checkpoint saved ({len(all_rows)} rows). "
+                                f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+                            )
+        finally:
+            pool.close()
+            pool.join()
+            if lookups_path:
+                try:
+                    Path(lookups_path).unlink()
+                except FileNotFoundError:
+                    pass
+    else:
+        # ---- Single-process path (n_jobs <= 1) ----
+        for start in range(0, len(df_unprocessed), current_chunk_size):
+            if monitor:
+                status = monitor.check()
+                if status == "warning":
+                    current_chunk_size = adaptive_chunk_size(monitor, current_chunk_size)
+                    gc.collect()
+                    logger.warning(
+                        "Memory warning (M3/M4 loop): RSS=%.2fGB / budget=%.2fGB — "
+                        "adaptive chunk_size=%d",
+                        monitor.current_usage_bytes() / (1024 ** 3),
+                        monitor.budget_bytes / (1024 ** 3),
+                        current_chunk_size,
                     )
+                elif status == "critical":
+                    gc.collect()
+                    if monitor.check() == "critical":
+                        save_checkpoint(all_rows, checkpoint_path)
+                        rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
+                        budget_gb = monitor.budget_bytes / (1024 ** 3)
+                        raise MemoryError(
+                            f"RAM budget exceeded during M3/M4 computation: "
+                            f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
+                            f"Checkpoint saved ({len(all_rows)} rows). "
+                            f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+                        )
 
-        chunk_df = df_unprocessed.iloc[start : start + current_chunk_size].copy()
-        chunk_result = _compute_m3_m4(chunk_df, boletines_set)
-        chunk_out = chunk_result[output_cols].rename(columns={"ID Contrato": "id_contrato"})
-        all_rows.extend(chunk_out.to_dict("records"))
+            chunk_df = df_unprocessed.iloc[start : start + current_chunk_size].copy()
+            chunk_result = _compute_m3_m4(chunk_df, boletines_set)
+            chunk_out = chunk_result[_LABELS_OUTPUT_COLS].rename(columns={"ID Contrato": "id_contrato"})
+            all_rows.extend(chunk_out.to_dict("records"))
 
     # ---- Lifecycle cleanup: boletines_set no longer needed ----
     del boletines_set
