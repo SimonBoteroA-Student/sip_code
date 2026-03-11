@@ -5,20 +5,26 @@
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 17 planned — Hardware Optimization (4 plans, 2 waves)
+**Current focus:** Phase 17 in progress — Hardware Optimization (4 plans, 2 waves)
 
 ## Current Position
 
 Milestone: v1.3 — in progress (Phase 16 code complete, needs retrain)
 Phase 16: IRIC Feature Expansion — code complete (45 features), needs `run-pipeline --start-from train`
-Phase 17: Hardware Optimization — **Planned (0/4 executed)**
-Plans: 17-01 (MemoryMonitor + loaders), 17-02 (build integration + lifecycle), 17-03 (multiprocessing), 17-04 (GPU opt)
+Phase 17: Hardware Optimization — **In Progress (1/4 executed)**
+Plans: 17-01 ✅ (MemoryMonitor + loaders), 17-02 (build integration + lifecycle), 17-03 (multiprocessing), 17-04 (GPU opt)
 
-Progress: [████░░░░░░░░░░░░░░░░] Phase 16 code-complete, Phase 17 planned
+Progress: [█████░░░░░░░░░░░░░░░] Phase 17 plan 1/4 complete
 
 ## Accumulated Context
 
 ### Decisions
+
+Phase 17-01 decisions:
+- load_checkpoint returns (empty_df, empty_set) for missing file — callers do not need FileNotFoundError handling
+- MemoryMonitor uses psutil.Process().memory_info().rss for RSS — consistent with Phase 12 hardware detection
+- adaptive_chunk_size uses max(halved, min_chunk_size) at warning — prevents zero-size chunks
+- n_jobs/max_ram_gb accepted but no-op in build_labels/build_iric until Plan 17-02
 
 Phase 15-03 decisions:
 - _CheckboxWidget uses set[str] for selected — order-preserving output reconstructed from original list
@@ -88,9 +94,12 @@ Phase 12-03 decisions:
 - GPU fallback uses recursive _train_with_fallback() — strips device kwarg and retries on CPU
 - CV scoring functions have inline GPU fallback to prevent mid-HP-search failures
 - Non-interactive mode auto-detects CPU cores from hardware config when n_jobs=-1
+- [Phase 17]: load_checkpoint returns (empty_df, empty_set) for missing file — callers do not need FileNotFoundError handling
+- [Phase 17]: n_jobs/max_ram_gb accepted but no-op in build_labels/build_iric until Plan 17-02
 
 ### Roadmap Evolution
 
+- Phase 17 Plan 01 complete: MemoryMonitor foundation + chunk_size loader passthrough + n_jobs/max_ram_gb pipeline wiring
 - Phase 17 added: Hardware Optimization — RAM management & multithreading acceleration for label, feature, and IRIC building
 - Phase 16 added: Include IRIC scores as model features — rebuild feature builder and training pipeline
 - Phase 14 Plan 01 complete: TUI rendering fix — Layout replaces Group at screen level in all 3 config screens
@@ -120,6 +129,6 @@ None — all prior blockers resolved.
 
 ## Session Continuity
 
-Last session: 2026-03-08
-Stopped at: Completed 15-03-PLAN.md — Multi-model selector TUI + nargs='+' --model flag + PipelineConfig list[str]
-Resume file: .planning/phases/15-evaluation-and-training-module-enhancements-auc-pr-model-selector-brier-skill-score-and-named-model-artifacts/15-03-SUMMARY.md
+Last session: 2026-03-11
+Stopped at: Completed 17-01-PLAN.md — MemoryMonitor + chunk_size loaders + n_jobs/max_ram_gb pipeline wiring
+Resume file: .planning/phases/17-hardware-optimization-ram-management-multithreading-acceleration/17-01-SUMMARY.md
