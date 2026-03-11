@@ -47,7 +47,7 @@
 | 14. CLI & TUI Fixes — Command Pipeline Refactor | 2/2 | Complete    | 2026-03-06 | — |
 | 15. Evaluation & Training Enhancements | — | 3/3 | Complete | 2026-03-08 |
 | 16. Include IRIC scores as model features | — | 0/2 | Pending | — |
-| 17. Hardware Optimization — RAM & Multithreading | 1/4 | In Progress|  | — |
+| 17. Hardware Optimization — RAM & Multithreading | 4/4 | Complete | 2026-03-11 |
 
 <details>
 <summary>✅ v1.1 Cross-Platform OS Compatibility & Windows Support (Phases 12–13) — SHIPPED 2026-03-03</summary>
@@ -101,10 +101,10 @@ Plans:
 
 **Goal:** Optimize RAM usage according to system availability, preventing crashouts and deloading/loading data when necessary, and utilize multithreading and multicore processing when available, to accelerate the label, feature, and IRIC building steps.
 **Depends on:** Phase 16
-**Plans:** 1/4 plans executed
+**Plans:** 4/4 plans executed
 
 Plans:
 - [x] 17-01-PLAN.md — MemoryMonitor foundation, loaders & pipeline wiring (Wave 1)
 - [x] 17-02-PLAN.md — Build function integration: RAM management, lifecycle cleanup & checkpoints (Wave 1, after 17-01)
-- [ ] 17-03-PLAN.md — Multiprocessing acceleration for labels/IRIC/features (Wave 2, after 17-01 + 17-02)
-- [ ] 17-04-PLAN.md — GPU optimization: DMatrix caching & max_bin for HP search (Wave 2, parallel with 17-03, after 17-01)
+- [x] 17-03-PLAN.md — Multiprocessing acceleration for labels/IRIC/features (Wave 2, after 17-01 + 17-02)
+- [x] 17-04-PLAN.md — GPU optimization: DMatrix caching & max_bin for HP search (Wave 2, parallel with 17-03, after 17-01)

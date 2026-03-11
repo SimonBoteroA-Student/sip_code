@@ -11,14 +11,20 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 Milestone: v1.3 — in progress (Phase 16 code complete, needs retrain)
 Phase 16: IRIC Feature Expansion — code complete (45 features), needs `run-pipeline --start-from train`
-Phase 17: Hardware Optimization — **In Progress (2/4 executed)**
-Plans: 17-01 ✅ (MemoryMonitor + loaders), 17-02 ✅ (build integration + lifecycle), 17-03 (multiprocessing), 17-04 (GPU opt)
+Phase 17: Hardware Optimization — **Complete (4/4 executed)**
+Plans: 17-01 ✅ (MemoryMonitor + loaders), 17-02 ✅ (build integration + lifecycle), 17-03 ✅ (multiprocessing), 17-04 ✅ (GPU opt)
 
-Progress: [██████████░░░░░░░░░░] Phase 17 plan 2/4 complete
+Progress: [████████████████████] Phase 17 plan 4/4 complete
 
 ## Accumulated Context
 
 ### Decisions
+
+Phase 17-04 decisions:
+- DMatrix fold_dmats uses (dtrain, dval, y_val) tuple — y_val kept separately for roc_auc_score
+- CUDA-only DMatrix caching — ROCm excluded (ROCm XGBoost DMatrix untested per plan notes)
+- max_bin=512 not overwritten if caller already set it explicitly (guard: 'max_bin' not in device_kwargs)
+- DMatrix is NOT pickle-serializable (ctypes pointer) — test uses save_binary() round-trip
 
 Phase 17-02 decisions:
 - build_labels M3/M4 computed in chunks (_M3M4_CHUNK_SIZE=5000) to enable checkpoint-save mid-computation
@@ -102,9 +108,14 @@ Phase 12-03 decisions:
 - Non-interactive mode auto-detects CPU cores from hardware config when n_jobs=-1
 - [Phase 17]: load_checkpoint returns (empty_df, empty_set) for missing file — callers do not need FileNotFoundError handling
 - [Phase 17]: n_jobs/max_ram_gb accepted but no-op in build_labels/build_iric until Plan 17-02
+- [Phase 17]: DMatrix fold_dmats uses (dtrain, dval, y_val) tuple — y_val kept separately for roc_auc_score
+- [Phase 17]: CUDA-only DMatrix caching — ROCm excluded (ROCm XGBoost DMatrix untested)
+- [Phase 17]: max_bin=512 not overwritten if caller already set it explicitly
+- [Phase 17]: DMatrix is NOT pickle-serializable — test uses save_binary() round-trip
 
 ### Roadmap Evolution
 
+- Phase 17 Plan 04 complete: GPU optimization — DMatrix caching + max_bin=512 for CUDA HP search
 - Phase 17 Plan 01 complete: MemoryMonitor foundation + chunk_size loader passthrough + n_jobs/max_ram_gb pipeline wiring
 - Phase 17 added: Hardware Optimization — RAM management & multithreading acceleration for label, feature, and IRIC building
 - Phase 16 added: Include IRIC scores as model features — rebuild feature builder and training pipeline
@@ -136,5 +147,5 @@ None — all prior blockers resolved.
 ## Session Continuity
 
 Last session: 2026-03-11
-Stopped at: Completed 17-02-PLAN.md — MemoryMonitor integration + lifecycle cleanup + checkpoint-resume in all 3 build functions
-Resume file: .planning/phases/17-hardware-optimization-ram-management-multithreading-acceleration/17-02-SUMMARY.md
+Stopped at: Completed 17-04-PLAN.md — GPU optimization: DMatrix caching + max_bin=512 for CUDA HP search
+Resume file: .planning/phases/17-hardware-optimization-ram-management-multithreading-acceleration/17-04-SUMMARY.md
