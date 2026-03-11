@@ -116,6 +116,7 @@ def _cv_score_scale_pos_weight(
     n_splits: int = 5,
     seed: int = RANDOM_SEED,
     device_kwargs: dict | None = None,
+    fold_dmats: list[tuple] | None = None,
 ) -> tuple[float, float]:
     """Cross-validate XGBClassifier using scale_pos_weight imbalance strategy.
 
@@ -131,6 +132,11 @@ def _cv_score_scale_pos_weight(
         seed: Random seed for StratifiedKFold. Default 42.
         device_kwargs: XGBoost device kwargs from get_xgb_device_kwargs(). If None,
             uses CPU default {'tree_method': 'hist'}.
+        fold_dmats: Optional list of pre-built (dtrain, dval, y_val) tuples for
+            CUDA path. When provided, uses xgb.train() with pre-built DMatrix
+            objects instead of XGBClassifier.fit() to eliminate idle-GPU overhead.
+            When None (CPU path), existing XGBClassifier.fit() code path is used
+            unchanged.
 
     Returns:
         (mean_auc, std_auc) across folds. Both are floats.
@@ -142,41 +148,83 @@ def _cv_score_scale_pos_weight(
     n_neg = int((y == 0).sum())
     scale_pos_weight = n_neg / max(n_pos, 1)
 
-    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
     fold_scores: list[float] = []
 
-    for train_idx, val_idx in cv.split(X, y):
-        X_tr, y_tr = X[train_idx], y[train_idx]
-        X_val, y_val = X[val_idx], y[val_idx]
+    if fold_dmats is not None:
+        # CUDA fast path: use pre-built DMatrix + xgb.train() to keep GPU busy
+        num_boost_round = int(params.get("n_estimators", 100))
+        booster_params: dict = {k: v for k, v in params.items() if k != "n_estimators"}
+        booster_params.update({
+            "objective": "binary:logistic",
+            "eval_metric": "auc",
+            "verbosity": 0,
+            "scale_pos_weight": scale_pos_weight,
+        })
+        booster_params.update(device_kwargs)
 
-        clf = xgb.XGBClassifier(
-            **params,
-            **device_kwargs,
-            objective="binary:logistic",
-            scale_pos_weight=scale_pos_weight,
-            verbosity=0,
-            random_state=seed,
-        )
-        try:
-            clf.fit(X_tr, y_tr)
-        except (RuntimeError, xgb.core.XGBoostError) as e:
-            if "device" in device_kwargs and device_kwargs.get("device", "").startswith("cuda"):
-                logger.warning("GPU error in CV fold: %s — retrying on CPU", e)
-                cpu_kw = {"tree_method": "hist"}
-                clf = xgb.XGBClassifier(
-                    **params,
-                    **cpu_kw,
-                    objective="binary:logistic",
-                    scale_pos_weight=scale_pos_weight,
-                    verbosity=0,
-                    random_state=seed,
+        for dtrain, dval, y_val in fold_dmats:
+            try:
+                booster = xgb.train(
+                    booster_params,
+                    dtrain,
+                    num_boost_round=num_boost_round,
+                    evals=[(dval, "val")],
+                    verbose_eval=False,
                 )
+            except (RuntimeError, xgb.core.XGBoostError) as e:
+                if device_kwargs.get("device", "").startswith("cuda"):
+                    logger.warning("GPU error in CV fold (DMatrix path): %s — retrying on CPU", e)
+                    cpu_params = {k: v for k, v in booster_params.items()
+                                  if k not in ("device", "max_bin")}
+                    cpu_params["tree_method"] = "hist"
+                    booster = xgb.train(
+                        cpu_params,
+                        dtrain,
+                        num_boost_round=num_boost_round,
+                        evals=[(dval, "val")],
+                        verbose_eval=False,
+                    )
+                else:
+                    raise
+            preds = booster.predict(dval)
+            score = roc_auc_score(y_val, preds)
+            fold_scores.append(score)
+    else:
+        # CPU path (unchanged): sklearn XGBClassifier.fit()
+        cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+
+        for train_idx, val_idx in cv.split(X, y):
+            X_tr, y_tr = X[train_idx], y[train_idx]
+            X_val, y_val = X[val_idx], y[val_idx]
+
+            clf = xgb.XGBClassifier(
+                **params,
+                **device_kwargs,
+                objective="binary:logistic",
+                scale_pos_weight=scale_pos_weight,
+                verbosity=0,
+                random_state=seed,
+            )
+            try:
                 clf.fit(X_tr, y_tr)
-            else:
-                raise
-        proba = clf.predict_proba(X_val)[:, 1]
-        score = roc_auc_score(y_val, proba)
-        fold_scores.append(score)
+            except (RuntimeError, xgb.core.XGBoostError) as e:
+                if "device" in device_kwargs and device_kwargs.get("device", "").startswith("cuda"):
+                    logger.warning("GPU error in CV fold: %s — retrying on CPU", e)
+                    cpu_kw = {"tree_method": "hist"}
+                    clf = xgb.XGBClassifier(
+                        **params,
+                        **cpu_kw,
+                        objective="binary:logistic",
+                        scale_pos_weight=scale_pos_weight,
+                        verbosity=0,
+                        random_state=seed,
+                    )
+                    clf.fit(X_tr, y_tr)
+                else:
+                    raise
+            proba = clf.predict_proba(X_val)[:, 1]
+            score = roc_auc_score(y_val, proba)
+            fold_scores.append(score)
 
     return float(np.mean(fold_scores)), float(np.std(fold_scores))
 
@@ -193,6 +241,7 @@ def _cv_score_upsampling(
     n_splits: int = 5,
     seed: int = RANDOM_SEED,
     device_kwargs: dict | None = None,
+    fold_dmats: list[tuple] | None = None,
 ) -> tuple[float, float]:
     """Cross-validate XGBClassifier with 25% minority upsampling inside CV folds.
 
@@ -213,6 +262,12 @@ def _cv_score_upsampling(
         seed: Random seed for StratifiedKFold and resample. Default 42.
         device_kwargs: XGBoost device kwargs from get_xgb_device_kwargs(). If None,
             uses CPU default {'tree_method': 'hist'}.
+        fold_dmats: Optional list of pre-built (dtrain_upsampled, dval, y_val) tuples
+            for CUDA path. When provided, uses xgb.train() with pre-built DMatrix
+            objects (dtrain already contains the upsampled training fold) instead of
+            XGBClassifier.fit() to eliminate idle-GPU overhead.
+            When None (CPU path), existing XGBClassifier.fit() code path is used
+            unchanged.
 
     Returns:
         (mean_auc, std_auc) across folds. Both are floats.
@@ -220,60 +275,104 @@ def _cv_score_upsampling(
     if device_kwargs is None:
         device_kwargs = {"tree_method": "hist"}
 
-    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
     fold_scores: list[float] = []
 
-    for train_idx, val_idx in cv.split(X, y):
-        X_tr, y_tr = X[train_idx], y[train_idx]
-        X_val, y_val = X[val_idx], y[val_idx]
+    if fold_dmats is not None:
+        # CUDA fast path: use pre-built upsampled DMatrix + xgb.train()
+        num_boost_round = int(params.get("n_estimators", 100))
+        booster_params: dict = {k: v for k, v in params.items() if k != "n_estimators"}
+        booster_params.update({
+            "objective": "binary:logistic",
+            "eval_metric": "auc",
+            "verbosity": 0,
+        })
+        booster_params.update(device_kwargs)
 
-        # Split fold training data into majority and minority
-        maj_mask = y_tr == 0
-        min_mask = y_tr == 1
-        X_maj, y_maj = X_tr[maj_mask], y_tr[maj_mask]
-        X_min, y_min = X_tr[min_mask], y_tr[min_mask]
-
-        n_maj = len(X_maj)
-        n_target = int(n_maj * 0.25 / 0.75)  # target 25% minority ratio
-
-        if len(X_min) > 0 and n_target > 0:
-            # Upsample minority with replacement — bootstrap sampling
-            X_min_up = resample(X_min, n_samples=max(n_target, 1), replace=True, random_state=seed)
-            y_min_up = np.ones(len(X_min_up), dtype=y.dtype)
-            X_tr_up = np.vstack([X_maj, X_min_up])
-            y_tr_up = np.concatenate([y_maj, y_min_up])
-        else:
-            # Fallback: no minority samples or degenerate fold — use as-is
-            X_tr_up, y_tr_up = X_tr, y_tr
-
-        clf = xgb.XGBClassifier(
-            **params,
-            **device_kwargs,
-            objective="binary:logistic",
-            verbosity=0,
-            random_state=seed,
-        )
-        try:
-            clf.fit(X_tr_up, y_tr_up)
-        except (RuntimeError, xgb.core.XGBoostError) as e:
-            if "device" in device_kwargs and device_kwargs.get("device", "").startswith("cuda"):
-                logger.warning("GPU error in CV fold (upsampling): %s — retrying on CPU", e)
-                cpu_kw = {"tree_method": "hist"}
-                clf = xgb.XGBClassifier(
-                    **params,
-                    **cpu_kw,
-                    objective="binary:logistic",
-                    verbosity=0,
-                    random_state=seed,
+        for dtrain, dval, y_val in fold_dmats:
+            try:
+                booster = xgb.train(
+                    booster_params,
+                    dtrain,
+                    num_boost_round=num_boost_round,
+                    evals=[(dval, "val")],
+                    verbose_eval=False,
                 )
-                clf.fit(X_tr_up, y_tr_up)
-            else:
-                raise
+            except (RuntimeError, xgb.core.XGBoostError) as e:
+                if device_kwargs.get("device", "").startswith("cuda"):
+                    logger.warning(
+                        "GPU error in CV fold (upsampling DMatrix path): %s — retrying on CPU", e
+                    )
+                    cpu_params = {k: v for k, v in booster_params.items()
+                                  if k not in ("device", "max_bin")}
+                    cpu_params["tree_method"] = "hist"
+                    booster = xgb.train(
+                        cpu_params,
+                        dtrain,
+                        num_boost_round=num_boost_round,
+                        evals=[(dval, "val")],
+                        verbose_eval=False,
+                    )
+                else:
+                    raise
+            # Score on ORIGINAL validation fold (no upsampling — dval holds original y_val)
+            preds = booster.predict(dval)
+            score = roc_auc_score(y_val, preds)
+            fold_scores.append(score)
+    else:
+        # CPU path (unchanged): sklearn XGBClassifier.fit() with inline upsampling
+        cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
 
-        # Score on ORIGINAL validation fold (no upsampling)
-        proba = clf.predict_proba(X_val)[:, 1]
-        score = roc_auc_score(y_val, proba)
-        fold_scores.append(score)
+        for train_idx, val_idx in cv.split(X, y):
+            X_tr, y_tr = X[train_idx], y[train_idx]
+            X_val, y_val = X[val_idx], y[val_idx]
+
+            # Split fold training data into majority and minority
+            maj_mask = y_tr == 0
+            min_mask = y_tr == 1
+            X_maj, y_maj = X_tr[maj_mask], y_tr[maj_mask]
+            X_min, y_min = X_tr[min_mask], y_tr[min_mask]
+
+            n_maj = len(X_maj)
+            n_target = int(n_maj * 0.25 / 0.75)  # target 25% minority ratio
+
+            if len(X_min) > 0 and n_target > 0:
+                # Upsample minority with replacement — bootstrap sampling
+                X_min_up = resample(X_min, n_samples=max(n_target, 1), replace=True, random_state=seed)
+                y_min_up = np.ones(len(X_min_up), dtype=y.dtype)
+                X_tr_up = np.vstack([X_maj, X_min_up])
+                y_tr_up = np.concatenate([y_maj, y_min_up])
+            else:
+                # Fallback: no minority samples or degenerate fold — use as-is
+                X_tr_up, y_tr_up = X_tr, y_tr
+
+            clf = xgb.XGBClassifier(
+                **params,
+                **device_kwargs,
+                objective="binary:logistic",
+                verbosity=0,
+                random_state=seed,
+            )
+            try:
+                clf.fit(X_tr_up, y_tr_up)
+            except (RuntimeError, xgb.core.XGBoostError) as e:
+                if "device" in device_kwargs and device_kwargs.get("device", "").startswith("cuda"):
+                    logger.warning("GPU error in CV fold (upsampling): %s — retrying on CPU", e)
+                    cpu_kw = {"tree_method": "hist"}
+                    clf = xgb.XGBClassifier(
+                        **params,
+                        **cpu_kw,
+                        objective="binary:logistic",
+                        verbosity=0,
+                        random_state=seed,
+                    )
+                    clf.fit(X_tr_up, y_tr_up)
+                else:
+                    raise
+
+            # Score on ORIGINAL validation fold (no upsampling)
+            proba = clf.predict_proba(X_val)[:, 1]
+            score = roc_auc_score(y_val, proba)
+            fold_scores.append(score)
 
     return float(np.mean(fold_scores)), float(np.std(fold_scores))
 
@@ -290,6 +389,8 @@ def _compare_strategies(
     n_splits: int = 5,
     seed: int = RANDOM_SEED,
     device_kwargs: dict | None = None,
+    fold_dmats_spw: list[tuple] | None = None,
+    fold_dmats_ups: list[tuple] | None = None,
 ) -> dict:
     """Compare both imbalance strategies with a given hyperparameter set.
 
@@ -304,6 +405,12 @@ def _compare_strategies(
         n_splits: Number of StratifiedKFold folds. Default 5.
         seed: Random seed. Default 42.
         device_kwargs: XGBoost device kwargs. If None, uses CPU default.
+        fold_dmats_spw: Pre-built (dtrain, dval, y_val) tuples for strategy A
+            (scale_pos_weight). Forwarded to _cv_score_scale_pos_weight(). When
+            None, CPU path is used.
+        fold_dmats_ups: Pre-built (dtrain_upsampled, dval, y_val) tuples for
+            strategy B (upsampling). Forwarded to _cv_score_upsampling(). When
+            None, CPU path is used.
 
     Returns:
         Dict with keys:
@@ -312,10 +419,12 @@ def _compare_strategies(
             "winner": "scale_pos_weight" | "upsampling_25pct"
     """
     spw_mean, spw_std = _cv_score_scale_pos_weight(
-        params, X, y, n_splits=n_splits, seed=seed, device_kwargs=device_kwargs
+        params, X, y, n_splits=n_splits, seed=seed, device_kwargs=device_kwargs,
+        fold_dmats=fold_dmats_spw,
     )
     ups_mean, ups_std = _cv_score_upsampling(
-        params, X, y, n_splits=n_splits, seed=seed, device_kwargs=device_kwargs
+        params, X, y, n_splits=n_splits, seed=seed, device_kwargs=device_kwargs,
+        fold_dmats=fold_dmats_ups,
     )
 
     # Winner = higher mean AUC. Ties go to scale_pos_weight (simpler).
