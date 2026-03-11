@@ -118,7 +118,7 @@ class TestRunFunctions:
     def test_run_labels(self):
         with patch("sip_engine.shared.data.label_builder.build_labels", return_value=Path("labels.parquet")) as m:
             result = run_labels(_CFG)
-        m.assert_called_once_with(force=True)
+        m.assert_called_once_with(force=True, n_jobs=2, max_ram_gb=4)
         assert result == Path("labels.parquet")
 
     def test_run_features(self):
@@ -137,7 +137,7 @@ class TestRunFunctions:
     def test_run_iric(self):
         with patch("sip_engine.classifiers.iric.pipeline.build_iric", return_value=Path("iric.parquet")) as m:
             result = run_iric(_CFG)
-        m.assert_called_once_with(force=True)
+        m.assert_called_once_with(force=True, n_jobs=2, max_ram_gb=4)
         assert result == Path("iric.parquet")
 
     def test_run_train_all_models(self):
