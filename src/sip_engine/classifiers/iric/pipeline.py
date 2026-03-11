@@ -193,7 +193,7 @@ def _to_date_iric(value: Any):
 # =============================================================================
 
 
-def build_iric(force: bool = False) -> Path:
+def build_iric(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = None) -> Path:
     """Build iric_scores.parquet from all source data.
 
     Offline batch path — processes all contratos and writes iric_scores.parquet
@@ -203,6 +203,8 @@ def build_iric(force: bool = False) -> Path:
     Args:
         force: If True, rebuild even if iric_scores.parquet already exists.
             Also forces threshold recalibration if thresholds JSON is absent.
+        n_jobs: Number of parallel jobs (reserved for Plan 17-02 implementation).
+        max_ram_gb: RAM budget in GB (reserved for Plan 17-02 implementation).
 
     Returns:
         Path to the written iric_scores.parquet file.

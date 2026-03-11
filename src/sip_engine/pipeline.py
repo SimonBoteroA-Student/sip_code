@@ -69,7 +69,7 @@ def run_labels(cfg: PipelineConfig) -> Path:
     """Build M1/M2/M3/M4 target labels."""
     from sip_engine.shared.data.label_builder import build_labels
 
-    return build_labels(force=cfg.force)
+    return build_labels(force=cfg.force, n_jobs=cfg.n_jobs, max_ram_gb=cfg.max_ram_gb)
 
 
 def run_features(cfg: PipelineConfig) -> Path:
@@ -90,7 +90,7 @@ def run_iric(cfg: PipelineConfig) -> Path:
     """Build IRIC irregularity-risk-index scores."""
     from sip_engine.classifiers.iric.pipeline import build_iric
 
-    return build_iric(force=cfg.force)
+    return build_iric(force=cfg.force, n_jobs=cfg.n_jobs, max_ram_gb=cfg.max_ram_gb)
 
 
 def run_train(cfg: PipelineConfig) -> list[Path]:

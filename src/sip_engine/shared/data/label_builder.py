@@ -248,7 +248,7 @@ def _compute_m3_m4(
 # Public API
 # ============================================================
 
-def build_labels(force: bool = False) -> Path:
+def build_labels(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = None) -> Path:
     """Build M1/M2/M3/M4 binary labels from source data and save to parquet.
 
     M1 = 1 if contract has at least one value amendment (ADICION EN EL VALOR
@@ -261,6 +261,8 @@ def build_labels(force: bool = False) -> Path:
 
     Args:
         force: If True, rebuild even if labels.parquet already exists.
+        n_jobs: Number of parallel jobs (reserved for Plan 17-02 implementation).
+        max_ram_gb: RAM budget in GB (reserved for Plan 17-02 implementation).
 
     Returns:
         Path to the labels.parquet file.
