@@ -11,6 +11,7 @@ Total: 30 features. Category D (IRIC, 4 features) added in Phase 6.
 from __future__ import annotations
 
 import datetime
+import gc
 import logging
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,13 @@ from sip_engine.classifiers.features.encoding import (
 from sip_engine.classifiers.features.provider_history import (
     build_provider_history_index,
     lookup_provider_history,
+)
+from sip_engine.shared.memory import (
+    MemoryMonitor,
+    cleanup,
+    load_checkpoint,
+    remove_checkpoint,
+    save_checkpoint,
 )
 
 logger = logging.getLogger(__name__)
@@ -291,10 +299,16 @@ def build_features(
     for model training. Enforces post-execution (FEAT-08) and RCAC (FEAT-09)
     exclusions. Drops rows missing critical fields with INFO-level logging.
 
+    When *max_ram_gb* is provided, a :class:`~sip_engine.shared.memory.MemoryMonitor`
+    enforces the budget:
+    - At 90% (warning): ``gc.collect()`` is called and processing continues.
+    - At 100% (critical): processed rows are saved as a checkpoint and execution
+      aborts.  Restarting with ``force=False`` resumes from the last checkpoint.
+
     Args:
         force: If True, rebuild even if features.parquet already exists.
         n_jobs: CPU cores to use for parallel operations.
-        max_ram_gb: Maximum RAM to use in GB (informational; not enforced yet).
+        max_ram_gb: RAM budget in GB.  ``None`` disables monitoring.
         device: Device identifier (``'cpu'``, ``'cuda'``, ``'rocm'``).
         interactive: If True, show the interactive hardware config screen.
         show_progress: If True, show a Rich live progress display.
@@ -305,6 +319,7 @@ def build_features(
     Raises:
         FileNotFoundError: If labels.parquet does not exist (required for
             provider history M1/M2 label integration).
+        MemoryError: If RAM budget is exceeded and a checkpoint has been saved.
     """
     # ---- Optional interactive config screen ----
     if interactive:
@@ -335,6 +350,19 @@ def build_features(
         return features_path
 
     logger.info("Building feature matrix (n_jobs=%d, device=%s)...", n_jobs, device)
+
+    # ---- MemoryMonitor setup ----
+    monitor: MemoryMonitor | None = MemoryMonitor(max_ram_gb) if max_ram_gb is not None else None
+
+    # ---- Checkpoint support ----
+    checkpoint_path: Path = settings.artifacts_features_dir / "_checkpoint.parquet"
+    settings.artifacts_features_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_df, processed_ids = load_checkpoint(checkpoint_path)
+    prior_rows: list[dict] = checkpoint_df.to_dict("records") if not checkpoint_df.empty else []
+    if processed_ids:
+        logger.info(
+            "Resuming from features checkpoint: %d rows already processed", len(processed_ids)
+        )
 
     # ---- Estimate total contratos rows for progress ETA ----
     total_rows_estimate: int | None = None
@@ -406,17 +434,48 @@ def build_features(
             display.start_stage(4)
         from sip_engine.shared.data.loaders import load_contratos
 
-        all_rows: list[dict] = []
+        all_rows: list[dict] = list(prior_rows)
         reason_counts: dict[str, int] = {}
-        rows_processed = 0
+        # Advance row counter by pre-loaded checkpoint rows (for progress display parity)
+        rows_processed = len(processed_ids)
         rows_dropped = 0
         _PROGRESS_INTERVAL = 5_000  # update display every N rows
 
         for chunk in load_contratos():
+            # Memory check before processing each chunk
+            if monitor:
+                status = monitor.check()
+                if status == "warning":
+                    gc.collect()
+                    logger.warning(
+                        "Memory warning (features loop): RSS=%.2fGB / budget=%.2fGB — "
+                        "running GC",
+                        monitor.current_usage_bytes() / (1024 ** 3),
+                        monitor.budget_bytes / (1024 ** 3),
+                    )
+                elif status == "critical":
+                    gc.collect()
+                    if monitor.check() == "critical":
+                        save_checkpoint(all_rows, checkpoint_path)
+                        rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
+                        budget_gb = monitor.budget_bytes / (1024 ** 3)
+                        raise MemoryError(
+                            f"RAM budget exceeded during feature extraction: "
+                            f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
+                            f"Checkpoint saved ({len(all_rows)} rows). "
+                            f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+                        )
+
             for _, row in chunk.iterrows():
                 rows_processed += 1
 
                 row_dict = row.to_dict()
+                id_contrato = str(row_dict.get("ID Contrato", ""))
+
+                # Skip already-processed rows (checkpoint resume)
+                if id_contrato in processed_ids:
+                    continue
+
                 if _is_missing_required(row_dict, reason_counts):
                     rows_dropped += 1
                     if display and rows_processed % _PROGRESS_INTERVAL == 0:
@@ -462,7 +521,7 @@ def build_features(
                 cat_c = compute_category_c(row_dict, procesos_data, provider_history, num_actividades)
 
                 feature_row = {
-                    "id_contrato": str(row_dict.get("ID Contrato", "")),
+                    "id_contrato": id_contrato,
                     **cat_a,
                     **cat_b,
                     **cat_c,
@@ -488,11 +547,18 @@ def build_features(
             for reason, count in sorted(reason_counts.items()):
                 logger.info("  Dropped %d rows due to missing: %s", count, reason)
 
+        # ---- Lifecycle cleanup: lookups no longer needed ----
+        del procesos_lookup, proveedores_lookup, num_actividades_lookup
+        cleanup()
+
         # ---- Step 5: Build DataFrame, apply encodings, and merge IRIC columns ----
         if display:
             display.start_stage(5)
 
         df = pd.DataFrame(all_rows)
+        del all_rows
+        cleanup()
+
         if df.empty:
             raise ValueError(
                 f"No feature rows produced: {rows_processed} rows processed, "
@@ -534,6 +600,9 @@ def build_features(
         features_path.parent.mkdir(parents=True, exist_ok=True)
         table = pa.Table.from_pandas(df_out, preserve_index=True)
         pq.write_table(table, features_path)
+
+        # ---- Remove checkpoint on successful completion ----
+        remove_checkpoint(checkpoint_path)
 
         if display:
             display.complete_stage(5)
