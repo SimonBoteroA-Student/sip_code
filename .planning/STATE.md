@@ -5,15 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Given any Colombian public contract, reliably flag corruption risk using multiple evidence-backed signals — so oversight actors can prioritize where to investigate.
-**Current focus:** Phase 15 complete — Evaluation & Training Enhancements (3/3 plans verified)
+**Current focus:** Phase 17 planned — Hardware Optimization (4 plans, 2 waves)
 
 ## Current Position
 
-Milestone: v1.3 — Evaluation & Training Enhancements
-Phase 15: Evaluation & Training Module Enhancements — **Plan 3/3 Complete**
-Status: All plans complete — 15-01 (AUC-PR + BSS), 15-02 (Named Artifacts), 15-03 (Model Selector).
+Milestone: v1.3 — in progress (Phase 16 code complete, needs retrain)
+Phase 16: IRIC Feature Expansion — code complete (45 features), needs `run-pipeline --start-from train`
+Phase 17: Hardware Optimization — **Planned (0/4 executed)**
+Plans: 17-01 (MemoryMonitor + loaders), 17-02 (build integration + lifecycle), 17-03 (multiprocessing), 17-04 (GPU opt)
 
-Progress: [███░░░░░░░░░░░░░░░░░] Phase 15 complete (3/3 plans)
+Progress: [████░░░░░░░░░░░░░░░░] Phase 16 code-complete, Phase 17 planned
 
 ## Accumulated Context
 

@@ -46,6 +46,8 @@
 | 13. Windows 10 Compatibility | v1.1 | 3/3 | Complete | 2026-03-03 |
 | 14. CLI & TUI Fixes — Command Pipeline Refactor | 2/2 | Complete    | 2026-03-06 | — |
 | 15. Evaluation & Training Enhancements | — | 3/3 | Complete | 2026-03-08 |
+| 16. Include IRIC scores as model features | — | 0/2 | Pending | — |
+| 17. Hardware Optimization — RAM & Multithreading | — | 0/3 | Pending | — |
 
 <details>
 <summary>✅ v1.1 Cross-Platform OS Compatibility & Windows Support (Phases 12–13) — SHIPPED 2026-03-03</summary>
@@ -94,3 +96,15 @@ Plans:
 Plans:
 - [ ] 16-00: Create test_pipeline16.py (Wave 0 — test first)
 - [ ] 16-01: Reorder pipeline + expand features + retrain (Wave 1)
+
+### Phase 17: Hardware Optimization — RAM Management & Multithreading Acceleration
+
+**Goal:** Optimize RAM usage according to system availability, preventing crashouts and deloading/loading data when necessary, and utilize multithreading and multicore processing when available, to accelerate the label, feature, and IRIC building steps.
+**Depends on:** Phase 16
+**Plans:** 4 plans (2 waves)
+
+Plans:
+- [ ] 17-01-PLAN.md — MemoryMonitor foundation, loaders & pipeline wiring (Wave 1)
+- [ ] 17-02-PLAN.md — Build function integration: RAM management, lifecycle cleanup & checkpoints (Wave 1, after 17-01)
+- [ ] 17-03-PLAN.md — Multiprocessing acceleration for labels/IRIC/features (Wave 2, after 17-01 + 17-02)
+- [ ] 17-04-PLAN.md — GPU optimization: DMatrix caching & max_bin for HP search (Wave 2, parallel with 17-03, after 17-01)
