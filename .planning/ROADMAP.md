@@ -101,10 +101,10 @@ Plans:
 
 **Goal:** Optimize RAM usage according to system availability, preventing crashouts and deloading/loading data when necessary, and utilize multithreading and multicore processing when available, to accelerate the label, feature, and IRIC building steps.
 **Depends on:** Phase 16
-**Plans:** 4/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 - [x] 17-01-PLAN.md — MemoryMonitor foundation, loaders & pipeline wiring (Wave 1)
 - [x] 17-02-PLAN.md — Build function integration: RAM management, lifecycle cleanup & checkpoints (Wave 1, after 17-01)
 - [x] 17-03-PLAN.md — Multiprocessing acceleration for labels/IRIC/features (Wave 2, after 17-01 + 17-02)
-- [x] 17-04-PLAN.md — GPU optimization: DMatrix caching & max_bin for HP search (Wave 2, parallel with 17-03, after 17-01)
+- [ ] 17-04-PLAN.md — GPU optimization: DMatrix caching & max_bin for HP search (Wave 2, parallel with 17-03, after 17-01)

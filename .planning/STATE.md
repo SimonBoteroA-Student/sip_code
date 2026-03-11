@@ -11,14 +11,22 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 Milestone: v1.3 — in progress (Phase 16 code complete, needs retrain)
 Phase 16: IRIC Feature Expansion — code complete (45 features), needs `run-pipeline --start-from train`
-Phase 17: Hardware Optimization — **Complete (4/4 executed)**
-Plans: 17-01 ✅ (MemoryMonitor + loaders), 17-02 ✅ (build integration + lifecycle), 17-03 ✅ (multiprocessing), 17-04 ✅ (GPU opt)
+Phase 17: Hardware Optimization — **In Progress (3/4 executed)**
+Plans: 17-01 ✅ (MemoryMonitor + loaders), 17-02 ✅ (build integration + lifecycle), 17-03 ✅ (multiprocessing), 17-04 (GPU opt)
 
-Progress: [████████████████████] Phase 17 plan 4/4 complete
+Progress: [███████████████░░░░░] Phase 17 plan 3/4 complete
 
 ## Accumulated Context
 
 ### Decisions
+
+Phase 17-03 decisions:
+- Worker functions use lazy imports inside function body — avoids module-level circular import issues
+- provider_history lazy-loads from disk pkl in each worker — simpler and cross-platform (no explicit sharing)
+- processed_ids set included in shared lookups pickle so workers skip checkpoint-resumed rows
+- n_jobs>1 MP path does NOT use adaptive chunk sizing — fixed chunk size is acceptable trade-off
+- FeatureBuildProgressDisplay uses update_rows() in main process — no cross-process display needed
+- Lifecycle cleanup (del procesos_lookup etc.) remains in main process after pool joins
 
 Phase 17-04 decisions:
 - DMatrix fold_dmats uses (dtrain, dval, y_val) tuple — y_val kept separately for roc_auc_score
@@ -115,7 +123,7 @@ Phase 12-03 decisions:
 
 ### Roadmap Evolution
 
-- Phase 17 Plan 04 complete: GPU optimization — DMatrix caching + max_bin=512 for CUDA HP search
+- Phase 17 Plan 03 complete: Multiprocessing acceleration — Pool.imap_unordered in all 3 build steps + cross-platform worker pool utilities
 - Phase 17 Plan 01 complete: MemoryMonitor foundation + chunk_size loader passthrough + n_jobs/max_ram_gb pipeline wiring
 - Phase 17 added: Hardware Optimization — RAM management & multithreading acceleration for label, feature, and IRIC building
 - Phase 16 added: Include IRIC scores as model features — rebuild feature builder and training pipeline
@@ -147,5 +155,5 @@ None — all prior blockers resolved.
 ## Session Continuity
 
 Last session: 2026-03-11
-Stopped at: Completed 17-04-PLAN.md — GPU optimization: DMatrix caching + max_bin=512 for CUDA HP search
-Resume file: .planning/phases/17-hardware-optimization-ram-management-multithreading-acceleration/17-04-SUMMARY.md
+Stopped at: Completed 17-03-PLAN.md — Multiprocessing acceleration: Pool.imap_unordered in labels, IRIC, features build steps
+Resume file: .planning/phases/17-hardware-optimization-ram-management-multithreading-acceleration/17-03-SUMMARY.md
