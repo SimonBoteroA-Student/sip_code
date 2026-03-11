@@ -41,6 +41,8 @@ from sip_engine.classifiers.iric.thresholds import (
 from sip_engine.shared.memory import (
     MemoryMonitor,
     cleanup,
+    create_worker_pool,
+    get_shared_lookups,
     load_checkpoint,
     remove_checkpoint,
     save_checkpoint,
@@ -197,9 +199,119 @@ def _to_date_iric(value: Any):
 
 
 # =============================================================================
-# Public API
+# Multiprocessing worker (module-level for picklability)
 # =============================================================================
 
+
+def _process_iric_chunk(chunk: "pd.DataFrame") -> list[dict]:  # type: ignore[name-defined]
+    """Process a contratos chunk: compute all 11 IRIC components + aggregates per row.
+
+    Accesses shared lookups (procesos_lookup, num_actividades_lookup,
+    bid_stats_lookup, thresholds, processed_ids) from the module-global dict
+    populated by the pool initializer.
+
+    Args:
+        chunk: A contratos chunk (DataFrame) to process.
+
+    Returns:
+        List of dicts, each representing one output row with all IRIC fields.
+    """
+    import datetime as _dt
+
+    import pandas as _pd
+
+    from sip_engine.classifiers.features.provider_history import lookup_provider_history
+    from sip_engine.classifiers.iric.calculator import (
+        compute_iric_components,
+        compute_iric_scores,
+    )
+    from sip_engine.shared.data.rcac_builder import normalize_numero, normalize_tipo
+    from sip_engine.shared.memory import get_shared_lookups
+
+    shared = get_shared_lookups()
+    procesos_lookup: dict = shared["procesos_lookup"]
+    num_actividades_lookup: dict = shared["num_actividades_lookup"]
+    bid_stats_lookup: dict = shared["bid_stats_lookup"]
+    thresholds: dict = shared["thresholds"]
+    processed_ids: set = shared.get("processed_ids", set())
+
+    results: list[dict] = []
+
+    for _, row in chunk.iterrows():
+        row_dict = row.to_dict()
+        id_contrato = str(row_dict.get("ID Contrato", ""))
+
+        # Skip already-processed rows (checkpoint resume)
+        if id_contrato in processed_ids:
+            continue
+
+        # Contract signing date — skip rows with no valid date
+        firma_date = _to_date_iric(row_dict.get("Fecha de Firma"))
+        if firma_date is None:
+            continue
+
+        # Procesos data lookup
+        proceso_id = str(row_dict.get("Proceso de Compra", "")).strip()
+        procesos_data: dict | None = procesos_lookup.get(proceso_id)
+
+        if procesos_data is not None:
+            procesos_data = dict(procesos_data)
+            procesos_data["Fecha de Firma"] = firma_date
+
+            if "dias_publicidad" not in procesos_data:
+                fecha_pub = _to_date_iric(procesos_data.get("Fecha de Publicacion del Proceso"))
+                fecha_recep = _to_date_iric(procesos_data.get("Fecha de Recepcion de Respuestas"))
+                if fecha_pub is not None and fecha_recep is not None:
+                    procesos_data["dias_publicidad"] = (fecha_recep - fecha_pub).days
+                else:
+                    procesos_data["dias_publicidad"] = None
+
+            if "dias_decision" not in procesos_data:
+                fecha_adj = _to_date_iric(procesos_data.get("Fecha Adjudicacion"))
+                if fecha_adj is not None and firma_date is not None:
+                    procesos_data["dias_decision"] = (firma_date - fecha_adj).days
+                else:
+                    procesos_data["dias_decision"] = None
+
+        raw_tipo = row_dict.get("TipoDocProveedor")
+        raw_num = row_dict.get("Documento Proveedor")
+        num_norm = normalize_numero(raw_num)
+        tipo_norm = normalize_tipo(raw_tipo)
+
+        departamento = str(row_dict.get("Departamento", "") or "").strip()
+        provider_history = lookup_provider_history(
+            tipo_doc=raw_tipo,
+            num_doc=raw_num,
+            as_of_date=firma_date,
+            departamento=departamento,
+        )
+
+        provider_key = (tipo_norm, num_norm)
+        num_actividades = num_actividades_lookup.get(provider_key, 0)
+        bid_stats = bid_stats_lookup.get(proceso_id, dict(_DEFAULT_BID_STATS))
+
+        components = compute_iric_components(
+            row=row_dict,
+            procesos_data=procesos_data,
+            provider_history=provider_history,
+            thresholds=thresholds,
+            num_actividades=num_actividades,
+        )
+        scores = compute_iric_scores(components)
+
+        results.append({
+            "id_contrato": id_contrato,
+            **components,
+            **scores,
+            **bid_stats,
+        })
+
+    return results
+
+
+# =============================================================================
+# Public API
+# =============================================================================
 
 def build_iric(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = None) -> Path:
     """Build iric_scores.parquet from all source data.
@@ -311,117 +423,161 @@ def build_iric(force: bool = False, n_jobs: int = 1, max_ram_gb: int | None = No
     all_rows: list[dict] = list(prior_rows)
     rows_processed = 0
 
-    for chunk in load_contratos():
-        # Memory check before processing each chunk
-        if monitor:
-            status = monitor.check()
-            if status == "warning":
-                gc.collect()
-                logger.warning(
-                    "Memory warning (IRIC loop): RSS=%.2fGB / budget=%.2fGB — running GC",
-                    monitor.current_usage_bytes() / (1024 ** 3),
-                    monitor.budget_bytes / (1024 ** 3),
-                )
-            elif status == "critical":
-                gc.collect()
-                if monitor.check() == "critical":
-                    save_checkpoint(all_rows, checkpoint_path)
-                    rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
-                    budget_gb = monitor.budget_bytes / (1024 ** 3)
-                    raise MemoryError(
-                        f"RAM budget exceeded during IRIC computation: "
-                        f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
-                        f"Checkpoint saved ({len(all_rows)} rows). "
-                        f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+    if n_jobs > 1:
+        # ---- Multiprocessing path (n_jobs > 1) ----
+        lookups = {
+            "procesos_lookup": procesos_lookup,
+            "num_actividades_lookup": num_actividades_lookup,
+            "bid_stats_lookup": bid_stats_lookup,
+            "thresholds": thresholds,
+            "processed_ids": processed_ids,
+        }
+        pool, lookups_path = create_worker_pool(n_jobs, lookups)
+        try:
+            for chunk_results in pool.imap_unordered(_process_iric_chunk, load_contratos()):
+                all_rows.extend(chunk_results)
+                if monitor:
+                    status = monitor.check()
+                    if status == "warning":
+                        gc.collect()
+                        logger.warning(
+                            "Memory warning (IRIC MP loop): RSS=%.2fGB / budget=%.2fGB — GC",
+                            monitor.current_usage_bytes() / (1024 ** 3),
+                            monitor.budget_bytes / (1024 ** 3),
+                        )
+                    elif status == "critical":
+                        gc.collect()
+                        if monitor.check() == "critical":
+                            pool.terminate()
+                            save_checkpoint(all_rows, checkpoint_path)
+                            rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
+                            budget_gb = monitor.budget_bytes / (1024 ** 3)
+                            raise MemoryError(
+                                f"RAM budget exceeded during IRIC computation (MP): "
+                                f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
+                                f"Checkpoint saved ({len(all_rows)} rows). "
+                                f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+                            )
+        finally:
+            pool.close()
+            pool.join()
+            if lookups_path:
+                try:
+                    Path(lookups_path).unlink()
+                except FileNotFoundError:
+                    pass
+    else:
+        # ---- Single-process path (n_jobs <= 1) ----
+        for chunk in load_contratos():
+            # Memory check before processing each chunk
+            if monitor:
+                status = monitor.check()
+                if status == "warning":
+                    gc.collect()
+                    logger.warning(
+                        "Memory warning (IRIC loop): RSS=%.2fGB / budget=%.2fGB — running GC",
+                        monitor.current_usage_bytes() / (1024 ** 3),
+                        monitor.budget_bytes / (1024 ** 3),
                     )
+                elif status == "critical":
+                    gc.collect()
+                    if monitor.check() == "critical":
+                        save_checkpoint(all_rows, checkpoint_path)
+                        rss_gb = monitor.current_usage_bytes() / (1024 ** 3)
+                        budget_gb = monitor.budget_bytes / (1024 ** 3)
+                        raise MemoryError(
+                            f"RAM budget exceeded during IRIC computation: "
+                            f"{rss_gb:.2f}GB used / {budget_gb:.2f}GB budget. "
+                            f"Checkpoint saved ({len(all_rows)} rows). "
+                            f"Increase max_ram_gb to >{budget_gb:.0f}GB and retry."
+                        )
 
-        for _, row in chunk.iterrows():
-            rows_processed += 1
-            row_dict = row.to_dict()
+            for _, row in chunk.iterrows():
+                rows_processed += 1
+                row_dict = row.to_dict()
 
-            id_contrato = str(row_dict.get("ID Contrato", ""))
+                id_contrato = str(row_dict.get("ID Contrato", ""))
 
-            # Skip already-processed rows (checkpoint resume)
-            if id_contrato in processed_ids:
-                continue
+                # Skip already-processed rows (checkpoint resume)
+                if id_contrato in processed_ids:
+                    continue
 
-            # Contract signing date
-            firma_date = _to_date_iric(row_dict.get("Fecha de Firma"))
-            if firma_date is None:
-                continue  # Skip rows with no valid signing date
+                # Contract signing date
+                firma_date = _to_date_iric(row_dict.get("Fecha de Firma"))
+                if firma_date is None:
+                    continue  # Skip rows with no valid signing date
 
-            # Procesos data lookup
-            proceso_id = str(row_dict.get("Proceso de Compra", "")).strip()
-            procesos_data: dict | None = procesos_lookup.get(proceso_id)
+                # Procesos data lookup
+                proceso_id = str(row_dict.get("Proceso de Compra", "")).strip()
+                procesos_data: dict | None = procesos_lookup.get(proceso_id)
 
-            # Inject signing date + compute dias_publicidad / dias_decision
-            if procesos_data is not None:
-                procesos_data = dict(procesos_data)  # shallow copy
-                procesos_data["Fecha de Firma"] = firma_date
+                # Inject signing date + compute dias_publicidad / dias_decision
+                if procesos_data is not None:
+                    procesos_data = dict(procesos_data)  # shallow copy
+                    procesos_data["Fecha de Firma"] = firma_date
 
-                # Compute dias_publicidad if not already present
-                if "dias_publicidad" not in procesos_data:
-                    import datetime
-                    fecha_pub_raw = procesos_data.get("Fecha de Publicacion del Proceso")
-                    fecha_recep_raw = procesos_data.get("Fecha de Recepcion de Respuestas")
-                    fecha_pub = _to_date_iric(fecha_pub_raw)
-                    fecha_recep = _to_date_iric(fecha_recep_raw)
-                    if fecha_pub is not None and fecha_recep is not None:
-                        procesos_data["dias_publicidad"] = (fecha_recep - fecha_pub).days
-                    else:
-                        procesos_data["dias_publicidad"] = None
+                    # Compute dias_publicidad if not already present
+                    if "dias_publicidad" not in procesos_data:
+                        import datetime
+                        fecha_pub_raw = procesos_data.get("Fecha de Publicacion del Proceso")
+                        fecha_recep_raw = procesos_data.get("Fecha de Recepcion de Respuestas")
+                        fecha_pub = _to_date_iric(fecha_pub_raw)
+                        fecha_recep = _to_date_iric(fecha_recep_raw)
+                        if fecha_pub is not None and fecha_recep is not None:
+                            procesos_data["dias_publicidad"] = (fecha_recep - fecha_pub).days
+                        else:
+                            procesos_data["dias_publicidad"] = None
 
-                # Compute dias_decision if not already present
-                if "dias_decision" not in procesos_data:
-                    fecha_adj_raw = procesos_data.get("Fecha Adjudicacion")
-                    fecha_adj = _to_date_iric(fecha_adj_raw)
-                    if fecha_adj is not None and firma_date is not None:
-                        procesos_data["dias_decision"] = (firma_date - fecha_adj).days
-                    else:
-                        procesos_data["dias_decision"] = None
+                    # Compute dias_decision if not already present
+                    if "dias_decision" not in procesos_data:
+                        fecha_adj_raw = procesos_data.get("Fecha Adjudicacion")
+                        fecha_adj = _to_date_iric(fecha_adj_raw)
+                        if fecha_adj is not None and firma_date is not None:
+                            procesos_data["dias_decision"] = (firma_date - fecha_adj).days
+                        else:
+                            procesos_data["dias_decision"] = None
 
-            # Provider lookup
-            raw_tipo = row_dict.get("TipoDocProveedor")
-            raw_num = row_dict.get("Documento Proveedor")
-            num_norm = normalize_numero(raw_num)
-            tipo_norm = normalize_tipo(raw_tipo)
+                # Provider lookup
+                raw_tipo = row_dict.get("TipoDocProveedor")
+                raw_num = row_dict.get("Documento Proveedor")
+                num_norm = normalize_numero(raw_num)
+                tipo_norm = normalize_tipo(raw_tipo)
 
-            departamento = str(row_dict.get("Departamento", "") or "").strip()
-            provider_history = lookup_provider_history(
-                tipo_doc=raw_tipo,
-                num_doc=raw_num,
-                as_of_date=firma_date,
-                departamento=departamento,
-            )
+                departamento = str(row_dict.get("Departamento", "") or "").strip()
+                provider_history = lookup_provider_history(
+                    tipo_doc=raw_tipo,
+                    num_doc=raw_num,
+                    as_of_date=firma_date,
+                    departamento=departamento,
+                )
 
-            provider_key = (tipo_norm, num_norm)
-            num_actividades = num_actividades_lookup.get(provider_key, 0)
+                provider_key = (tipo_norm, num_norm)
+                num_actividades = num_actividades_lookup.get(provider_key, 0)
 
-            # Bid stats lookup
-            bid_stats = bid_stats_lookup.get(proceso_id, dict(_DEFAULT_BID_STATS))
+                # Bid stats lookup
+                bid_stats = bid_stats_lookup.get(proceso_id, dict(_DEFAULT_BID_STATS))
 
-            # Compute IRIC components + scores
-            components = compute_iric_components(
-                row=row_dict,
-                procesos_data=procesos_data,
-                provider_history=provider_history,
-                thresholds=thresholds,
-                num_actividades=num_actividades,
-            )
-            scores = compute_iric_scores(components)
+                # Compute IRIC components + scores
+                components = compute_iric_components(
+                    row=row_dict,
+                    procesos_data=procesos_data,
+                    provider_history=provider_history,
+                    thresholds=thresholds,
+                    num_actividades=num_actividades,
+                )
+                scores = compute_iric_scores(components)
 
-            # Collect row
-            result_row = {
-                "id_contrato": id_contrato,
-                **components,
-                **scores,
-                **bid_stats,
-            }
-            all_rows.append(result_row)
+                # Collect row
+                result_row = {
+                    "id_contrato": id_contrato,
+                    **components,
+                    **scores,
+                    **bid_stats,
+                }
+                all_rows.append(result_row)
 
     logger.info(
-        "IRIC computation complete: %d rows processed, %d IRIC rows produced",
-        rows_processed,
+        "IRIC computation complete: %d IRIC rows produced",
         len(all_rows),
     )
 
